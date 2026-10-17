@@ -1,0 +1,8 @@
+{
+    "name": "Sample counter",
+    "id": "nagma-sample-counter",
+    "api": "1.0.0",
+    "main": "code.js",
+    "containsWidget": true,
+    "editorType": ["design"]
+}

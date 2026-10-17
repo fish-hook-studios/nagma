@@ -1,0 +1,28 @@
+<!doctype html>
+<style>
+    body { margin: 0; padding: 12px; font: 12px system-ui, sans-serif; color: #1e1e1e; }
+    label { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    input { width: 72px; height: 26px; box-sizing: border-box; border: 1px solid #ddd; border-radius: 6px; padding: 0 6px; }
+    .row { display: flex; gap: 8px; margin-top: 12px; }
+    button { flex: 1; height: 30px; border-radius: 6px; border: 1px solid #ddd; background: #fff; }
+    button.primary { background: #0d99ff; border-color: #0d99ff; color: #fff; }
+    p { margin: 0 0 8px; color: #777; }
+</style>
+<p id="info">Nothing selected.</p>
+<label>Rows <input id="rows" type="number" min="1" max="20" value="3" /></label>
+<label>Columns <input id="columns" type="number" min="1" max="20" value="4" /></label>
+<label>Colour <input id="color" type="color" value="#0d99ff" /></label>
+<div class="row">
+    <button id="cancel">Cancel</button>
+    <button id="create" class="primary">Create</button>
+</div>
+<script>
+    const send = (msg) => parent.postMessage({ pluginMessage: msg }, "*");
+    document.getElementById("create").onclick = () =>
+        send({ type: "create", rows: Number(document.getElementById("rows").value) || 1, columns: Number(document.getElementById("columns").value) || 1, color: document.getElementById("color").value });
+    document.getElementById("cancel").onclick = () => send({ type: "cancel" });
+    onmessage = (event) => {
+        const msg = event.data.pluginMessage;
+        if (msg && msg.type === "selection") document.getElementById("info").textContent = msg.count ? `${msg.count} layer${msg.count === 1 ? "" : "s"} selected.` : "Nothing selected.";
+    };
+</script>

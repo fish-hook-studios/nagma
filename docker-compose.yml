@@ -1,0 +1,53 @@
+# Nagma, self-hosted: the editor and the sync server in one container, its data on a named volume.
+# Settings come from .env (copy .env.example, or let tools/install.sh write it). See docs/self-hosting.md.
+#
+#   docker compose up -d                       # Nagma on http://<this machine>:8080
+#   COMPOSE_PROFILES=https docker compose up -d  # plus Caddy: automatic HTTPS for NAGMA_DOMAIN
+#
+# tools/install.sh sets COMPOSE_PROFILES=https in .env when you give it a domain.
+
+name: nagma
+
+services:
+  nagma:
+    build: .
+    image: nagma:local
+    restart: always
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      PORT: "8080"
+      DATA_DIR: /data
+    volumes:
+      - nagma-data:/data
+    ports:
+      # Behind Caddy only Caddy needs to reach it: install.sh sets NAGMA_BIND=127.0.0.1 then.
+      - "${NAGMA_BIND:-0.0.0.0}:${NAGMA_HTTP_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # Automatic HTTPS (Let's Encrypt) for NAGMA_DOMAIN. Started with the "https" profile.
+  caddy:
+    image: caddy:2
+    profiles: ["https"]
+    restart: always
+    depends_on:
+      - nagma
+    command: ["caddy", "reverse-proxy", "--from", "${NAGMA_DOMAIN:-localhost}", "--to", "nagma:8080"]
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  nagma-data:
+  caddy-data:
+  caddy-config:

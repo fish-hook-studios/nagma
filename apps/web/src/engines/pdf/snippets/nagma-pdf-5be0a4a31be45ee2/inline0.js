@@ -1,0 +1,1 @@
+export function local_now() { const d = new Date(); return d.getTime() / 1000 - d.getTimezoneOffset() * 60; }

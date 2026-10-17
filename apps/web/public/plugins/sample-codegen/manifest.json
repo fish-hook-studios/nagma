@@ -1,0 +1,12 @@
+{
+    "name": "Sample codegen",
+    "id": "nagma-sample-codegen",
+    "api": "1.0.0",
+    "main": "code.js",
+    "editorType": ["inspect"],
+    "capabilities": ["codegen"],
+    "codegenLanguages": [
+        { "label": "React (JSX)", "value": "react" },
+        { "label": "Flutter", "value": "flutter" }
+    ]
+}

@@ -1,0 +1,40 @@
+# Fly.io: one machine runs the editor and sync server. Keep it to one machine, since live
+# collaboration on a file goes through a single server process. The app and its volume keep the
+# names they were created with before the product's rename: renaming them here would deploy to a new,
+# empty app and volume. Rename them on Fly first (and move the volume's data) if they should change.
+app = "migfa"
+primary_region = "bom"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+
+[[mounts]]
+  source = "migfa_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Sleeps when nobody is connected and wakes on the next visit; shared files are on the volume.
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "connections"
+    soft_limit = 500
+    hard_limit = 1000
+
+[[http_service.checks]]
+  interval = "30s"
+  timeout = "5s"
+  grace_period = "10s"
+  method = "GET"
+  path = "/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

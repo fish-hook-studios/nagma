@@ -1,0 +1,40 @@
+{
+    "name": "nagma-inspect",
+    "displayName": "Nagma Inspect",
+    "description": "Browse your Nagma files and read Inspect code for a layer from a Nagma link, inside the editor.",
+    "version": "0.1.0",
+    "private": true,
+    "publisher": "nagma",
+    "license": "MPL-2.0",
+    "engines": {
+        "vscode": "^1.85.0"
+    },
+    "categories": ["Other"],
+    "main": "./src/extension.js",
+    "activationEvents": [],
+    "contributes": {
+        "commands": [
+            { "command": "nagma.setToken", "title": "Set personal access token", "category": "Nagma" },
+            { "command": "nagma.clearToken", "title": "Forget personal access token", "category": "Nagma" },
+            { "command": "nagma.listFiles", "title": "List files", "category": "Nagma" },
+            { "command": "nagma.inspectLink", "title": "Inspect code for a link", "category": "Nagma" },
+            { "command": "nagma.refresh", "title": "Refresh", "category": "Nagma", "icon": "$(refresh)" }
+        ],
+        "viewsContainers": {
+            "activitybar": [{ "id": "nagma", "title": "Nagma", "icon": "media/nagma.svg" }]
+        },
+        "views": {
+            "nagma": [{ "id": "nagma.files", "name": "Files" }]
+        },
+        "menus": {
+            "view/title": [{ "command": "nagma.refresh", "when": "view == nagma.files", "group": "navigation" }]
+        },
+        "configuration": {
+            "title": "Nagma",
+            "properties": {
+                "nagma.serverUrl": { "type": "string", "default": "http://localhost:8787", "description": "The Nagma sync server." },
+                "nagma.codeLanguage": { "type": "string", "enum": ["react", "html", "css"], "default": "react", "description": "The language Inspect code is shown in." }
+            }
+        }
+    }
+}

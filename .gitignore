@@ -1,0 +1,14 @@
+node_modules
+dist
+.DS_Store
+*.local
+engines/photo-wasm/target
+engines/pdf-wasm/target
+engines/layout-wasm/target
+engines/motion-wasm/target
+engines/video-wasm/target
+apps/desktop/release
+
+# Self-hosting: the server settings and backups (docs/self-hosting.md)
+.env
+backups/

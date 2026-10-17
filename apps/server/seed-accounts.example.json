@@ -1,0 +1,21 @@
+{
+  "note": "Test accounts for a local Nagma server. Create them with POST /auth/signup; never reuse these on a real server.",
+  "accounts": [
+    {
+      "name": "Ava Tester",
+      "email": "ava@nagma.test",
+      "password": "ava-local-test-1"
+    },
+    {
+      "name": "Ben Viewer",
+      "email": "ben@nagma.test",
+      "password": "ben-local-test-1"
+    },
+    {
+      "name": "Cal Invitee",
+      "email": "cal@nagma.test",
+      "password": "cal-local-test-1",
+      "newPassword": "cal-local-test-2"
+    }
+  ]
+}

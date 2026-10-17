@@ -1,0 +1,167 @@
+{
+    "name": "nagma-desktop",
+    "productName": "Nagma",
+    "private": true,
+    "version": "0.1.0",
+    "description": "Nagma for macOS and Windows: the editor with its own local sync server",
+    "main": "main.cjs",
+    "scripts": {
+        "web": "npm --prefix ../web run build",
+        "start": "npm run web && electron .",
+        "dev": "NAGMA_DEV_URL=http://localhost:5173 electron .",
+        "dist": "npm run web && electron-builder --config electron-builder.config.cjs --mac --arm64",
+        "dist:win": "npm run web && electron-builder --config electron-builder.config.cjs --win --x64 --arm64",
+        "dist:all": "npm run web && electron-builder --config electron-builder.config.cjs --mac --arm64 --win --x64 --arm64",
+        "pack": "electron-builder --config electron-builder.config.cjs --dir"
+    },
+    "devDependencies": {
+        "electron": "44.5.1",
+        "electron-builder": "26.16.1"
+    },
+    "build": {
+        "appId": "app.nagma.desktop",
+        "productName": "Nagma",
+        "directories": {
+            "output": "release",
+            "buildResources": "build"
+        },
+        "files": [
+            "main.cjs",
+            "open-files.cjs",
+            "preload.cjs",
+            "updater.cjs",
+            "guards.cjs",
+            "legacy.cjs",
+            "menu-items.cjs",
+            "package.json",
+            "build/trayTemplate.png",
+            "build/trayTemplate@2x.png"
+        ],
+        "extraResources": [
+            {
+                "from": "../web/dist",
+                "to": "web"
+            },
+            {
+                "from": "../server",
+                "to": "server",
+                "filter": [
+                    "*.mjs"
+                ]
+            },
+            {
+                "from": "../server/package.json",
+                "to": "server/package.json"
+            },
+            {
+                "from": "../server/node_modules",
+                "to": "server/node_modules"
+            }
+        ],
+        "mac": {
+            "category": "public.app-category.graphics-design",
+            "target": [
+                {
+                    "target": "dmg",
+                    "arch": [
+                        "arm64"
+                    ]
+                },
+                {
+                    "target": "zip",
+                    "arch": [
+                        "arm64"
+                    ]
+                }
+            ],
+            "icon": "build/icon.png",
+            "hardenedRuntime": true,
+            "entitlements": "build/entitlements.mac.plist",
+            "entitlementsInherit": "build/entitlements.mac.plist",
+            "extendInfo": {
+                "CFBundleDevelopmentRegion": "en",
+                "CFBundleLocalizations": [
+                    "en",
+                    "en-GB",
+                    "en-AU",
+                    "en-CA",
+                    "fr",
+                    "de",
+                    "es",
+                    "ja",
+                    "ko",
+                    "pt-BR",
+                    "zh-Hans"
+                ]
+            }
+        },
+        "dmg": {
+            "title": "Nagma"
+        },
+        "electronDist": "node_modules/electron/dist",
+        "electronVersion": "44.5.1",
+        "fileAssociations": [
+            {
+                "ext": "fig",
+                "name": "Design file",
+                "role": "Editor"
+            },
+            {
+                "ext": "deck",
+                "name": "Slides file",
+                "role": "Editor"
+            },
+            {
+                "ext": "buzz",
+                "name": "Campaign file",
+                "role": "Editor"
+            }
+        ],
+        "win": {
+            "target": [
+                {
+                    "target": "nsis",
+                    "arch": [
+                        "x64",
+                        "arm64"
+                    ]
+                },
+                {
+                    "target": "portable",
+                    "arch": [
+                        "x64"
+                    ]
+                }
+            ],
+            "icon": "build/icon.png"
+        },
+        "nsis": {
+            "oneClick": false,
+            "perMachine": false,
+            "allowToChangeInstallationDirectory": true,
+            "createDesktopShortcut": true,
+            "createStartMenuShortcut": true,
+            "shortcutName": "Nagma",
+            "artifactName": "Nagma-Setup-${version}-${arch}.${ext}"
+        },
+        "portable": {
+            "artifactName": "Nagma-${version}-portable.${ext}"
+        },
+        "protocols": [
+            {
+                "name": "Nagma link",
+                "schemes": [
+                    "nagma",
+                    "migfa"
+                ]
+            }
+        ]
+    },
+    "dependencies": {
+        "electron-updater": "6.8.10"
+    },
+    "author": {
+        "name": "Nagma"
+    },
+    "license": "MPL-2.0"
+}

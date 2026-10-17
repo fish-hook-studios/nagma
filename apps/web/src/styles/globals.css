@@ -1,0 +1,290 @@
+@import "tailwindcss";
+
+/* Nagma's own palette. Tokens switch with data-theme on <html>; Tailwind classes read them. */
+:root,
+:root[data-theme="light"] {
+    --canvas: #f5f5f5;
+    --panel: #ffffff;
+    --panel-raised: #ffffff;
+    --panel-border: #e6e6e6;
+    /* The rules between the design panel's sections (lighter than the panel's edge in Light). */
+    --section-rule: #ebebeb;
+    --panel-hover: #f5f5f5;
+    --field: #f5f5f5;
+    /* The bottom toolbar's hairline ring and its mode switcher's inset well. */
+    --toolbar-ring: #e6e6e6;
+    --mode-well: #ebebeb;
+    --ink: #1e1e1e;
+    --ink-muted: #7f7f7f;
+    --ink-subtle: #b3b3b3;
+    --brand: #0d99ff;
+    --brand-strong: #007be5;
+    --brand-soft: #e5f4ff;
+    --brand-row: #e5f4ff;
+    --tooltip: #1e1e1e;
+    /* File browser and admin console: card outlines, table rules, links and badges. */
+    --card-border: #e6e6e6;
+    --rule: #e6e6e6;
+    --link: #007be5;
+    --badge: #e5f4ff;
+    --badge-ink: #007be5;
+    --button: #0d99ff;
+    color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+    --canvas: #1e1e1e;
+    --panel: #2c2c2c;
+    --panel-raised: #2c2c2c;
+    --panel-border: #444444;
+    --section-rule: #444444;
+    --panel-hover: #383838;
+    --field: #383838;
+    --toolbar-ring: #3e3e3e;
+    --mode-well: #444444;
+    --ink: #ffffff;
+    --ink-muted: #b3b3b3;
+    --ink-subtle: #7f7f7f;
+    --brand: #0d99ff;
+    --brand-strong: #007be5;
+    --brand-soft: rgba(13, 153, 255, 0.2);
+    --brand-row: #394760;
+    --tooltip: #1e1e1e;
+    --card-border: #3d3d3d;
+    --rule: #383838;
+    --link: #7cc4f8;
+    --badge: #22466e;
+    --badge-ink: #a3c6ee;
+    --button: #0c8ce9;
+    color-scheme: dark;
+}
+
+/* The slides editor (slides/) shares the design editor's palette; only its selected-row grey is its own. */
+[data-slides-ui] {
+    /* The selected slide's row in the slide list. */
+    --slide-selected: #d9d9d9;
+}
+:root[data-theme="dark"] [data-slides-ui] {
+    --slide-selected: #767676;
+}
+
+/* The campaign editor (campaign/): a magenta accent, and in dark mode the near-black canvas and
+   soft panels of the brand asset tool it follows. Set on <html> while it's open, so its menus and
+   dialogs match. */
+:root[data-product="campaign"] {
+    --brand: #e62e9e;
+    --brand-strong: #cc1f88;
+    --brand-soft: #fbe3f2;
+    --brand-row: #fbe3f2;
+    --brand-ink: #c81f86;
+    --button: #e62e9e;
+    /* Bulk edit's rows: the one on show, and the one under the pointer. */
+    --row-on: #ebebeb;
+    --row-hover: #f0f0f0;
+}
+:root[data-theme="dark"][data-product="campaign"] {
+    /* The design editor's dark greys (panel #2C2C2C, canvas #1E1E1E, field #383838, rule #444444);
+       only the magenta tints are the product's own. */
+    --canvas: #1e1e1e;
+    --panel: #2c2c2c;
+    --panel-raised: #2c2c2c;
+    --panel-border: #444444;
+    --section-rule: #444444;
+    --panel-hover: #383838;
+    --field: #383838;
+    --ink-muted: #b3b3b3;
+    --ink-subtle: #7f7f7f;
+    --brand-soft: #4d3549;
+    --brand-row: #6c4865;
+    --brand-ink: #efa1dd;
+    --row-on: #444444;
+    --row-hover: #404040;
+}
+/* The floating toolbar over the selection stays dark in both themes. */
+[data-campaign-toolbar] {
+    --panel: #1e1e1e;
+    --panel-raised: #1e1e1e;
+    --panel-border: #444444;
+    --panel-hover: #383838;
+    --field: #383838;
+    --ink: #ffffff;
+    --ink-muted: #b3b3b3;
+    --ink-subtle: #7f7f7f;
+    color-scheme: dark;
+}
+/* Its Design mode is the design editor: the blue accent comes back, the dark palette stays. */
+:root[data-product="campaign"][data-campaign-mode="design"] {
+    --brand: #0d99ff;
+    --brand-strong: #007be5;
+    --brand-soft: #e5f4ff;
+    --brand-row: #e5f4ff;
+    --brand-ink: #007be5;
+    --button: #0d99ff;
+}
+:root[data-theme="dark"][data-product="campaign"][data-campaign-mode="design"] {
+    --brand-soft: rgba(13, 153, 255, 0.2);
+    --brand-row: #394760;
+    --brand-ink: #7cc4f8;
+    --button: #0c8ce9;
+}
+
+/* The Document product's (document/) blue accent. */
+:root {
+    --doc-accent: #2f6fed;
+}
+:root[data-theme="dark"] {
+    --doc-accent: #4c84f5;
+}
+
+/* The site editor (site/): an indigo accent. */
+:root[data-product="site"] {
+    --brand: #4f46e5;
+    --brand-strong: #4338ca;
+    --brand-soft: #eef2ff;
+    --brand-row: #e0e7ff;
+    --button: #4f46e5;
+}
+:root[data-theme="dark"][data-product="site"] {
+    --brand: #6366f1;
+    --brand-strong: #4f46e5;
+    --brand-soft: rgba(99, 102, 241, 0.2);
+    --brand-row: #34376b;
+    --button: #6366f1;
+}
+
+@theme inline {
+    --font-sans: "Inter", system-ui, sans-serif;
+    --color-canvas: var(--canvas);
+    --color-panel: var(--panel);
+    --color-panel-raised: var(--panel-raised);
+    --color-panel-border: var(--panel-border);
+    --color-section-rule: var(--section-rule, var(--panel-border));
+    --color-panel-hover: var(--panel-hover);
+    --color-field: var(--field);
+    --color-toolbar-ring: var(--toolbar-ring);
+    --color-mode-well: var(--mode-well);
+    --color-row-on: var(--row-on, var(--panel-hover));
+    --color-row-hover: var(--row-hover, var(--panel-hover));
+    --color-ink: var(--ink);
+    --color-ink-muted: var(--ink-muted);
+    --color-ink-subtle: var(--ink-subtle);
+    --color-brand-500: var(--brand);
+    --color-brand-600: var(--brand-strong);
+    --color-brand-50: var(--brand-soft);
+    --color-brand-100: var(--brand-row);
+    --color-brand-300: var(--brand-ink, var(--brand));
+    --color-tooltip: var(--tooltip);
+    --color-card-border: var(--card-border);
+    --color-rule: var(--rule);
+    --color-link: var(--link);
+    --color-badge: var(--badge);
+    --color-badge-ink: var(--badge-ink);
+    --color-button: var(--button);
+}
+
+html,
+body,
+#root {
+    height: 100%;
+}
+
+body {
+    margin: 0;
+    background: var(--canvas);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 11px;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+}
+
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+/* The colour picker's hue and opacity sliders: a flat track with a round white thumb. */
+/* The colour picker's hue and opacity sliders: 14pt tracks with a round ring thumb showing the
+   current colour (--thumb). */
+.picker-slider {
+    appearance: none;
+    height: 14px;
+    width: 100%;
+    border-radius: 999px;
+    outline: none;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1);
+}
+.picker-slider::-webkit-slider-thumb {
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 999px;
+    background: var(--thumb, transparent);
+    border: 3px solid #fff;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25), 0 1px 3px rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+}
+
+/* Desktop app: the tab bar is the window's title bar (macOS window buttons sit at its left). */
+.desktop [data-titlebar] {
+    -webkit-app-region: drag;
+}
+.desktop [data-titlebar] button,
+.desktop [data-titlebar] a,
+.desktop [data-titlebar] input {
+    -webkit-app-region: no-drag;
+}
+.desktop-darwin [data-titlebar] {
+    padding-left: 80px;
+}
+.desktop-darwin.desktop-full-screen [data-titlebar] {
+    padding-left: 0;
+}
+/* View > Always Show Tabs When Presenting: the presentation sits below the tab bar. */
+.present-tabs [data-player] {
+    top: 38px;
+}
+/* The variable button beside a field shows while its row is hovered or focused, or when a variable is applied. */
+[data-var-button=""] {
+    opacity: 0;
+    transition: opacity 80ms;
+}
+*:hover > [data-var-button=""],
+*:focus-within > [data-var-button=""],
+[data-var-button=""][data-pressed],
+[data-var-button=""]:focus-visible {
+    opacity: 1;
+}
+/* Sliders in effect settings: a thin track filled in blue up to a white knob. */
+.glass-slider {
+    appearance: none;
+    background: transparent;
+}
+.glass-slider::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 2px;
+    background: linear-gradient(to right, #0d99ff var(--fill, 0%), var(--color-panel-hover) var(--fill, 0%));
+}
+.glass-slider::-webkit-slider-thumb {
+    appearance: none;
+    margin-top: -4px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #ffffff;
+    box-shadow: 0 0 0 0.5px rgb(0 0 0 / 0.3), 0 1px 3px rgb(0 0 0 / 0.35);
+}
+
+/* Preferences › Accessibility: focus rings on every focused control, and no interface motion. */
+:root[data-focus-rings="always"] :focus {
+    outline: 2px solid var(--brand) !important;
+    outline-offset: 1px;
+}
+:root[data-reduce-motion="true"] *,
+:root[data-reduce-motion="true"] *::before,
+:root[data-reduce-motion="true"] *::after {
+    transition-duration: 0s !important;
+    animation-duration: 0s !important;
+    animation-iteration-count: 1 !important;
+}

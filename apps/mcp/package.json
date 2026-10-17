@@ -1,0 +1,17 @@
+{
+    "name": "@nagma/mcp",
+    "private": true,
+    "version": "0.1.0",
+    "description": "A Model Context Protocol server (stdio) that reads Nagma files from a Nagma sync server with a read-only personal access token.",
+    "type": "module",
+    "bin": {
+        "nagma-mcp": "./src/server.mjs"
+    },
+    "scripts": {
+        "start": "node src/server.mjs"
+    },
+    "engines": {
+        "node": ">=20"
+    },
+    "license": "MPL-2.0"
+}

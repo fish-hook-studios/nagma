@@ -1,0 +1,31 @@
+{
+    "name": "Sample grid maker",
+    "id": "nagma-sample-grid",
+    "api": "1.0.0",
+    "main": "code.js",
+    "ui": "ui.html",
+    "editorType": [
+        "design"
+    ],
+    "menu": [
+        {
+            "name": "Create grid…",
+            "command": "grid"
+        },
+        {
+            "name": "Name layers by type",
+            "command": "rename"
+        }
+    ],
+    "relaunchButtons": [
+        {
+            "command": "grid",
+            "name": "Make another grid"
+        },
+        {
+            "command": "rename",
+            "name": "Name layers by type",
+            "multipleSelection": true
+        }
+    ]
+}

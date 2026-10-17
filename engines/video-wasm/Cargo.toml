@@ -1,0 +1,29 @@
+[package]
+name = "nagma-video"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "FilmCraft's decoders, encoders and MP4 muxer compiled to WebAssembly for Nagma's video fills and video files."
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+filmcraft-codecs = { path = "../filmcraft/crates/codecs", default-features = false }
+filmcraft-media = { path = "../filmcraft/crates/media" }
+filmcraft-frame = { path = "../filmcraft/crates/frame" }
+filmcraft-time = { path = "../filmcraft/crates/time" }
+filmcraft-h264enc = { path = "../filmcraft/crates/h264enc" }
+filmcraft-aac = { path = "../filmcraft/crates/aac" }
+filmcraft-isobmff = { path = "../filmcraft/crates/isobmff" }
+wasm-bindgen = "0.2"
+serde_json = "1"
+
+# Its own workspace, so cargo doesn't look for one in parent folders.
+[workspace]
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
