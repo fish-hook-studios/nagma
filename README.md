@@ -1,8 +1,31 @@
 # Nagma
 
+[![CI](https://github.com/fish-hook-studios/nagma/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/fish-hook-studios/nagma/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/fish-hook-studios/nagma?include_prereleases&sort=semver)](https://github.com/fish-hook-studios/nagma/releases/latest)
+[![Licence: MPL-2.0](https://img.shields.io/badge/licence-MPL--2.0-blue)](LICENSE)
+
 Nagma is an open-source, self-hostable design suite. One editor and one small sync server cover design, prototyping, whiteboards, slides, campaign assets, sites, apps, video and documents, with live collaboration on files you host yourself.
 
+Website: https://nagma.app
 Source: https://github.com/fish-hook-studios/nagma
+
+## Download
+
+The desktop app (editor plus its own local sync server) for macOS, Windows and Linux: **[latest release](https://github.com/fish-hook-studios/nagma/releases/latest)**.
+
+| System | File |
+|---|---|
+| macOS, Apple silicon | `Nagma-<version>-arm64.dmg` |
+| macOS, Intel | `Nagma-<version>-x64.dmg` |
+| Windows (x64 and Arm) | `Nagma-Setup-<version>.exe`, or `Nagma-<version>-portable.exe` without installing |
+| Linux | `.AppImage` (make it executable and run it) or `.deb` (`sudo apt install ./Nagma-<version>-amd64.deb`) |
+
+The app updates itself from the releases page. Until the builds are signed, the systems warn the first time you open them:
+
+- **macOS**: right-click Nagma in Applications › Open, then Open again (or System Settings › Privacy & Security › Open Anyway). Unsigned Mac builds can't install updates in place: when one is out, Nagma says so and opens its download page.
+- **Windows**: on the "Windows protected your PC" screen, choose More info › Run anyway.
+
+To run your own server for a team, see [docs/self-hosting.md](docs/self-hosting.md). Maintainers: [docs/releasing.md](docs/releasing.md).
 
 ## Run it
 
@@ -171,6 +194,10 @@ Mail goes over SMTP when `NAGMA_SMTP_URL` is set (`smtp://user:pass@host:587` or
 Sign-up makes an unverified account and sends a verification link (random 32 bytes, kept only as a SHA-256, valid 24 hours, single use; opening it verifies the account and signs it in on that device). Until then the account can sign in and work on its drafts, sees a "Verify your email" banner with Resend (at most one mail a minute and five an hour), and can't invite people, share files or folders, publish (community, sites, libraries, Make apps), create teams or be added to one. Single sign-on (OIDC, SAML), a completed password reset, a confirmed email change and the link in an emailed invitation (`?email-token=`, 14 days, sent when `NAGMA_PUBLIC_URL` is set) each prove the address too. Accounts made before verification existed are marked verified when the server loads them.
 
 `NAGMA_REQUIRE_VERIFIED_EMAIL`: `1` requires verification, `0` turns it off. Unset, it's required when the server can deliver the link (`NAGMA_SMTP_URL` or `NAGMA_DEV_MAIL_FILE=1`) and off otherwise, so a local single-user server isn't held back. When it's required and no mail is set up, the banner says so and a server admin (`NAGMA_ADMINS`, or the first account) verifies accounts under Settings › Account (`GET /auth/admin/unverified`, `POST /auth/admin/verify`). Verification links point at `NAGMA_APP_URL` when set, else the address the request came from, else `NAGMA_PUBLIC_URL`.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) (setup, tests, the brand-name and clean-room rules), the [Code of Conduct](CODE_OF_CONDUCT.md) and, for security problems, [SECURITY.md](SECURITY.md).
 
 ## Licence
 

@@ -1,0 +1,11 @@
+# Cloudflare Pages redirects for nagma.app (https://developers.cloudflare.com/pages/configuration/redirects/).
+# The download links need the release assets to keep these exact names (see README.md).
+/download/mac       https://github.com/fish-hook-studios/nagma/releases/latest/download/Nagma-mac-arm64.dmg     302
+/download/windows   https://github.com/fish-hook-studios/nagma/releases/latest/download/Nagma-Setup-x64.exe     302
+/download/mac-intel https://github.com/fish-hook-studios/nagma/releases/latest/download/Nagma-mac-x64.dmg       302
+/download/deb       https://github.com/fish-hook-studios/nagma/releases/latest/download/Nagma-amd64.deb          302
+/download/linux     https://github.com/fish-hook-studios/nagma/releases/latest/download/Nagma-x86_64.AppImage   302
+/download           https://github.com/fish-hook-studios/nagma/releases/latest                                  302
+/github             https://github.com/fish-hook-studios/nagma                                                 302
+/docs               https://github.com/fish-hook-studios/nagma/tree/main/docs                                  302
+/self-host          https://github.com/fish-hook-studios/nagma/blob/main/docs/self-hosting.md                  302

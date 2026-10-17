@@ -34,7 +34,7 @@ const pendingLinks = [];
 // The data folder is named after the app; the first start under the new name copies the old one in.
 legacy.migrateUserData(app.getPath("userData"));
 const settingsPath = () => path.join(app.getPath("userData"), "settings.json");
-let settings = { interfaceScale: 1, presentTabs: false, showInMenuBar: false, disableHardwareAcceleration: false, keptWindows: null, updateUrl: "", betaUpdates: false, trustedOrigins: [] };
+let settings = { interfaceScale: 1, presentTabs: false, showInMenuBar: false, disableHardwareAcceleration: false, keptWindows: null, updateUrl: "", updatesOff: false, betaUpdates: false, trustedOrigins: [] };
 // The newest notifications from the open editor (comments, invites, requests), for the menu bar icon.
 let notices = [];
 const mac = process.platform === "darwin";
@@ -376,21 +376,23 @@ for (const scheme of legacy.SCHEMES) {
     else app.setAsDefaultProtocolClient(scheme);
 }
 
-// Preferences > Update Feed…: the address of the update folder, taken from the clipboard.
+// Preferences > Update Feed…: Nagma's releases on GitHub (the default), the address of a folder your
+// team publishes builds to (taken from the clipboard), or no updates.
 async function chooseUpdateFeed() {
     const current = updater.feedUrl(settings);
     const copied = clipboard.readText().trim();
     const usable = /^https?:\/\/\S+$/.test(copied) ? copied : null;
     const { response } = await dialog.showMessageBox({
         type: "question",
-        buttons: [usable ? "Use Copied Address" : "Copy an Address First", "Turn Off Updates", "Cancel"],
-        defaultId: usable ? 0 : 2,
-        cancelId: 2,
+        buttons: [usable ? "Use Copied Address" : "Copy an Address First", "Use Nagma Releases", "Turn Off Updates", "Cancel"],
+        defaultId: usable ? 0 : 3,
+        cancelId: 3,
         message: "Update feed",
-        detail: `${process.env.NAGMA_UPDATE_URL ? "Set by NAGMA_UPDATE_URL: " : "Now: "}${current || "none (updates are off)"}\n\nCopy the address of the folder your team publishes Nagma builds to, then choose Use Copied Address.${usable ? `\n\nCopied: ${usable}` : ""}`,
+        detail: `${process.env.NAGMA_UPDATE_URL ? "Set by NAGMA_UPDATE_URL: " : "Now: "}${current || "none (updates are off)"}\n\nNagma updates from its releases on GitHub. To use builds your team publishes instead, copy the address of that folder, then choose Use Copied Address.${usable ? `\n\nCopied: ${usable}` : ""}`,
     });
-    if (response === 0 && usable) settings.updateUrl = usable;
-    else if (response === 1) settings.updateUrl = "";
+    if (response === 0 && usable) Object.assign(settings, { updateUrl: usable, updatesOff: false });
+    else if (response === 1) Object.assign(settings, { updateUrl: "", updatesOff: false });
+    else if (response === 2) settings.updatesOff = true;
     else return;
     saveSettings();
     updater.setup(settings);
@@ -444,7 +446,7 @@ async function resetAndRestart() {
     if (response !== 0) return;
     await session.defaultSession.clearCache();
     await session.defaultSession.clearStorageData({ storages: ["cachestorage", "serviceworkers", "shadercache"] });
-    settings = { interfaceScale: 1, presentTabs: false, showInMenuBar: false, disableHardwareAcceleration: false, keptWindows: null, updateUrl: settings.updateUrl ?? "", betaUpdates: Boolean(settings.betaUpdates), trustedOrigins: [] };
+    settings = { interfaceScale: 1, presentTabs: false, showInMenuBar: false, disableHardwareAcceleration: false, keptWindows: null, updateUrl: settings.updateUrl ?? "", updatesOff: Boolean(settings.updatesOff), betaUpdates: Boolean(settings.betaUpdates), trustedOrigins: [] };
     saveSettings();
     relaunch();
 }
@@ -466,6 +468,8 @@ function updateItem() {
     const u = updater.getState();
     if (u.status === "ready") return { label: `Restart to Update${u.version ? ` (${u.version})` : ""}`, click: () => updater.restartToUpdate() };
     if (u.status === "downloading") return { label: `Downloading Update… ${u.progress}%`, enabled: false };
+    // An unsigned Mac build can't install updates itself (updater.cjs): the release page has the new one.
+    if (u.status === "available") return { label: `Download Nagma ${u.version ?? ""}…`.replace(/ +…/, "…"), click: () => updater.openReleasePage() };
     if (u.status === "checking") return { label: "Checking for Updates…", enabled: false };
     return { label: "Check for Updates…", click: () => void updater.checkNow(settings) };
 }
@@ -627,7 +631,7 @@ function buildMenu() {
         {
             role: "help",
             submenu: [
-                ...(file ? [...helpParts(file.help)[0].map(fileItem), { type: "separator" }] : []),
+                ...(file ? [...helpParts(file.help)[0].map(fileItem), { type: "separator" }] : [{ label: "Get Started", click: act("gettingStarted") }, { type: "separator" }]),
                 {
                     label: "Troubleshooting",
                     submenu: [

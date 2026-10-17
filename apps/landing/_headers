@@ -1,0 +1,21 @@
+# Cloudflare Pages headers for nagma.app (https://developers.cloudflare.com/pages/configuration/headers/).
+/*
+  Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; upgrade-insecure-requests
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=(), interest-cohort=()
+  Cross-Origin-Opener-Policy: same-origin
+
+/img/*
+  Cache-Control: public, max-age=604800, stale-while-revalidate=86400
+
+/favicon.svg
+  Cache-Control: public, max-age=604800
+
+/*.css
+  Cache-Control: public, max-age=3600, stale-while-revalidate=86400
+
+/*.js
+  Cache-Control: public, max-age=3600, stale-while-revalidate=86400

@@ -1,0 +1,55 @@
+name: Feature request
+description: Suggest something Nagma should do.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please search the existing issues first. Describe the problem you're solving before the solution you have in mind.
+        Refer to other products by what they do, not by name (see CONTRIBUTING.md).
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do, and what gets in the way today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you'd like
+      description: How it could work in Nagma. Sketches and examples help.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      multiple: true
+      options:
+        - Design editor
+        - Prototyping
+        - Whiteboard
+        - Slides
+        - Campaign assets
+        - Sites
+        - Apps (Make)
+        - Video
+        - Documents and PDF
+        - Collaboration and sharing
+        - Import and export
+        - Desktop app
+        - Self-hosting and server
+        - AI features
+        - Other
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: Workarounds you use now, or other ways it could be solved.
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Contributing
+      options:
+        - label: I'd like to work on this myself.

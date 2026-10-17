@@ -3,7 +3,8 @@
     "productName": "Nagma",
     "private": true,
     "version": "0.1.0",
-    "description": "Nagma for macOS and Windows: the editor with its own local sync server",
+    "description": "Nagma for macOS, Windows and Linux: the editor with its own local sync server",
+    "homepage": "https://github.com/fish-hook-studios/nagma",
     "main": "main.cjs",
     "scripts": {
         "web": "npm --prefix ../web run build",
@@ -12,6 +13,7 @@
         "dist": "npm run web && electron-builder --config electron-builder.config.cjs --mac --arm64",
         "dist:win": "npm run web && electron-builder --config electron-builder.config.cjs --win --x64 --arm64",
         "dist:all": "npm run web && electron-builder --config electron-builder.config.cjs --mac --arm64 --win --x64 --arm64",
+        "dist:linux": "npm run web && electron-builder --config electron-builder.config.cjs --linux --x64",
         "pack": "electron-builder --config electron-builder.config.cjs --dir"
     },
     "devDependencies": {
@@ -30,6 +32,7 @@
             "open-files.cjs",
             "preload.cjs",
             "updater.cjs",
+            "update-feed.cjs",
             "guards.cjs",
             "legacy.cjs",
             "menu-items.cjs",
@@ -64,13 +67,15 @@
                 {
                     "target": "dmg",
                     "arch": [
-                        "arm64"
+                        "arm64",
+                        "x64"
                     ]
                 },
                 {
                     "target": "zip",
                     "arch": [
-                        "arm64"
+                        "arm64",
+                        "x64"
                     ]
                 }
             ],
@@ -96,10 +101,12 @@
             }
         },
         "dmg": {
-            "title": "Nagma"
+            "title": "Nagma",
+            "artifactName": "Nagma-${version}-${arch}.${ext}"
         },
         "electronDist": "node_modules/electron/dist",
         "electronVersion": "44.5.1",
+        "generateUpdatesFilesForAllChannels": true,
         "fileAssociations": [
             {
                 "ext": "fig",
@@ -134,6 +141,31 @@
                 }
             ],
             "icon": "build/icon.png"
+        },
+        "linux": {
+            "target": [
+                {
+                    "target": "AppImage",
+                    "arch": [
+                        "x64"
+                    ]
+                },
+                {
+                    "target": "deb",
+                    "arch": [
+                        "x64"
+                    ]
+                }
+            ],
+            "category": "Graphics",
+            "icon": "build/icon.png",
+            "executableName": "nagma",
+            "maintainer": "Nagma contributors <hello@nagma.app>",
+            "synopsis": "Open-source, self-hostable design suite",
+            "artifactName": "Nagma-${version}-${arch}.${ext}"
+        },
+        "deb": {
+            "packageName": "nagma"
         },
         "nsis": {
             "oneClick": false,

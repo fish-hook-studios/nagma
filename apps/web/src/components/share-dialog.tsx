@@ -10,6 +10,8 @@ import { AuthForm } from "./auth";
 import { Avatar } from "./avatar";
 import { DarkMenu } from "./collab-menu";
 import { PublishDialog } from "./community-page";
+import { ShareNeedsServer } from "./onboarding";
+import { shouldNudgeShare } from "../engine/onboarding";
 
 // Share, like the reference's dialog: invite by email with a role, "Who has access" (the link, the project's
 // team, the owner and everyone invited), what each can do, and links to copy or embed.
@@ -101,6 +103,9 @@ export function ShareDialogContent({ close, stacked }: { close: () => void; stac
     const [publishing, setPublishing] = useState(false);
     const shared = status !== "local";
     const manage = role === "edit";
+    // The first Share in a file only on this device, with This computer as the server: a note that
+    // collaboration needs a server (once per device).
+    const [nudge] = useState(() => shouldNudgeShare(status === "local"));
 
     const keyParam = () => {
         const key = currentLinkKey();
@@ -173,6 +178,7 @@ export function ShareDialogContent({ close, stacked }: { close: () => void; stac
     if (!account) {
         return single(
                 <div className="space-y-4 p-4">
+                    {nudge && !shared && <ShareNeedsServer close={close} />}
                     <p className="text-[12px] leading-relaxed text-ink-muted">Sign in so this file has an owner, and so you can invite people by email.</p>
                     <AuthForm compact />
                     {shared && (
@@ -187,6 +193,7 @@ export function ShareDialogContent({ close, stacked }: { close: () => void; stac
     if (!shared) {
         return single(
                 <div className="space-y-4 p-4">
+                    {nudge && <ShareNeedsServer close={close} />}
                     <p className="text-[12px] leading-relaxed text-ink-muted">This file is only in this browser. Move it to your Nagma server, owned by you, then invite people or send a link.</p>
                     <AriaButton
                         onPress={() => {

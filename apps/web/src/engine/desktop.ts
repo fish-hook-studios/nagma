@@ -8,6 +8,7 @@ import { vui } from "./video/state";
 import { ACTION_BY_ID, actionEnabled, actionLabel, runAction } from "./menu-actions";
 import { editor } from "./store";
 import { openServerPicker } from "./servers";
+import { openWelcome } from "./onboarding";
 
 // The desktop app's menu bar (apps/desktop/main.cjs) reaches the editor through window.__nagmaMenu:
 // Undo, Redo and Select All act on a text field when one has focus, else run the editor's own
@@ -126,6 +127,10 @@ function run(action: string, arg?: unknown): unknown {
             return true;
         case "logOut":
             void signOut().then(refreshServerFiles);
+            return true;
+        // Help › Get Started on Home (in a file it's the editor's own action).
+        case "gettingStarted":
+            openWelcome();
             return true;
         default:
             return false;
@@ -317,7 +322,7 @@ export const SPEC: Record<string, string[]> = {
     vector: ["join", "smoothJoin", "heal", "-", "splitVector", "simplifyPath", "offsetPath"],
     plugins: ["runLastPlugin", "Development:newPlugin,importPlugin,-,pluginDocs,pluginConsole,-,devVm,hotReload", "-", "plugins"],
     widgets: ["Development:importWidget", "-", "manageWidgets", "selectWidgets"],
-    help: ["help", "shortcuts", "forum", "tutorials", "releaseNotes", "-", "account"],
+    help: ["gettingStarted", "help", "shortcuts", "forum", "tutorials", "releaseNotes", "-", "account"],
 };
 // The menu bar spells items in title case, except the Plugins and Widgets menus (sentence case).
 const SMALL = new Set(["a", "an", "and", "as", "at", "by", "for", "in", "of", "on", "or", "the", "to", "with"]);

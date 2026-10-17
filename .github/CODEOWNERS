@@ -1,0 +1,9 @@
+# Reviewers requested automatically for pull requests. @fish-hook-studios/maintainers is a team in
+# the fish-hook-studios organisation; create it (Organisation › Teams) and give it write access.
+*                       @fish-hook-studios/maintainers
+
+# Release, CI and signing setup.
+/.github/               @fish-hook-studios/maintainers
+/tools/release.sh       @fish-hook-studios/maintainers
+/apps/desktop/electron-builder.config.cjs @fish-hook-studios/maintainers
+/apps/desktop/update*.cjs @fish-hook-studios/maintainers

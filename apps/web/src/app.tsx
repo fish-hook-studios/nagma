@@ -49,6 +49,7 @@ import { PluginHost } from "./components/plugins-ui";
 import { MobileViewer, useMobileViewer } from "./components/mobile-viewer";
 import { VerifyBanner } from "./components/verify-email";
 import { MoveDraftsOffer } from "./components/move-drafts";
+import { Onboarding } from "./components/onboarding";
 import "./engine/team-features";
 
 export function App() {
@@ -251,6 +252,7 @@ export function App() {
             <ServerPicker />
             <ServerLinkPrompt />
             <AccountSettingsHost />
+            <Onboarding />
             <AskTextDialog />
             {!linkDone && link.reset && <ResetPasswordModal token={link.reset} onDone={clearLink} />}
             {!linkDone && link.invite && <InviteModal token={link.invite} onDone={clearLink} />}

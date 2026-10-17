@@ -1,0 +1,147 @@
+# Checks every push and pull request to main: the web app (types, lint, tests), the sync server and
+# desktop tests, the brand-name guard, and a self-hosting smoke test (the Docker image and the
+# compose stack, started for real, with an account signed up through the API).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "22"
+
+jobs:
+  web:
+    name: Web (tsc, oxlint, vitest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+      - name: Type-check the app
+        run: npx tsc --noEmit -p tsconfig.app.json
+      - name: Type-check the tests
+        run: npx tsc --noEmit -p tsconfig.test.json
+      - name: Lint
+        run: npx oxlint src
+      - name: Tests
+        run: npx vitest run
+
+  server:
+    name: Server tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/server/package-lock.json
+      - run: npm ci
+        working-directory: apps/server
+      - name: Syntax check
+        run: for f in apps/server/*.mjs; do node --check "$f"; done
+      - name: Tests
+        run: node --test apps/server/test/
+
+  desktop:
+    name: Desktop tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      # The tests load only the app's pure modules (no Electron), so no install is needed.
+      - name: Syntax check
+        run: for f in apps/desktop/*.cjs; do node --check "$f"; done
+      - name: Tests
+        run: node --test apps/desktop/test/
+
+  guards:
+    name: Brand names and scripts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Brand-name guard
+        run: bash tools/check-brand-names.sh
+      - name: Shell syntax
+        run: for f in tools/*.sh engines/*.sh; do bash -n "$f"; done
+      - name: install.sh dry run
+        run: bash tools/install.sh --dry-run --yes --admin-email admin@example.com </dev/null
+
+  self-host:
+    name: Self-host smoke test (Docker)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build the image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: nagma:local
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Write a temporary .env
+        run: |
+          cat > .env <<'EOF'
+          NAGMA_SERVER_NAME=CI
+          NAGMA_BIND=127.0.0.1
+          NAGMA_HTTP_PORT=8080
+          COMPOSE_PROFILES=
+          EOF
+      - name: Compose file is valid
+        run: docker compose config --quiet
+      - name: Start the stack
+        run: docker compose up -d --no-build nagma
+      - name: Wait for /health
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8080/health > health.json; then cat health.json; echo; exit 0; fi
+            sleep 2
+          done
+          docker compose logs nagma
+          exit 1
+      - name: Sign up through the API
+        run: |
+          set -euo pipefail
+          curl -fsS -X POST http://127.0.0.1:8080/auth/signup \
+            -H 'content-type: application/json' \
+            -d '{"name":"CI","email":"ci@example.com","password":"correct horse battery"}' > signup.json
+          token=$(jq -er .token signup.json)
+          curl -fsS http://127.0.0.1:8080/auth/me -H "authorization: Bearer $token" | jq -e '.email == "ci@example.com"'
+      - name: The editor is served
+        run: |
+          set -euo pipefail
+          curl -fsS http://127.0.0.1:8080/ -H 'accept: text/html' > index.html
+          grep -qi '<html' index.html
+      - name: Logs
+        if: failure()
+        run: docker compose logs nagma
+      - name: Stop
+        if: always()
+        run: docker compose down -v

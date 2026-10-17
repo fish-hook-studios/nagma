@@ -1,0 +1,243 @@
+# Builds the desktop app for macOS, Windows and Linux and publishes a GitHub Release.
+#
+# Started by pushing a tag vX.Y.Z (tools/release.sh makes one), or by hand from the Actions tab with a
+# version (Run workflow > version; "dry run" builds without publishing, the installers are kept as
+# workflow artifacts). A version with a hyphen (v0.2.0-beta.1) becomes a pre-release.
+#
+# The tag's version is written into the apps' package.json files for the build only; nothing is
+# committed. Signing and notarisation happen only when the secrets exist (docs/releasing.md); without
+# them the builds are unsigned, which electron-builder.config.cjs handles.
+#
+# The release gets the installers plus electron-updater's latest*.yml / beta*.yml files: installed
+# apps read those from the newest release to update themselves (apps/desktop/update-feed.cjs).
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, e.g. 0.2.0 or 0.2.0-beta.1 (the tag v<version> is created at this commit)"
+        required: true
+        type: string
+      dry_run:
+        description: "Build only: don't create the release"
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "22"
+
+jobs:
+  version:
+    name: Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      tag: ${{ steps.v.outputs.tag }}
+      prerelease: ${{ steps.v.outputs.prerelease }}
+    steps:
+      - id: v
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then raw="$INPUT_VERSION"; else raw="$GITHUB_REF_NAME"; fi
+          version="${raw#v}"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::\"$raw\" isn't a version like 1.2.3 or 1.2.3-beta.1"; exit 1
+          fi
+          prerelease=false
+          if [[ "$version" == *-* ]]; then prerelease=true; fi
+          {
+            echo "version=$version"
+            echo "tag=v$version"
+            echo "prerelease=$prerelease"
+          } >> "$GITHUB_OUTPUT"
+          echo "Releasing $version (prerelease: $prerelease)"
+
+  web:
+    name: Web app
+    needs: version
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+        working-directory: apps/web
+      - run: npm run build
+        working-directory: apps/web
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: apps/web/dist
+          if-no-files-found: error
+          retention-days: 3
+
+  desktop:
+    name: Desktop (${{ matrix.name }})
+    needs: [version, web]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Architectures come from the targets in apps/desktop/package.json ("build"):
+          # macOS dmg + zip for arm64 and x64; Windows NSIS for x64 and arm64 (one installer) plus a
+          # portable x64 build; Linux AppImage and deb for x64.
+          - name: macOS
+            os: macos-latest
+            args: --mac
+          - name: Windows
+            os: windows-latest
+            args: --win
+          - name: Linux
+            os: ubuntu-latest
+            args: --linux
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            apps/server/package-lock.json
+            apps/desktop/package-lock.json
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: apps/web/dist
+      - name: Install the server (bundled into the app) and the desktop tools
+        shell: bash
+        run: |
+          npm ci --omit=dev --prefix apps/server
+          npm ci --prefix apps/desktop
+      - name: Set the version for this build (not committed)
+        shell: bash
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          for app in apps/desktop apps/server; do
+            (cd "$app" && npm version "$VERSION" --no-git-tag-version --allow-same-version >/dev/null)
+          done
+          node -p "'apps/desktop is ' + require('./apps/desktop/package.json').version"
+      # Each credential is passed on only when its secret exists, so a missing one leaves the build
+      # unsigned instead of failing it. The Apple certificate goes only to the macOS build (on
+      # Windows, CSC_LINK would be read as the Windows certificate).
+      - name: Signing credentials (when configured)
+        shell: bash
+        env:
+          S_CSC_LINK: ${{ secrets.CSC_LINK }}
+          S_CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          S_APPLE_ID: ${{ secrets.APPLE_ID }}
+          S_APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          S_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          S_WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          S_WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: |
+          pass() {
+            local value="${!2}"
+            [ -n "$value" ] || return 0
+            { echo "$1<<__NAGMA_SECRET__"; echo "$value"; echo "__NAGMA_SECRET__"; } >> "$GITHUB_ENV"
+            echo "$1 is set"
+          }
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            pass CSC_LINK S_CSC_LINK
+            pass CSC_KEY_PASSWORD S_CSC_KEY_PASSWORD
+            pass APPLE_ID S_APPLE_ID
+            pass APPLE_APP_SPECIFIC_PASSWORD S_APPLE_APP_SPECIFIC_PASSWORD
+            pass APPLE_TEAM_ID S_APPLE_TEAM_ID
+          elif [ "$RUNNER_OS" = "Windows" ]; then
+            pass WIN_CSC_LINK S_WIN_CSC_LINK
+            pass WIN_CSC_KEY_PASSWORD S_WIN_CSC_KEY_PASSWORD
+          fi
+      - name: Build
+        shell: bash
+        working-directory: apps/desktop
+        env:
+          # Lets electron-builder fetch Electron and its tools without hitting anonymous rate limits.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --config electron-builder.config.cjs ${{ matrix.args }} --publish never
+      - name: Release files
+        shell: bash
+        run: ls -la apps/desktop/release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.name }}
+          if-no-files-found: error
+          retention-days: 7
+          path: |
+            apps/desktop/release/*.dmg
+            apps/desktop/release/*.zip
+            apps/desktop/release/*.exe
+            apps/desktop/release/*.AppImage
+            apps/desktop/release/*.deb
+            apps/desktop/release/*.blockmap
+            apps/desktop/release/*.yml
+            !apps/desktop/release/builder-debug.yml
+            !apps/desktop/release/builder-effective-config.yaml
+
+  publish:
+    name: GitHub Release
+    needs: [version, desktop]
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-*
+          path: dist
+          merge-multiple: true
+      - name: Files
+        run: ls -la dist
+      # Stable names beside the versioned ones, so nagma.app/download/<platform> can point at
+      # releases/latest/download/<fixed name> (apps/landing/_redirects). The versioned files stay:
+      # electron-updater's latest*.yml refer to them.
+      - name: Stable download names
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          link() { src=$(ls $1 2>/dev/null | head -n 1 || true); [ -n "$src" ] && cp "$src" "$2" && echo "$2 <- $src" || echo "no match for $1"; }
+          link 'Nagma-*-arm64.dmg'          Nagma-mac-arm64.dmg
+          link 'Nagma-*-x64.dmg'            Nagma-mac-x64.dmg
+          link 'Nagma-Setup-*.exe'          Nagma-Setup-x64.exe
+          link 'Nagma-*-portable.exe'       Nagma-portable-x64.exe
+          link 'Nagma-*-x86_64.AppImage'    Nagma-x86_64.AppImage
+          link 'Nagma-*-x64.AppImage'       Nagma-x86_64.AppImage
+          link 'Nagma-*amd64.deb'           Nagma-amd64.deb
+          link 'Nagma-*-x64.deb'            Nagma-amd64.deb
+          ls -la
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.version.outputs.tag }}
+          name: Nagma ${{ needs.version.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          draft: false
+          prerelease: ${{ needs.version.outputs.prerelease == 'true' }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          body: |
+            **Downloads:** macOS (Apple silicon: `arm64.dmg`, Intel: `x64.dmg`), Windows (`Nagma-Setup-…exe`, or the portable `.exe`), Linux (`.AppImage` or `.deb`). The server is the Docker image built from this tag; see docs/self-hosting.md.
+
+            Until the builds are signed: on macOS, right-click Nagma in Applications and choose Open the first time; on Windows, choose More info › Run anyway.
+          files: |
+            dist/*

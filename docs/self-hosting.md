@@ -184,7 +184,7 @@ you don't use commented out rather than empty: an empty value counts as set. The
 | `TRASH_DAYS`, `SESSION_IDLE_DAYS`, `DIGEST_MINUTES`, `AUTO_VERSION_MS` | Housekeeping (30 days, 30 days, 30 minutes, 30 minutes). |
 | `TRUST_PROXY` | `1` behind a reverse proxy, so rate limits see the visitor's address. |
 | `PORT`, `DATA_DIR`, `STATIC_DIR` | Set inside the container (8080, `/data`, the built editor). |
-| `NAGMA_UPDATE_URL`, `NAGMA_UPDATE_CHANNEL` | For building the desktop app: where its updates are published. |
+| `NAGMA_UPDATE_URL`, `NAGMA_UPDATE_CHANNEL`, `NAGMA_NO_UPDATES` | For building the desktop app: a folder of your own its updates are published to (by default, the project's GitHub Releases), or `NAGMA_NO_UPDATES=1` for builds that never update. See [releasing.md](releasing.md). |
 
 Settings named `MIGFA_*` (the product's name before it was Nagma) are still read as their `NAGMA_*`
 names, with a line in the log; rename them when you can.

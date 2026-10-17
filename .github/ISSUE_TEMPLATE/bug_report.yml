@@ -1,0 +1,61 @@
+name: Bug report
+description: Something in Nagma doesn't work as it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Security problems go to security@nagma.app (see SECURITY.md), not here.
+        Please search the existing issues first.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open a new design file
+        2. Draw a frame and …
+        3. …
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where
+      multiple: true
+      options:
+        - Web app (browser)
+        - Desktop app (macOS)
+        - Desktop app (Windows)
+        - Desktop app (Linux)
+        - Self-hosted server (Docker / install.sh)
+        - Sync server (other)
+        - MCP server
+        - VS Code extension
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Desktop app › About Nagma, the server's /health "version", or the commit you built from.
+      placeholder: 0.2.0
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Browser and operating system
+      placeholder: Chrome 140 on macOS 26
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs, screenshots or files
+      description: Browser console errors, `docker compose logs nagma`, the desktop app's Help › Troubleshooting › Save Debug Info…, or a small file that shows the problem. Remove anything private first.
+      render: text

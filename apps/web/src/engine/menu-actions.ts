@@ -409,6 +409,7 @@ export const MENU_ACTIONS: MenuAction[] = [
     { id: "pluginConsole", label: "Show/Hide console", group: "Plugins", keywords: "plugin development console log errors", run: () => (pluginStore.get().consoleOpen ? closePluginConsole() : openPluginConsole()) },
     { id: "widgets", label: "Widgets", group: "Menu", keywords: "widget insert interactive", run: openWidgets },
     { id: "libraries", label: "Libraries", group: "Menu", keywords: "assets components publish enable", run: () => openLibraries() },
+    { id: "gettingStarted", label: "Get started", group: "Help", keywords: "welcome onboarding first run server ai key", run: () => void import("./onboarding").then((m) => m.openWelcome()) },
     { id: "shortcuts", label: "Keyboard shortcuts", group: "Help", shortcut: "⌃ ⇧ ?", keywords: "keys hotkeys cheat sheet", run: toggleShortcuts },
     { id: "help", label: "Help page", group: "Help", run: () => window.open("https://github.com/fish-hook-studios/nagma#readme", "_blank", "noopener") },
     { id: "forum", label: "Support forum", group: "Help", keywords: "community questions discussions", run: () => window.open("https://github.com/fish-hook-studios/nagma/discussions", "_blank", "noopener") },
@@ -697,7 +698,7 @@ export const MAIN_MENU: MenuNode[] = [
     "libraries",
     "-",
     { sub: "aiBalanceMenu", label: "AI balance", items: ["aiBalance"] },
-    { sub: "helpMenu", label: "Help and account", items: ["help", "shortcuts", "forum", "releaseNotes", "reportProblem", "resources", "-", "account", "accountTokens", "signOut"] },
+    { sub: "helpMenu", label: "Help and account", items: ["gettingStarted", "help", "shortcuts", "forum", "releaseNotes", "reportProblem", "resources", "-", "account", "accountTokens", "signOut"] },
 ];
 
 // Every action with the menu path it sits under, for search ("Object › Boolean groups › Union selection").

@@ -133,6 +133,7 @@ import { ResourcesPage, TemplatePickerHost } from "./resources-page";
 import { openTemplatePicker } from "../engine/team-templates";
 import { askText } from "./ask-text";
 import { currentServer, openServerPicker, shareableUrl, withServer } from "../engine/servers";
+import { openWelcome } from "../engine/onboarding";
 import { ServerBadge } from "./server-picker";
 
 // Where Home is looking: the same places a design tool's file browser has. A "folder" is one of
@@ -958,6 +959,7 @@ export function Home() {
                             switchAccount(k.slice(7));
                             void refreshServerFiles();
                         }
+                        else if (k === "start") openWelcome();
                         else if (k === "theme") editor.setPrefs({ theme: editor.get().prefs.theme === "dark" ? "light" : "dark" });
                     }}
                 >
@@ -971,6 +973,7 @@ export function Home() {
                             <MenuRow id="settings" label="Settings" />
                             <MenuRow id="notifications" label="Notification settings" />
                             <MenuRow id="theme" label="Switch theme" />
+                            <MenuRow id="start" label="Get started" />
                             <AriaSeparator className="my-1 h-px bg-white/10" />
                             <MenuRow id="server" label="Server…" />
                             <MenuRow id="add" label="Add account" />
@@ -981,6 +984,7 @@ export function Home() {
                             <MenuRow id="signin" label="Sign in or create an account" />
                             <MenuRow id="server" label="Server…" />
                             <MenuRow id="theme" label="Switch theme" />
+                            <MenuRow id="start" label="Get started" />
                         </>
                     )}
                 </SidebarAccount>
