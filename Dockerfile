@@ -1,7 +1,7 @@
 # Nagma: one container serving the editor and the sync server on a single port.
 
 # Build the editor.
-FROM node:22-alpine AS web
+FROM node:26-alpine AS web
 WORKDIR /app/web
 COPY apps/web/package.json apps/web/package-lock.json ./
 RUN npm ci
@@ -9,7 +9,7 @@ COPY apps/web/ ./
 RUN npm run build
 
 # Run the sync server, which also serves the built editor.
-FROM node:22-alpine
+FROM node:26-alpine
 WORKDIR /app/server
 COPY apps/server/package.json apps/server/package-lock.json ./
 RUN npm ci --omit=dev
