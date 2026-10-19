@@ -18,6 +18,7 @@ import { openLinkInDesktopApp } from "./engine/desktop-links";
 import "./engine/desktop";
 import { beforeScopeChange, reloadOnScopeChange } from "./engine/user-storage";
 import { docWritesSettled } from "./engine/doc-store";
+import { onMediaError } from "./engine/media";
 import "./styles/globals.css";
 
 // In the desktop app the top bar is the window's title bar: room for the window buttons, and it
@@ -32,6 +33,9 @@ desktop?.onFullScreen?.((on) => document.documentElement.classList.toggle("deskt
 // over with the next account's.
 beforeScopeChange(() => editor.flushSave());
 reloadOnScopeChange(() => void docWritesSettled().then(() => location.reload()));
+
+// An upload the server refused (too large, a limit reached) says why.
+onMediaError((message) => editor.notify(message));
 
 // Web fonts arrive after the first paint; re-measure and redraw text whenever one finishes loading.
 document.fonts?.addEventListener("loadingdone", () => {

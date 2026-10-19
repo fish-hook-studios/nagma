@@ -13,6 +13,8 @@ import type { Comment } from "./comments";
 import { browserId } from "./client-id";
 import { userScopedKey, userStorage } from "./user-storage";
 import { linkedServer, remoteLinkBase, shareableUrl, withServer } from "./servers";
+import { createPresenceThrottle, PRESENCE_HZ } from "./presence-throttle";
+import { type MissedOp, combinePending, reconnectDelay, resumeFrom } from "./reconnect";
 
 // Real-time collaboration: connects to the sync server, sends this person's edits as patches,
 // merges everyone else's, and shares cursors, selections and comments.
@@ -250,7 +252,15 @@ export function setMyName(name: string, color?: string) {
 
 let socket: WebSocket | null = null;
 let confirmed: NagmaDocument | null = null;
+// The server's version of `confirmed`: after a dropped connection, the server sends only what
+// happened since (when it still has it) instead of the whole file.
+let confirmedVersion: number | null = null;
 let pending: { id: string; patch: DocPatch }[] = [];
+// Presence updates a second the room allows (the server lowers it for busy rooms).
+let presenceHz = PRESENCE_HZ;
+// The server turned this connection away for having too many open (per account): no retrying on
+// our own until asked.
+let connectionsCapped = false;
 
 // Audio call signalling (engine/audio.ts): connection details to and from one other person.
 const rtcHandlers = new Set<(from: string, signal: Record<string, unknown>) => void>();
@@ -295,6 +305,7 @@ function keptPending(fileId: string): { id: string; patch: DocPatch }[] {
 // The unsynced changes dialog: try the server again now, or drop what hasn't synced.
 export function retrySync() {
     retry = 0;
+    connectionsCapped = false;
     if (state.fileId && state.status !== "live") connect();
 }
 export function discardUnsynced() {
@@ -340,8 +351,9 @@ function connect() {
     const ws = new WebSocket(serverUrl(fileId));
     socket = ws;
     ws.onopen = () => {
-        retry = 0;
-        ws.send(JSON.stringify({ type: "hello", user: state.me, initial: initialDoc, key: linkKey, token: token(), clientId: browserId() }));
+        // Back again after a drop: ask for what happened since the last version we have.
+        const since = confirmed && confirmedVersion !== null ? confirmedVersion : undefined;
+        ws.send(JSON.stringify({ type: "hello", user: state.me, initial: initialDoc, key: linkKey, token: token(), clientId: browserId(), since }));
     };
     ws.onmessage = (event) => {
         let message: Record<string, unknown>;
@@ -353,6 +365,25 @@ function connect() {
         for (const listener of roomListeners) listener(message);
         switch (message.type) {
             case "snapshot": {
+                retry = 0;
+                if (typeof message.presenceHz === "number") presenceHz = message.presenceHz;
+                if (message.resume && confirmed && confirmedVersion !== null) {
+                    // Only what was missed: move forward, drop our own edits the server already
+                    // has, and send the rest again.
+                    const resumed = resumeFrom(confirmed, confirmedVersion, (message.ops as MissedOp[]) ?? [], pending);
+                    if (!resumed) {
+                        // The history had a gap: start over with the whole file.
+                        confirmedVersion = null;
+                        ws.close();
+                        return;
+                    }
+                    confirmed = resumed.doc;
+                    confirmedVersion = resumed.version;
+                    pending = combinePending(confirmed, resumed.pending, diffDocs, () => nanoid(8));
+                    keepPending();
+                    joined(message, false);
+                    break;
+                }
                 const doc = prepareDocument(message.doc as NagmaDocument | null);
                 if (!doc) {
                     editor.notify("That shared file doesn't exist (yet). You're working on your own copy.");
@@ -373,36 +404,29 @@ function connect() {
                 setMediaContext(state.fileId, linkKey);
                 // A file just moved to the server takes the media it uses along.
                 if (created && role === "edit") void uploadUsedMedia(mediaIdsIn(doc));
-                editor.set({ readOnly: role !== "edit" });
-                set({ role, keys, access: (message.access as CollabState["access"]) ?? null, branch: (message.branch as CollabState["branch"]) ?? null });
                 // Opened from a link: list it on Home so it can be reopened, with the key that worked.
                 if (state.fileId) {
                     const meta = rememberShared(state.fileId, doc.name || "Shared file", linkKey ?? (keys ? keys.edit : null));
                     if (editor.get().fileId !== meta.id) editor.set({ fileId: meta.id, homeOpen: false });
                 }
-                const peers: Record<string, Presence> = {};
-                for (const p of (message.peers as Presence[]) ?? []) peers[p.userId] = p;
                 const firstLoad = confirmed === null;
                 confirmed = doc;
-                set({ status: "live", myId: String(message.you), peers, comments: (message.comments as Comment[]) ?? [], reads: (message.reads as Record<string, number>) ?? {}, viewers: (message.viewers as Viewer[]) ?? [], uid: typeof message.uid === "string" ? message.uid : null });
+                confirmedVersion = typeof message.version === "number" ? message.version : null;
+                if (!firstLoad) pending = combinePending(confirmed, pending, diffDocs, () => nanoid(8));
+                joined(message, firstLoad);
                 if (firstLoad) {
                     applyingRemote = true;
                     editor.receive(doc, { resetHistory: true, opened: true });
                     applyingRemote = false;
                     // Changes made here while offline last time go up now (the server's order wins).
-                    pending = state.role === "edit" && state.fileId ? keptPending(state.fileId) : [];
+                    pending = state.role === "edit" && state.fileId ? combinePending(doc, keptPending(state.fileId), diffDocs, () => nanoid(8)) : [];
                     if (pending.length) {
                         for (const p of pending) sendRaw({ type: "patch", id: p.id, patch: p.patch });
                         rebuildLocal();
                         editor.notify(`Syncing ${pending.length} change${pending.length === 1 ? "" : "s"} made while offline.`);
                     }
                     keepPending();
-                } else {
-                    // Reconnected: re-send anything that wasn't confirmed before the connection dropped.
-                    for (const p of pending) sendRaw({ type: "patch", id: p.id, patch: p.patch });
-                    rebuildLocal();
                 }
-                sendPresence(true);
                 if (firstLoad) openFromLink();
                 break;
             }
@@ -411,6 +435,7 @@ function connect() {
                 const doc = prepareDocument(message.doc as NagmaDocument | null);
                 if (!doc) break;
                 confirmed = doc;
+                if (typeof message.version === "number") confirmedVersion = message.version;
                 pending = [];
                 keepPending();
                 if (state.previewing) set({ previewing: null });
@@ -434,6 +459,7 @@ function connect() {
                 if (!confirmed) return;
                 const patch = message.patch as DocPatch;
                 confirmed = applyPatch(confirmed, patch);
+                if (typeof message.version === "number") confirmedVersion = message.version;
                 if (message.from === state.myId && pending[0]?.id === message.id) {
                     // Our own edit, now confirmed; the view already shows it.
                     pending = pending.slice(1);
@@ -443,15 +469,36 @@ function connect() {
                 }
                 break;
             }
-            case "presence": {
-                const presence = message.presence as Presence;
-                set({ peers: { ...state.peers, [presence.userId]: presence } });
+            case "ack": {
+                // An edit sent again after a reconnect that the server already had.
+                pending = pending.filter((p) => p.id !== message.id);
+                keepPending();
+                break;
+            }
+            case "presence":
+            case "presences": {
+                // One person's update, or several gathered by the server in one message.
+                const list = message.type === "presence" ? [message.presence as Presence] : ((message.presences as Presence[]) ?? []);
+                const peers = { ...state.peers };
+                for (const p of list) if (p?.userId && p.userId !== state.myId) peers[p.userId] = p;
+                set({ peers });
+                break;
+            }
+            case "presence-rate":
+                if (typeof message.hz === "number") presenceHz = message.hz;
+                break;
+            case "rate-limited": {
+                // The server holds our changes and applies them at its pace; nothing is lost.
+                const at = Date.now();
+                if (at - lastRateNotice > 60_000) editor.notify(String(message.text ?? "Sending changes more slowly: the server limits how many it takes a second."));
+                lastRateNotice = at;
                 break;
             }
             case "leave": {
                 const peers = { ...state.peers };
-                delete peers[String(message.userId)];
-                set({ peers, ...(state.following === message.userId ? { following: null } : {}) });
+                const gone = Array.isArray(message.userIds) ? (message.userIds as string[]) : [String(message.userId)];
+                for (const id of gone) delete peers[id];
+                set({ peers, ...(state.following && gone.includes(state.following) ? { following: null } : {}) });
                 break;
             }
             case "comments":
@@ -484,6 +531,9 @@ function connect() {
                 break;
             }
             case "rejected": {
+                // Waiting for an editor's spot (the file has as many editors as it allows): kept, and
+                // sent again when this person can edit.
+                if (message.reason === "editors-full") break;
                 // A change the server refused (view-only): drop it and show the file as it is.
                 pending = pending.filter((p) => p.id !== message.id);
                 keepPending();
@@ -506,6 +556,8 @@ function connect() {
                 set({ role, keys: (message.keys as CollabState["keys"]) ?? (role === "edit" ? state.keys : null) });
                 editor.set({ readOnly: role !== "edit" });
                 editor.notify(role === "edit" ? "You can edit this file now." : "This file is view only for you now.");
+                // Changes kept while waiting for an editor's spot go up now.
+                if (role === "edit") for (const p of pending) sendRaw({ type: "patch", id: p.id, patch: p.patch });
                 break;
             }
             case "versions":
@@ -526,13 +578,44 @@ function connect() {
             }
         }
     };
-    ws.onclose = () => {
+    ws.onclose = (event) => {
         if (socket !== ws || !state.fileId) return;
         set({ status: "offline" });
-        // Back off up to 10 seconds between attempts.
+        // Too many connections open for this account: wait to be asked (the unsynced changes dialog).
+        if (event.code === 4029) {
+            connectionsCapped = true;
+            editor.notify(event.reason || "This account has too many connections open. Close some tabs, then try again.");
+            return;
+        }
+        if (connectionsCapped) return;
+        // Exponential backoff with jitter, up to 15 seconds between attempts.
         retry += 1;
-        setTimeout(connect, Math.min(10_000, 500 * 2 ** retry));
+        setTimeout(() => {
+            if (socket === ws && state.fileId && !connectionsCapped) connect();
+        }, reconnectDelay(retry));
     };
+}
+
+let lastRateNotice = 0;
+
+// In the room (a whole snapshot, or a resume): the role, keys and people in it, then everything
+// still pending goes up again.
+function joined(message: Record<string, unknown>, firstLoad: boolean) {
+    const role = (message.role as Role) ?? "edit";
+    const keys = (message.keys as CollabState["keys"]) ?? null;
+    editor.set({ readOnly: role !== "edit" });
+    set({ role, keys, access: (message.access as CollabState["access"]) ?? null, branch: (message.branch as CollabState["branch"]) ?? null });
+    if (message.capped && typeof message.cappedText === "string") editor.notify(message.cappedText);
+    const peers: Record<string, Presence> = {};
+    for (const p of (message.peers as Presence[]) ?? []) peers[p.userId] = p;
+    set({ status: "live", myId: String(message.you), peers, comments: (message.comments as Comment[]) ?? [], reads: (message.reads as Record<string, number>) ?? {}, viewers: (message.viewers as Viewer[]) ?? [], uid: typeof message.uid === "string" ? message.uid : null });
+    if (!firstLoad) {
+        // Reconnected: send again anything that wasn't confirmed before the connection dropped.
+        for (const p of pending) sendRaw({ type: "patch", id: p.id, patch: p.patch });
+        rebuildLocal();
+    }
+    presence.reset();
+    sendPresence(true);
 }
 
 // Your committed edits go to the server as patches.
@@ -806,22 +889,32 @@ export function onLinkOpened(listener: (params: URLSearchParams) => void) {
 
 // ---- Presence ----
 
-let lastPresence = 0;
-let presenceTimer: number | undefined;
 let cursor: { x: number; y: number } | null = null;
 
-export function sendPresence(force = false) {
-    if (state.status !== "live") return;
-    const now = performance.now();
-    const flush = () => {
-        lastPresence = performance.now();
+// At most 20 updates a second (5 in rooms the server calls busy), the latest state each time;
+// nothing while this tab is hidden or when nothing changed; the camera 5 times a second.
+const presence = createPresenceThrottle({
+    build: () => {
         const s = editor.get();
-        sendRaw({ type: "presence", name: state.me.name, color: state.me.color, cursor, selection: s.selection, pageId: s.pageId, camera: { ...s.camera, w: viewport.width, h: viewport.height }, spotlight: state.spotlight, chat: state.chat, mode: s.mode, emote: state.emote, highFive: state.highFive, ask: state.ask, audio: state.audio.on, muted: state.audio.muted, caption: state.audio.on ? state.caption : null, prototype: state.prototypeScreen ? { screen: state.prototypeScreen } : null });
-    };
-    window.clearTimeout(presenceTimer);
-    // About 20 updates a second is smooth enough for cursors without flooding the server.
-    if (force || now - lastPresence > 50) flush();
-    else presenceTimer = window.setTimeout(flush, 50);
+        return { type: "presence", name: state.me.name, color: state.me.color, cursor, selection: s.selection, pageId: s.pageId, camera: { ...s.camera, w: viewport.width, h: viewport.height }, spotlight: state.spotlight, chat: state.chat, mode: s.mode, emote: state.emote, highFive: state.highFive, ask: state.ask, audio: state.audio.on, muted: state.audio.muted, caption: state.audio.on ? state.caption : null, prototype: state.prototypeScreen ? { screen: state.prototypeScreen } : null };
+    },
+    send: (payload) => {
+        if (state.status === "live") sendRaw(payload);
+    },
+    hz: () => presenceHz,
+    hidden: () => typeof document !== "undefined" && document.visibilityState === "hidden",
+});
+if (typeof document !== "undefined") {
+    document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible" && state.status === "live") presence.visible();
+    });
+}
+
+// Something people see changed (pointer, selection, page, camera, call state…). `force` is kept for
+// callers; every update goes through the same throttle (the next free slot is at most 50 ms away).
+export function sendPresence(_force = false) {
+    if (state.status !== "live") return;
+    presence.changed();
 }
 
 export function setCursor(world: { x: number; y: number } | null) {

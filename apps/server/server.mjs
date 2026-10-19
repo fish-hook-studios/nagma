@@ -27,6 +27,10 @@ import { createSaml, safeReturnUrl } from "./saml.mjs";
 import { createImageProxy } from "./image-proxy.mjs";
 import { parseObject } from "./json-body.mjs";
 import { saveLater, writeAtomic } from "./atomic-write.mjs";
+import { alreadyApplied, flushPresence, msUntilToken, opsSince, presenceAllowed, presenceHz, queuePresence, recordOp, resetOps, syncSettings, takeToken, updatePresenceRate } from "./sync-scale.mjs";
+import { monitorEventLoopDelay } from "node:perf_hooks";
+import { clientAddress, etagOf, sendCached } from "./http-cache.mjs";
+import { createMediaStore, validMediaType, validSha256 } from "./media-store.mjs";
 
 const PORT = Number(process.env.PORT ?? 8787);
 const withSlash = (dir) => (dir.endsWith("/") ? dir : `${dir}/`);
@@ -39,18 +43,26 @@ await mkdir(DATA, { recursive: true });
 const SITES = join(DATA, "sites");
 await mkdir(SITES, { recursive: true });
 
-/** @type {Map<string, {id: string, file: any, version: number, clients: Map<any, any>, dirty: boolean, timer: any}>} */
+// Limits and timings for rooms and sockets (sync-scale.mjs; NAGMA_ROOM_IDLE_MS, NAGMA_ROOM_EDITORS,
+// NAGMA_WS_PER_SECOND, NAGMA_WS_PER_ACCOUNT, NAGMA_ROOM_OPS, NAGMA_SAVE_MS, NAGMA_SAVE_OPS).
+const SYNC = syncSettings();
+
+/** @type {Map<string, {id: string, file: any, version: number, clients: Map<any, any>, dirty: boolean, timer: any, ops: any[], lastUsed: number}>} */
 const rooms = new Map();
 
 const validId = (id) => typeof id === "string" && /^[A-Za-z0-9_-]{6,64}$/.test(id);
 const filePath = (id) => join(DATA, `${id}.json`);
+const newRoom = (id, file) => ({ id, file, version: file?.version ?? 0, clients: new Map(), dirty: false, timer: null, ops: [], opIds: new Map(), lastUsed: Date.now(), saving: 0, lastSave: 0, opsSinceSave: 0 });
 
 async function loadRoom(id) {
     // Ids come from addresses and request bodies: anything but a plain id ("../x", "/tmp/x") is no
     // file, and never reaches the disk or the room list.
-    if (!validId(id)) return { id: String(id), file: null, version: 0, clients: new Map(), dirty: false, timer: null };
+    if (!validId(id)) return newRoom(String(id), null);
     let room = rooms.get(id);
-    if (room) return room;
+    if (room) {
+        room.lastUsed = Date.now();
+        return room;
+    }
     let file = null;
     try {
         file = JSON.parse(await readFile(filePath(id), "utf8"));
@@ -59,27 +71,60 @@ async function loadRoom(id) {
     }
     room = rooms.get(id);
     if (room) return room;
-    room = { id, file, version: file?.version ?? 0, clients: new Map(), dirty: false, timer: null };
+    room = newRoom(id, file);
     rooms.set(id, room);
     return room;
 }
 
 // Writes are batched and atomic (write a temp file, then rename), so a crash never leaves half a file.
+// The first change after a quiet spell is written within 400 ms; while people keep editing, the
+// file is written at most every NAGMA_SAVE_MS (2 s), or straight away after NAGMA_SAVE_OPS changes.
+// (Each write serialises the whole document, so writing on every change would cost a busy room dearly.)
 function scheduleSave(room) {
     room.dirty = true;
+    room.opsSinceSave += 1;
+    const soon = room.opsSinceSave >= SYNC.saveOps;
+    if (room.timer && !soon) return;
     clearTimeout(room.timer);
-    room.timer = setTimeout(() => {
-        if (!room.dirty || !room.file) return;
-        room.dirty = false;
-        writeAtomic(filePath(room.id), JSON.stringify({ ...room.file, version: room.version }))
-            .then(() => (room.touched ? writeMeta(room.id, { updatedAt: room.touched }) : undefined))
-            .catch((error) => {
-                // The file stays in memory: say so and try again shortly, rather than stop the server.
-                console.error(`Couldn't save ${room.id}: ${error?.message ?? error}`);
-                setTimeout(() => scheduleSave(room), 2000);
-            });
-    }, 400);
+    const wait = soon ? 0 : Math.max(400, room.lastSave + SYNC.saveMs - Date.now());
+    room.timer = setTimeout(() => void saveRoom(room), wait);
 }
+
+function saveRoom(room) {
+    clearTimeout(room.timer);
+    room.timer = null;
+    if (!room.dirty || !room.file) return Promise.resolve();
+    room.dirty = false;
+    room.opsSinceSave = 0;
+    room.lastSave = Date.now();
+    room.saving += 1;
+    return (room.savePromise = writeAtomic(filePath(room.id), JSON.stringify({ ...room.file, version: room.version }))
+        .then(() => (room.touched ? writeMeta(room.id, { updatedAt: room.touched }) : undefined))
+        .catch((error) => {
+            // The file stays in memory: say so and try again shortly, rather than stop the server.
+            console.error(`Couldn't save ${room.id}: ${error?.message ?? error}`);
+            setTimeout(() => scheduleSave(room), 2000);
+        })
+        .finally(() => {
+            room.saving -= 1;
+        }));
+}
+
+// Rooms nobody has been in for NAGMA_ROOM_IDLE_MS leave memory once their file is safely written;
+// the next join reads it from disk again (with its version, so reconnecting clients still resume).
+function evictIdleRooms(now = Date.now()) {
+    for (const [id, room] of rooms) {
+        if (room.clients.size || now - room.lastUsed < SYNC.roomIdleMs) continue;
+        if (room.dirty) {
+            if (!room.timer) scheduleSave(room);
+            continue;
+        }
+        if (room.saving || room.timer) continue;
+        clearTimeout(room.presenceTimer);
+        rooms.delete(id);
+    }
+}
+setInterval(evictIdleRooms, Math.max(25, Math.min(60_000, SYNC.roomIdleMs / 4))).unref();
 
 // The same merge every client does: layer properties overwrite, null removes a layer. `patch` has
 // passed validPatch.
@@ -506,10 +551,8 @@ const LIMIT_FREE = { ip: 10, account: 5 };
 const LIMIT_MAX_MS = 15 * 60 * 1000;
 const failures = new Map();
 
-function clientAddress(req) {
-    const forwarded = process.env.TRUST_PROXY ? String(req.headers["x-forwarded-for"] ?? "").split(",")[0].trim() : "";
-    return forwarded || req.socket?.remoteAddress || "unknown";
-}
+// The visitor's address (http-cache.mjs clientAddress): behind a proxy (NAGMA_TRUST_PROXY=1), the
+// address the proxy saw; behind Cloudflare (NAGMA_TRUST_PROXY=cloudflare), CF-Connecting-IP.
 
 function limitKeys(req, email) {
     const keys = [["ip", `ip:${clientAddress(req)}`]];
@@ -760,6 +803,8 @@ async function removeFile(id) {
     const room = rooms.get(id);
     if (room) {
         for (const ws of room.clients.keys()) ws.close(4004, "The file was deleted.");
+        clearTimeout(room.timer);
+        clearTimeout(room.presenceTimer);
         rooms.delete(id);
     }
     await unlink(filePath(id)).catch(() => undefined);
@@ -1185,6 +1230,8 @@ async function makeFile(user, doc, projectId, kind = "design", extra = {}) {
     const room = await loadRoom(id);
     room.file = { doc, comments: [], versions: [], keys: { edit: newKey(), view: newKey() }, owner: user.id, members: {}, link: "none", project: projectId, ...extra };
     room.version = 0;
+    room.ops = [];
+    room.opIds = new Map();
     room.touched = Date.now();
     scheduleSave(room);
     await writeMeta(id, { kind, project: projectId, createdAt: Date.now() });
@@ -1617,7 +1664,12 @@ function canDeleteForever(file, user) {
 // A member's role changed: connected clients learn straight away.
 function applyRoleChanges(room) {
     for (const [ws, client] of room.clients) {
-        const next = roleFor(room.file, client.user, client.key);
+        let next = roleFor(room.file, client.user, client.key);
+        // Edit access granted while the file is full of editors: view until a spot frees up.
+        if (next === "edit" && client.role !== "edit" && client.joined && editorsIn(room) >= SYNC.roomEditors) {
+            client.capped = true;
+            next = "view";
+        } else if (next !== "edit") client.capped = false;
         if (next === client.role) continue;
         client.role = next;
         if (!next) {
@@ -1627,14 +1679,52 @@ function applyRoleChanges(room) {
             send(ws, { type: "role", role: next, keys: next === "edit" ? room.file.keys : undefined });
         }
     }
+    promoteWaiting(room);
 }
 
-// ---- Media: video files and other large assets, by id ----
+// ---- Editors per room: at most NAGMA_ROOM_EDITORS edit one file at once ----
+// Anyone else with edit access joins as a viewer ("capped") and is promoted, first come first
+// served, when an editor leaves.
+
+function editorsIn(room) {
+    let n = 0;
+    for (const c of room.clients.values()) if (c.joined && c.role === "edit") n++;
+    return n;
+}
+
+const cappedText = () => `${SYNC.roomEditors} people are editing this file, the most at once. You're viewing for now, and can edit as soon as a spot frees up.`;
+
+function promoteWaiting(room) {
+    if (!room.file) return;
+    let free = SYNC.roomEditors - editorsIn(room);
+    for (const [ws, c] of room.clients) {
+        if (free <= 0) break;
+        if (!c.capped || !c.joined) continue;
+        c.capped = false;
+        if (roleFor(room.file, c.user, c.key) !== "edit") continue;
+        c.role = "edit";
+        free -= 1;
+        send(ws, { type: "role", role: "edit", keys: room.file.keys });
+    }
+}
+
+// ---- Media: video files, images and other large assets, by id (media-store.mjs) ----
+// The bytes live on this server's disk ("local", the default) or in an S3-compatible bucket
+// (NAGMA_MEDIA_STORE=s3), which browsers upload to and read from directly: then this server only
+// checks access, signs short-lived addresses and keeps each asset's record.
 
 const MEDIA = join(DATA, "media");
 await mkdir(MEDIA, { recursive: true });
-const MAX_MEDIA = 1024 * 1024 * 1024;
-const mediaPath = (id) => join(MEDIA, id);
+const mediaStore = await createMediaStore({ dir: MEDIA });
+const MAX_MEDIA = mediaStore.config.maxBytes;
+const mediaPath = (id) => mediaStore.localPath(id);
+if (mediaStore.kind === "s3") console.log(`media: stored in bucket ${mediaStore.s3.bucket} at ${mediaStore.config.s3.endpoint}; browsers upload and read there directly`);
+{
+    // Direct uploads never completed are removed after a day (NAGMA_MEDIA_PENDING_HOURS).
+    const sweep = () => void mediaStore.sweepPending().catch((error) => console.warn(`media: ${error.message}`));
+    setTimeout(sweep, Math.min(5000, mediaStore.config.sweepMs)).unref();
+    setInterval(sweep, mediaStore.config.sweepMs).unref();
+}
 
 const CORS = { "access-control-allow-origin": "*", "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS", "access-control-allow-headers": "content-type, authorization, x-nagma-ai" };
 
@@ -1680,16 +1770,11 @@ try {
     mediaSecret = randomBytes(32);
     await writeFile(SECRET_PATH, mediaSecret, { mode: 0o600 });
 }
-const MEDIA_URL_MS = 10 * 60 * 1000;
+const MEDIA_URL_MS = mediaStore.config.urlSeconds * 1000;
 const mediaSignature = (id, exp) => createHmac("sha256", mediaSecret).update(`media:${id}:${exp}`).digest("base64url");
 
-async function readMediaMeta(id) {
-    try {
-        return JSON.parse(await readFile(`${mediaPath(id)}.meta.json`, "utf8"));
-    } catch {
-        return null;
-    }
-}
+const readMediaMeta = (id) => mediaStore.readMeta(id);
+const mbText = (bytes) => (bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${Math.round(bytes / (1024 * 1024))} MB`);
 
 // Whether a file's document (or its comments) uses the asset. The text is kept per document version.
 function fileUses(room, id) {
@@ -1709,34 +1794,137 @@ async function mediaFileFor(id, meta, fileIds, user, key) {
     return null;
 }
 
-async function serveMedia(req, res, url, id, wantsUrl) {
-    const json = (status, body) => (res.writeHead(status, { ...CORS, "content-type": "application/json" }).end(JSON.stringify(body)), true);
+// Remembers a file the asset belongs to (the newest 50), so it stays reachable from there.
+async function addMediaFile(id, meta, fid) {
+    if ((meta.files ?? []).includes(fid)) return;
+    await mediaStore.writeMeta(id, { ...meta, files: [...(meta.files ?? []), fid].slice(-50) }).catch(() => undefined);
+}
+
+// Reads through this file may use the bucket's public address (NAGMA_S3_PUBLIC_URL): its link is
+// on, with no password and no end date.
+function linkIsPublic(file) {
+    return Boolean(file) && accessOf(file).link !== "none" && !file.linkPassword?.hash && !file.linkExpires;
+}
+
+// Why `bytes` more can't go up to file `fid` now, as [status, message, retry-after seconds], or null.
+async function mediaLimit(user, fid, bytes) {
+    if (bytes > MAX_MEDIA) return [413, `Media files can be up to ${mbText(MAX_MEDIA)} on this server; this one is ${mbText(bytes)}.`];
+    const used = await mediaStore.fileUsage(fid);
+    if (used + bytes > mediaStore.config.fileMaxBytes) return [413, `This file has reached its media limit (${mbText(mediaStore.config.fileMaxBytes)}). Put new images and videos in another file.`];
+    const rate = mediaStore.rateCheck(user.id, bytes);
+    return rate ? [429, rate.message, rate.retryAfter] : null;
+}
+
+// Uploads: POST /media/<id>/upload asks how (straight to the bucket with a presigned address, to this
+// server with PUT /media/<id>, or not at all when the same bytes are already stored); after a
+// direct upload POST /media/<id>/complete checks the object and makes the asset ready. Reads: GET
+// /media/<id>/url answers a short-lived address; GET /media/<id> answers the bytes (local) or
+// redirects to that address (s3), after the same access check.
+async function serveMedia(req, res, url, id, action) {
+    const json = (status, body, headers = {}) => (res.writeHead(status, { ...CORS, "content-type": "application/json", ...headers }).end(JSON.stringify(body)), true);
+    const refuse = ([status, error, retryAfter]) => json(status, { error }, retryAfter ? { "retry-after": String(retryAfter) } : {});
     const user = userFromReq(req);
     const key = url.searchParams.get("key") ?? "";
     const fileIds = url.searchParams.getAll("file").slice(0, 4);
-    const meta = await readMediaMeta(id);
-    if (req.method === "PUT") {
-        if (!user) return json(401, { error: "Sign in to upload." });
+    const stored = await readMediaMeta(id);
+    // An upload that hasn't completed isn't there for anyone yet.
+    const meta = stored?.pending ? null : stored;
+
+    // The file named for an upload, when the person can edit it; else null.
+    const editable = async () => {
         const fid = fileIds[0];
         const room = validId(fid) ? await loadRoom(fid) : null;
-        if (!room?.file || roleFor(room.file, user, key) !== "edit") return json(403, { error: "Only people who can edit the file can add media to it." });
-        if (meta) {
-            // An asset never changes once stored; the same upload again just says so.
-            const mine = await mediaFileFor(id, meta, meta.files ?? [], user, "");
-            if (!mine && !(meta.files ?? []).includes(fid)) return json(409, { error: "That media id is taken." });
-            if (!(meta.files ?? []).includes(fid)) await writeFile(`${mediaPath(id)}.meta.json`, JSON.stringify({ ...meta, files: [...(meta.files ?? []), fid].slice(-50) }));
-            return json(200, { ok: true, size: meta.size, existing: true });
-        }
+        return room?.file && user && roleFor(room.file, user, key) === "edit" ? fid : null;
+    };
+    // An asset never changes once stored: the same id again just joins it to the file, for people
+    // who could reach it already. Answers a refusal, or null.
+    const again = async (fid) => {
+        const mine = await mediaFileFor(id, meta, meta.files ?? [], user, "");
+        if (!mine && !(meta.files ?? []).includes(fid)) return [409, "That media id is taken."];
+        await addMediaFile(id, meta, fid);
+        return null;
+    };
+    const takenByOther = stored?.pending && stored.by !== user?.id;
+
+    if (action === "upload" || action === "complete") {
+        if (req.method !== "POST") return json(405, { error: "Method not allowed." });
+        if (!user) return json(401, { error: "Sign in to upload." });
+        let body;
         try {
-            const body = await readBody(req, MAX_MEDIA);
-            const type = String(req.headers["content-type"] ?? "application/octet-stream").slice(0, 100);
-            await writeFile(`${mediaPath(id)}.tmp`, body);
-            await rename(`${mediaPath(id)}.tmp`, mediaPath(id));
-            await writeFile(`${mediaPath(id)}.meta.json`, JSON.stringify({ type, size: body.length, files: [fid], by: user.id, at: Date.now() }));
-            return json(200, { ok: true, size: body.length });
-        } catch (error) {
-            return json(413, { error: String(error?.message ?? error) });
+            body = parseObject(await readBody(req, 16 * 1024));
+        } catch {
+            return json(400, { error: "Expected a JSON object." });
         }
+        if (action === "complete") return completeMediaUpload(json, refuse, id, stored, user, body);
+        const fid = await editable();
+        if (!fid) return json(403, { error: "Only people who can edit the file can add media to it." });
+        const type = String(body.type ?? "") || "application/octet-stream";
+        const size = Number(body.size);
+        if (!validMediaType(type)) return json(400, { error: "That isn't a media type." });
+        if (!Number.isSafeInteger(size) || size < 0) return json(400, { error: "Say how large the upload is (size, in bytes)." });
+        if (meta) {
+            const no = await again(fid);
+            return no ? refuse(no) : json(200, { mode: "exists", size: meta.size });
+        }
+        if (takenByOther) return json(409, { error: "That media id is taken." });
+        const limit = await mediaLimit(user, fid, size);
+        if (limit) return refuse(limit);
+        const sha256 = validSha256(body.sha256) ? body.sha256 : undefined;
+        // The same bytes this person stored before: a new id for the same object, nothing to send.
+        const earlierId = sha256 ? await mediaStore.hashLookup(user.id, sha256) : null;
+        const earlier = earlierId && earlierId !== id ? await readMediaMeta(earlierId) : null;
+        if (earlier && !earlier.pending && earlier.size === size && (await mediaStore.locate(earlierId, earlier))) {
+            await mediaStore.writeMeta(id, { type: earlier.type ?? type, size, files: [fid], by: user.id, at: Date.now(), sha256, object: mediaStore.objectOf(earlierId, earlier), ...(earlier.store ? { store: earlier.store } : {}) });
+            await mediaStore.addFileUsage(fid, size);
+            mediaStore.rateNote(user.id, 0);
+            return json(200, { mode: "exists", size, deduped: true });
+        }
+        if (mediaStore.kind !== "s3") return json(200, { mode: "server", maxBytes: MAX_MEDIA });
+        await mediaStore.writeMeta(id, { pending: true, type, size, files: [fid], by: user.id, at: Date.now(), ...(sha256 ? { sha256 } : {}), store: "s3" });
+        await mediaStore.markPending(id);
+        mediaStore.rateNote(user.id, size);
+        const put = mediaStore.s3.presignPut(id, { type, expires: mediaStore.config.urlSeconds });
+        return json(200, { mode: "direct", url: put.url, headers: put.headers, expires: put.expires });
+    }
+
+    if (req.method === "PUT") {
+        if (!user) return json(401, { error: "Sign in to upload." });
+        const fid = await editable();
+        if (!fid) return json(403, { error: "Only people who can edit the file can add media to it." });
+        if (meta) {
+            const no = await again(fid);
+            return no ? refuse(no) : json(200, { ok: true, size: meta.size, existing: true });
+        }
+        if (takenByOther) return json(409, { error: "That media id is taken." });
+        const declared = Number(req.headers["content-length"]);
+        const limit = await mediaLimit(user, fid, Number.isFinite(declared) ? declared : 0);
+        if (limit) {
+            req.resume();
+            return refuse(limit);
+        }
+        let body;
+        try {
+            body = await readBody(req, MAX_MEDIA);
+        } catch {
+            return json(413, { error: `Media files can be up to ${mbText(MAX_MEDIA)} on this server.` });
+        }
+        const over = await mediaLimit(user, fid, body.length);
+        if (over) return refuse(over);
+        const type = String(req.headers["content-type"] ?? "application/octet-stream").slice(0, 100);
+        const sha256 = createHash("sha256").update(body).digest("hex");
+        try {
+            // A server with a bucket keeps what older apps send here in the bucket too.
+            if (mediaStore.kind === "s3") await mediaStore.s3.put(id, body, { type: validMediaType(type) ? type : "application/octet-stream" });
+            else await mediaStore.writeLocal(id, body);
+        } catch (error) {
+            return json(502, { error: `Couldn't store the upload: ${error.message}` });
+        }
+        await mediaStore.writeMeta(id, { type, size: body.length, files: [fid], by: user.id, at: Date.now(), sha256, ...(mediaStore.kind === "s3" ? { store: "s3" } : {}) });
+        await mediaStore.clearPending(id);
+        await mediaStore.hashRecord(user.id, sha256, id);
+        await mediaStore.addFileUsage(fid, body.length);
+        mediaStore.rateNote(user.id, body.length);
+        return json(200, { ok: true, size: body.length });
     }
     if (req.method !== "GET" && req.method !== "HEAD") return json(405, { error: "Method not allowed." });
     // Unknown ids answer like forbidden ones until someone signs in, so ids cannot be probed.
@@ -1749,25 +1937,85 @@ async function serveMedia(req, res, url, id, wantsUrl) {
         const expected = Buffer.from(mediaSignature(id, exp));
         ok = expected.length === Buffer.from(sig).length && timingSafeEqual(expected, Buffer.from(sig));
     }
+    let publicOk = false;
     if (!ok) {
         const fid = await mediaFileFor(id, meta, fileIds, user, key);
         if (!fid) return json(user || key ? 403 : 401, { error: "No access to that media." });
         // Remember where it's used, so it stays reachable from this file.
-        if (!(meta.files ?? []).includes(fid)) await writeFile(`${mediaPath(id)}.meta.json`, JSON.stringify({ ...meta, files: [...(meta.files ?? []), fid].slice(-50) })).catch(() => undefined);
-        if (wantsUrl) {
-            const until = Date.now() + MEDIA_URL_MS;
-            return json(200, { url: `/media/${id}?exp=${until}&sig=${mediaSignature(id, until)}`, expires: until });
-        }
+        await addMediaFile(id, meta, fid);
+        publicOk = linkIsPublic((await loadRoom(fid)).file);
     }
+    const where = await mediaStore.locate(id, meta);
+    if (action === "url") {
+        if (where === "s3") return json(200, mediaStore.readUrl(id, meta, { publicOk }));
+        const until = Date.now() + MEDIA_URL_MS;
+        return json(200, { url: `/media/${id}?exp=${until}&sig=${mediaSignature(id, until)}`, expires: until });
+    }
+    if (where === "s3") {
+        // The bytes come from the bucket: the browser follows this to a short-lived address there.
+        res.writeHead(302, { ...CORS, location: mediaStore.readUrl(id, meta, { publicOk }).url, "cache-control": "private, no-store" }).end();
+        return true;
+    }
+    const path = mediaPath(mediaStore.objectOf(id, meta));
+    let info;
     try {
-        const info = await stat(mediaPath(id));
-        res.writeHead(200, { ...CORS, "content-type": meta.type ?? "application/octet-stream", "content-length": info.size, "cache-control": "private, max-age=3600", "x-content-type-options": "nosniff", "content-security-policy": "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox" });
-        if (req.method === "HEAD") res.end();
-        else createReadStream(mediaPath(id)).pipe(res);
+        info = await stat(path);
     } catch {
         res.writeHead(404, CORS).end();
+        return true;
     }
+    const headers = { ...CORS, "content-type": meta.type ?? "application/octet-stream", "accept-ranges": "bytes", "cache-control": "private, max-age=3600", "x-content-type-options": "nosniff", "content-security-policy": "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox" };
+    // A part of it (video seeking): Range: bytes=start-end.
+    const range = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range ?? ""));
+    let start = 0;
+    let end = info.size - 1;
+    let status = 200;
+    if (range && (range[1] || range[2])) {
+        start = range[1] ? Number(range[1]) : Math.max(0, info.size - Number(range[2]));
+        if (range[1] && range[2]) end = Math.min(Number(range[2]), info.size - 1);
+        if (start >= info.size || start > end) {
+            res.writeHead(416, { ...CORS, "content-range": `bytes */${info.size}` }).end();
+            return true;
+        }
+        status = 206;
+        headers["content-range"] = `bytes ${start}-${end}/${info.size}`;
+    }
+    res.writeHead(status, { ...headers, "content-length": info.size ? end - start + 1 : 0 });
+    if (req.method === "HEAD" || !info.size) res.end();
+    else createReadStream(path, { start, end }).pipe(res);
     return true;
+}
+
+// After a direct upload: the object must be in the bucket, within the limits; then it's ready.
+async function completeMediaUpload(json, refuse, id, stored, user, body) {
+    if (!stored) return json(404, { error: "There's no upload with that id." });
+    if (stored.by !== user.id) return json(403, { error: "That upload isn't yours." });
+    if (!stored.pending) return json(200, { ok: true, size: stored.size, existing: true });
+    if (!mediaStore.s3) return json(409, { error: "This server isn't set up for direct uploads." });
+    let head;
+    try {
+        head = await mediaStore.s3.head(mediaStore.objectOf(id, stored));
+    } catch (error) {
+        return json(502, { error: `Couldn't check the upload: ${error.message}` });
+    }
+    if (!head) return json(409, { error: "The upload hasn't arrived in storage. Try again." });
+    const fid = (stored.files ?? [])[0];
+    const discard = async (why) => {
+        await mediaStore.s3.remove(mediaStore.objectOf(id, stored)).catch(() => undefined);
+        await rm(`${mediaPath(id)}.meta.json`, { force: true });
+        await mediaStore.clearPending(id);
+        return refuse(why);
+    };
+    if (head.size > MAX_MEDIA) return discard([413, `Media files can be up to ${mbText(MAX_MEDIA)} on this server; this one is ${mbText(head.size)}.`]);
+    if (fid && (await mediaStore.fileUsage(fid)) + head.size > mediaStore.config.fileMaxBytes) return discard([413, `This file has reached its media limit (${mbText(mediaStore.config.fileMaxBytes)}). Put new images and videos in another file.`]);
+    const sha256 = validSha256(body.sha256) ? body.sha256 : stored.sha256;
+    const rest = { ...stored };
+    delete rest.pending;
+    await mediaStore.writeMeta(id, { ...rest, size: head.size, type: head.type || stored.type, at: Date.now(), ...(sha256 ? { sha256 } : {}) });
+    await mediaStore.clearPending(id);
+    if (sha256) await mediaStore.hashRecord(user.id, sha256, id);
+    if (fid) await mediaStore.addFileUsage(fid, head.size);
+    return json(200, { ok: true, size: head.size });
 }
 
 // ---- Libraries: what shared files publish (a manifest, plus one record per component or image) ----
@@ -2027,7 +2275,7 @@ function revealBallots(room) {
     delete room.file.ballots[session];
     const patch = { nodes: { [found.page.id]: { jam: { ...found.jam, voting: { ...found.voting, open: false, votes } } } } };
     applyPatch(room.file.doc, patch);
-    room.version += 1;
+    recordOp(room, patch, null, null, SYNC.roomOps);
     scheduleSave(room);
     broadcast(room, { type: "patch", version: room.version, patch, id: null, from: null });
 }
@@ -2168,8 +2416,8 @@ async function serveApi(req, res) {
         res.writeHead(204, CORS).end();
         return true;
     }
-    const media = /^\/media\/([A-Za-z0-9_-]{6,64})(\/url)?$/.exec(path);
-    if (media) return serveMedia(req, res, url, media[1], Boolean(media[2]));
+    const media = /^\/media\/([A-Za-z0-9_-]{6,64})(?:\/(url|upload|complete))?$/.exec(path);
+    if (media) return serveMedia(req, res, url, media[1], media[2] ?? null);
     if (path === "/libraries" || path.startsWith("/libraries/")) return serveLibraries(req, res, path);
     const assetReviews = /^\/files\/([A-Za-z0-9_-]{6,64})\/asset-reviews(?:\/([A-Za-z0-9_-]{1,64})(\/decide)?)?$/.exec(path);
     if (assetReviews) return serveAssetReviews(req, res, url, assetReviews[1], assetReviews[2] ?? null, Boolean(assetReviews[3]));
@@ -2179,8 +2427,10 @@ async function serveApi(req, res) {
     if (hosting) return siteHosting.serveSettings(req, res, url, hosting[1], hosting[2]);
     if (path === "/files" && req.method === "POST") return createServerFile(req, res);
     if (path === "/files" && req.method === "GET") {
+        // The list carries every file's thumbnail, so an unchanged list is answered with a 304. It's
+        // per person: browsers keep it, shared caches (a CDN) must not.
         const user = userFromReq(req);
-        res.writeHead(200, { ...CORS, "content-type": "application/json" }).end(JSON.stringify(await listFiles(user)));
+        sendCached(req, res, 200, { ...CORS, "content-type": "application/json", vary: "authorization, cookie" }, Buffer.from(JSON.stringify(await listFiles(user))), "private, no-cache");
         return true;
     }
     const access = /^\/files\/([A-Za-z0-9_-]{6,64})\/access$/.exec(path);
@@ -2448,7 +2698,7 @@ async function serveApi(req, res) {
             if (typeof patch.name === "string" && patch.name.trim() && metaRoom.file.doc) {
                 const name = patch.name.trim().slice(0, 120);
                 metaRoom.file.doc.name = name;
-                metaRoom.version += 1;
+                recordOp(metaRoom, { name }, null, null, SYNC.roomOps);
                 scheduleSave(metaRoom);
                 broadcast(metaRoom, { type: "patch", version: metaRoom.version, patch: { name }, id: null, from: null });
             }
@@ -2637,7 +2887,7 @@ async function replaceDoc(room, doc, who, before, after) {
     const actor = { uid: who?.id ?? null, presence: { name: who?.name ?? "Nagma", color: who?.color ?? "#9747FF" } };
     if (before) await saveVersion(room, actor, null, true, { label: before });
     room.file.doc = doc;
-    room.version += 1;
+    resetOps(room);
     room.touched = Date.now();
     scheduleSave(room);
     broadcast(room, { type: "reset", doc, version: room.version, by: who?.name ?? null });
@@ -3063,14 +3313,19 @@ function markRead(room, client, reads) {
 }
 
 function send(ws, message) {
-    if (ws.readyState === 1) ws.send(JSON.stringify(message));
+    if (ws.readyState === 1) ws.send(typeof message === "string" ? message : JSON.stringify(message));
 }
 
 // Everyone in the file: sockets join a room when they connect, but only hear what happens in it once
-// their hello got them in (a role), and stop when their access goes.
+// their hello got them in (a role), and stop when their access goes. The message is encoded once
+// for the whole room (one buffer, sent as text to each socket).
 function broadcast(room, message, except) {
-    const text = JSON.stringify(message);
-    for (const [ws, client] of room.clients) if (ws !== except && client.role && ws.readyState === 1) ws.send(text);
+    let data = null;
+    for (const [ws, client] of room.clients) {
+        if (ws === except || !client.role || ws.readyState !== 1) continue;
+        data ??= Buffer.from(JSON.stringify(message));
+        ws.send(data, { binary: false });
+    }
 }
 
 function peers(room, except) {
@@ -3219,8 +3474,11 @@ async function sendSite(req, res, id, rest, url) {
     if (!type) return notFound();
     const body = await readFile(path).catch(() => null);
     if (!body) return notFound();
-    res.writeHead(status, { ...SITE_HEADERS, "content-type": type, "cache-control": type.startsWith("text/html") ? "no-cache" : "public, max-age=300" });
-    res.end(req.method === "HEAD" ? undefined : body);
+    // Public sites can be kept by a CDN (pages checked every time, other files for 5 minutes);
+    // sites behind a password or for a team only never leave the browser's own cache.
+    const open = !(await siteHosting.gated(id));
+    const cache = !open ? "private, no-cache" : type.startsWith("text/html") ? "public, no-cache" : "public, max-age=300";
+    sendCached(req, res, status, { ...SITE_HEADERS, "content-type": type }, body, cache);
 }
 
 // NAGMA_PUBLIC_URL as an http(s) origin and path (no trailing slash), or null.
@@ -3267,6 +3525,18 @@ const TYPES = {
     ".webmanifest": "application/manifest+json",
 };
 
+// The built editor's files, read once (and again when they change on disk), with their ETags.
+const staticCache = new Map();
+async function staticFile(path) {
+    const info = await stat(path);
+    const known = staticCache.get(path);
+    if (known && known.mtimeMs === info.mtimeMs && known.size === info.size) return known;
+    const body = await readFile(path);
+    const entry = { body, etag: etagOf(body), mtimeMs: info.mtimeMs, size: info.size };
+    if (body.length < 8 * 1024 * 1024) staticCache.set(path, entry);
+    return entry;
+}
+
 // Serves the built editor. Unknown paths get index.html so links like /?file=… always open the app.
 async function serveStatic(req, res) {
     const url = new URL(req.url ?? "/", "http://local");
@@ -3290,12 +3560,13 @@ async function serveStatic(req, res) {
         path = join(STATIC, "index.html");
     }
     try {
-        const body = await readFile(path);
+        const { body, etag } = await staticFile(path);
         const type = TYPES[extname(path)] ?? "application/octet-stream";
-        // Built assets have content hashes in their names, so they can be cached for good.
-        const cache = path.includes(`${join(STATIC, "assets")}`) ? "public, max-age=31536000, immutable" : "no-cache";
-        res.writeHead(200, { "content-type": type, "cache-control": cache });
-        res.end(body);
+        // Built assets have content hashes in their names, so browsers and a CDN keep them for good;
+        // the app's page is checked every time (a 304 when unchanged), so a new release shows at once;
+        // other files (icons, the manifest) for an hour.
+        const cache = path.startsWith(join(STATIC, "assets/")) ? "public, max-age=31536000, immutable" : path.endsWith(".html") ? "public, no-cache" : "public, max-age=3600";
+        sendCached(req, res, 200, { "content-type": type }, body, cache, etag);
     } catch {
         res.writeHead(404, { "content-type": "text/plain" }).end("Nagma isn't built yet. Run `npm run build` in apps/web.");
     }
@@ -3638,7 +3909,10 @@ async function route(req, res) {
             // The public address the server was given (NAGMA_PUBLIC_URL), for links that must not name
             // this machine's network address (the Inspect panel's prompt). Its name and version are what
             // the apps' server picker shows when someone connects to it.
-            res.end(JSON.stringify({ ok: true, name: serverName(), version: SERVER_VERSION, publicUrl: configuredPublicUrl(), rooms: rooms.size, addresses: lanAddresses() }));
+            // Process and room statistics (load tests, monitoring) with NAGMA_HEALTH_STATS=1, or for a
+            // signed-in server admin.
+            const stats = process.env.NAGMA_HEALTH_STATS === "1" || isServerAdmin(userFromReq(req)) ? serverStats() : undefined;
+            res.end(JSON.stringify({ ok: true, name: serverName(), version: SERVER_VERSION, publicUrl: configuredPublicUrl(), rooms: rooms.size, addresses: lanAddresses(), stats }));
             return;
         }
     }
@@ -3655,12 +3929,99 @@ const http = createServer((req, res) => {
     });
 });
 
-const wss = new WebSocketServer({ server: http, maxPayload: MAX_MESSAGE });
+// ---- Live connections ----
+
+// Counters and event-loop delay for /health (NAGMA_HEALTH_STATS=1, or a server admin signed in).
+const counters = { messagesIn: 0, presenceIn: 0, patchesIn: 0, presenceMessagesOut: 0, rateLimited: 0, flooded: 0, editorsCapped: 0, accountCapped: 0, resumed: 0, fullSnapshots: 0 };
+const loopDelay = monitorEventLoopDelay({ resolution: 10 });
+loopDelay.enable();
+
+function serverStats() {
+    const mem = process.memoryUsage();
+    let joined = 0;
+    let editors = 0;
+    let busiest = 0;
+    for (const room of rooms.values()) {
+        busiest = Math.max(busiest, room.clients.size);
+        for (const c of room.clients.values()) {
+            if (!c.joined) continue;
+            joined++;
+            if (c.role === "edit") editors++;
+        }
+    }
+    const ms = (ns) => Math.round(ns / 1e4) / 100;
+    const eventLoop = { p50: ms(loopDelay.percentile(50)), p99: ms(loopDelay.percentile(99)), max: ms(loopDelay.max) };
+    loopDelay.reset();
+    return { pid: process.pid, uptime: Math.round(process.uptime()), cpu: process.cpuUsage(), rss: mem.rss, heapUsed: mem.heapUsed, connections: wss.clients.size, rooms: rooms.size, joined, editors, busiestRoom: busiest, eventLoop, counters: { ...counters }, limits: SYNC };
+}
+
+// Open sockets per account that got into a file (NAGMA_WS_PER_ACCOUNT).
+const accountSockets = new Map();
+
+const wss = new WebSocketServer({
+    server: http,
+    maxPayload: MAX_MESSAGE,
+    // Big messages (snapshots, large patches) are compressed, small ones (cursors, and presence,
+    // sent uncompressed) aren't. Fast compression with a small window and no context kept between
+    // messages, so thousands of sockets don't each hold a large compressor (about 25 KB each instead
+    // of 200+ KB).
+    perMessageDeflate: { threshold: 1024, serverMaxWindowBits: 11, zlibDeflateOptions: { level: 1, memLevel: 5 }, serverNoContextTakeover: true, clientNoContextTakeover: true, concurrencyLimit: 10 },
+});
+
+// A socket that stops answering pings (a closed laptop, a lost network) is closed within a minute,
+// so it doesn't keep a seat in a room or count against its account.
+setInterval(() => {
+    for (const ws of wss.clients) {
+        if (ws.isAlive === false) {
+            ws.terminate();
+            continue;
+        }
+        ws.isAlive = false;
+        try {
+            ws.ping();
+        } catch {
+            // Closing anyway.
+        }
+    }
+}, 30_000).unref();
+
+// Presence goes out through sync-scale.mjs, gathered per room.
+// Not compressed: presence is small, constant and short-lived, and compressing every person's
+// copy costs more CPU (and zlib memory) than the bytes it saves.
+const sendPresenceText = (ws, text) => {
+    if (ws.readyState !== 1) return;
+    ws.send(text, { compress: false });
+    counters.presenceMessagesOut++;
+};
+const presenceOptions = { busyRoom: SYNC.busyRoom, send: sendPresenceText };
+
+// The busy-room presence rate, when a join or a leave crossed the line.
+function presenceRateChanged(room) {
+    updatePresenceRate(room, { busyRoom: SYNC.busyRoom, sendAll: (m) => broadcast(room, m) });
+}
+
+// People leaving at the same moment (a network blip, a server restart elsewhere) are announced in
+// one message per room.
+function queueLeave(room, userId) {
+    (room.leaving ??= []).push(userId);
+    if (room.leaveTimer) return;
+    room.leaveTimer = setImmediate(() => {
+        room.leaveTimer = null;
+        const ids = room.leaving;
+        room.leaving = [];
+        if (ids.length === 1) broadcast(room, { type: "leave", userId: ids[0] });
+        else if (ids.length) broadcast(room, { type: "leave", userId: ids[0], userIds: ids });
+    });
+}
+
+const num = (v) => (Number.isFinite(v) ? v : 0);
 
 wss.on("connection", (ws, req) => {
     // A bad frame (text that isn't UTF-8, a frame over the size limit) closes this socket; without a
     // listener the error event would throw and take the whole server down.
     ws.on("error", (error) => console.warn(`socket error: ${error?.code ?? error?.message ?? error}`));
+    ws.isAlive = true;
+    ws.on("pong", () => (ws.isAlive = true));
     const match = /^\/files\/([^/?]+)/.exec(req.url ?? "");
     const id = match?.[1];
     if (!validId(id)) {
@@ -3675,24 +4036,59 @@ wss.on("connection", (ws, req) => {
     const ready = loadRoom(id).then((r) => {
         room = r;
         room.clients.set(ws, client);
+        room.lastUsed = Date.now();
         return room;
     });
 
-    ws.on("message", async (raw) => {
+    // A message that throws is logged, not left to take the whole server down as an unhandled rejection.
+    const run = (message) =>
+        ready
+            .then(() => handleMessage(message))
+            .catch((error) => console.warn(`socket message (${String(message.type).slice(0, 40)}) failed: ${error?.stack ?? error}`));
+
+    // NAGMA_WS_PER_SECOND messages a second (presence aside). Beyond that, messages wait in line and
+    // are handled in order as the allowance comes back, with a "rate-limited" (429) message so the
+    // client knows; more than five seconds' worth waiting closes the connection (4013), and the
+    // client reconnects and sends again what the server never confirmed.
+    const waiting = [];
+    let drainTimer = null;
+    let toldLimitedAt = 0;
+    const drain = () => {
+        drainTimer = null;
+        while (waiting.length && takeToken(client, SYNC.wsPerSecond)) run(waiting.shift());
+        if (waiting.length) drainTimer = setTimeout(drain, msUntilToken(client, SYNC.wsPerSecond));
+    };
+
+    ws.on("message", (raw) => {
         let message;
         try {
             message = JSON.parse(String(raw));
         } catch {
             return;
         }
-        // Anything but an object ("null", "42") is ignored; and a message that still throws is
-        // logged, not left to take the whole server down as an unhandled rejection.
+        // Anything but an object ("null", "42") is ignored.
         if (!plainObject(message)) return;
-        try {
-            await ready;
-            await handleMessage(message);
-        } catch (error) {
-            console.warn(`socket message (${String(message.type).slice(0, 40)}) failed: ${error?.stack ?? error}`);
+        counters.messagesIn++;
+        if (message.type === "presence") {
+            counters.presenceIn++;
+            if (presenceAllowed(client)) run(message);
+            return;
+        }
+        if (!waiting.length && takeToken(client, SYNC.wsPerSecond)) return void run(message);
+        if (waiting.length >= SYNC.wsPerSecond * 5) {
+            counters.flooded++;
+            waiting.length = 0;
+            clearTimeout(drainTimer);
+            send(ws, { type: "rate-limited", code: 429, limit: SYNC.wsPerSecond, text: "Too many changes at once: reconnecting to send the rest." });
+            ws.close(4013, "Too many messages");
+            return;
+        }
+        waiting.push(message);
+        drainTimer ??= setTimeout(drain, msUntilToken(client, SYNC.wsPerSecond));
+        if (Date.now() - toldLimitedAt > 5000) {
+            toldLimitedAt = Date.now();
+            counters.rateLimited++;
+            send(ws, { type: "rate-limited", code: 429, limit: SYNC.wsPerSecond, retryAfterMs: msUntilToken(client, SYNC.wsPerSecond), text: `Sending changes more slowly: the server takes ${SYNC.wsPerSecond} a second from each connection. Nothing is lost.` });
         }
     });
 
@@ -3715,6 +4111,8 @@ wss.on("connection", (ws, req) => {
                 if (!room.file && message.initial?.nodes) {
                     room.file = { doc: message.initial, comments: [], versions: [] };
                     room.version = 0;
+                    room.ops = [];
+                    room.opIds = new Map();
                     created = true;
                 }
                 if (!room.file) {
@@ -3727,6 +4125,19 @@ wss.on("connection", (ws, req) => {
                 const key = typeof message.key === "string" ? message.key : "";
                 client.key = key;
                 client.user = userFromToken(typeof message.token === "string" ? message.token : null);
+                // NAGMA_WS_PER_ACCOUNT open connections per account.
+                if (client.user && !client.counted) {
+                    const open = accountSockets.get(client.user.id) ?? new Set();
+                    if (open.size >= SYNC.wsPerAccount) {
+                        counters.accountCapped++;
+                        send(ws, { type: "notice", text: `This account has ${SYNC.wsPerAccount} connections open, the most allowed. Close some tabs or windows, then try again.` });
+                        ws.close(4029, "Too many connections for this account");
+                        break;
+                    }
+                    open.add(ws);
+                    accountSockets.set(client.user.id, open);
+                    client.counted = client.user.id;
+                }
                 admin.noteActive(client.user);
                 if (client.user) client.presence = { ...client.presence, name: client.user.name, color: client.user.color, accountId: client.user.id };
                 // Who this person is across visits: their account, or this browser for guests.
@@ -3742,14 +4153,28 @@ wss.on("connection", (ws, req) => {
                     ws.close(4003, "No access");
                     break;
                 }
+                // The file already has as many editors as it allows: view until a spot frees up.
+                client.capped = false;
+                if (client.role === "edit" && !created && !client.joined && editorsIn(room) >= SYNC.roomEditors) {
+                    client.role = "view";
+                    client.capped = true;
+                    counters.editorsCapped++;
+                }
                 // Who has opened the file, most recent first (the avatar menu's viewer list).
                 room.file.viewers = { ...(room.file.viewers ?? {}), [client.uid]: { uid: client.uid, name: client.presence.name, color: client.presence.color, at: Date.now() } };
                 const viewerList = Object.values(room.file.viewers).sort((a, b) => b.at - a.at);
                 if (viewerList.length > 100) room.file.viewers = Object.fromEntries(viewerList.slice(0, 100).map((v) => [v.uid, v]));
                 scheduleSave(room);
+                // Back after a dropped connection: only what it missed, when the room still has it.
+                const missed = Number.isInteger(message.since) ? opsSince(room, message.since) : null;
+                if (missed) counters.resumed++;
+                else counters.fullSnapshots++;
                 send(ws, {
                     type: "snapshot",
-                    doc: room.file.doc,
+                    ...(missed ? { resume: true, ops: missed } : { doc: room.file.doc }),
+                    presenceHz: presenceHz(room, SYNC.busyRoom),
+                    capped: client.capped || undefined,
+                    cappedText: client.capped ? cappedText() : undefined,
                     comments: room.file.comments ?? [],
                     reads: room.file.commentReads?.[client.uid] ?? {},
                     viewers: Object.values(room.file.viewers ?? {}).sort((a, b) => b.at - a.at).slice(0, 50),
@@ -3764,7 +4189,8 @@ wss.on("connection", (ws, req) => {
                     branch: room.file.branchOf ? { of: room.file.branchOf, name: room.file.branchName ?? "Branch" } : null,
                 });
                 client.joined = true;
-                broadcast(room, { type: "presence", presence: client.presence }, ws);
+                queuePresence(room, ws, client, presenceOptions);
+                presenceRateChanged(room);
                 // A timed voting session that ran out with nobody in the file shows its results now;
                 // an open one tells this person their own ballot and the turnout.
                 revealBallots(room);
@@ -3774,8 +4200,16 @@ wss.on("connection", (ws, req) => {
             }
             case "patch": {
                 if (!room.file || !message.patch) return;
+                counters.patchesIn++;
                 if (client.role !== "edit") {
-                    send(ws, { type: "rejected", id: message.id, reason: "view-only" });
+                    // Waiting for an editor's spot: the client keeps the change and sends it again then.
+                    send(ws, { type: "rejected", id: message.id, reason: client.capped ? "editors-full" : "view-only" });
+                    return;
+                }
+                // Sent again after a reconnect, but the server applied it before the connection dropped.
+                const applied = alreadyApplied(room, message.id, client.uid);
+                if (applied) {
+                    send(ws, { type: "ack", id: message.id, version: applied.version });
                     return;
                 }
                 if (!validPatch(message.patch)) {
@@ -3787,7 +4221,7 @@ wss.on("connection", (ws, req) => {
                 applyPatch(room.file.doc, message.patch);
                 for (const id of assetsTouched(room.file, message.patch)) touched.add(id);
                 if (resetApprovals(room, touched, client.user)) broadcast(room, { type: "asset-reviews" });
-                room.version += 1;
+                recordOp(room, message.patch, typeof message.id === "string" && message.id.length <= 64 ? message.id : null, client.uid, SYNC.roomOps);
                 scheduleSave(room);
                 room.touched = Date.now();
                 // Everyone (including the sender, as an acknowledgement) gets it in the same order.
@@ -3807,15 +4241,15 @@ wss.on("connection", (ws, req) => {
                 if (!room.file || !client.role) return;
                 const name = typeof message.name === "string" ? message.name.slice(0, 60) : client.presence.name;
                 const color = typeof message.color === "string" && /^#[0-9a-fA-F]{6}$/.test(message.color) ? message.color : client.presence.color;
-                const num = (v) => (Number.isFinite(v) ? v : 0);
                 const camera = message.camera && typeof message.camera === "object" ? { x: num(message.camera.x), y: num(message.camera.y), zoom: num(message.camera.zoom) || 1, w: num(message.camera.w), h: num(message.camera.h) } : null;
                 client.presence = {
                     ...client.presence,
                     name,
                     color,
-                    cursor: message.cursor ?? null,
-                    selection: Array.isArray(message.selection) ? message.selection.slice(0, 200) : [],
-                    pageId: message.pageId ?? null,
+                    // A point on the canvas, and the ids of selected layers: nothing else is passed on.
+                    cursor: plainObject(message.cursor) ? { x: num(message.cursor.x), y: num(message.cursor.y) } : null,
+                    selection: Array.isArray(message.selection) ? message.selection.slice(0, 200).filter((s) => typeof s === "string").map((s) => s.slice(0, 64)) : [],
+                    pageId: typeof message.pageId === "string" ? message.pageId.slice(0, 64) : null,
                     // Follow and spotlight need where each person is looking; cursor chat is a short message.
                     camera,
                     spotlight: Boolean(message.spotlight),
@@ -3833,7 +4267,8 @@ wss.on("connection", (ws, req) => {
                     prototype: message.prototype && typeof message.prototype === "object" && typeof message.prototype.screen === "string" ? { screen: message.prototype.screen.slice(0, 64) } : null,
                     emote: message.emote && typeof message.emote === "object" && typeof message.emote.glyph === "string" ? { id: String(message.emote.id).slice(0, 24), glyph: message.emote.glyph.slice(0, 16), x: num(message.emote.x), y: num(message.emote.y) } : null,
                 };
-                broadcast(room, { type: "presence", presence: client.presence }, ws);
+                // Gathered with everyone else's and sent at the room's presence rate, never back to its sender.
+                if (client.joined) queuePresence(room, ws, client, presenceOptions);
                 break;
             }
             case "versions": {
@@ -3873,7 +4308,7 @@ wss.on("connection", (ws, req) => {
                 }
                 await saveVersion(room, client, null, true, { label: "Before restoring" });
                 room.file.doc = doc;
-                room.version += 1;
+                resetOps(room);
                 room.touched = Date.now();
                 scheduleSave(room);
                 broadcast(room, { type: "reset", doc, version: room.version, by: client.presence.name });
@@ -3959,21 +4394,43 @@ wss.on("connection", (ws, req) => {
     }
 
     ws.on("close", async () => {
+        clearTimeout(drainTimer);
+        waiting.length = 0;
+        if (client.counted) {
+            const open = accountSockets.get(client.counted);
+            open?.delete(ws);
+            if (open && !open.size) accountSockets.delete(client.counted);
+        }
         await ready;
         room.clients.delete(ws);
+        room.presenceDirty?.delete(ws);
+        room.lastUsed = Date.now();
         // Only people who were in the file were announced, so only they are said to leave.
-        if (client.joined) broadcast(room, { type: "leave", userId: client.presence.userId });
+        if (client.joined) queueLeave(room, client.presence.userId);
+        // An editor's spot is free: the first person waiting for one gets it.
+        if (client.joined && client.role === "edit") promoteWaiting(room);
+        presenceRateChanged(room);
         if (room.clients.size === 0 && room.file && room.changedSinceVersion) {
             // Everyone left: keep a checkpoint of where they got to.
             void saveVersion(room, client, null, true);
         }
-        if (room.clients.size === 0) {
-            // Keep idle rooms briefly so a quick reconnect doesn't reload from disk.
-            setTimeout(() => {
-                if (room.clients.size === 0 && !room.dirty) rooms.delete(room.id);
-            }, 60_000);
-        }
+        // An empty room stays in memory for NAGMA_ROOM_IDLE_MS (evictIdleRooms), so a quick
+        // reconnect doesn't reload it from disk.
     });
 });
 
 http.listen(PORT, () => console.log(`Nagma sync server on :${PORT}`));
+
+// Stopping (a deploy, docker stop): files with unsaved changes are written first, and clients are
+// told the server is restarting (1012) so they reconnect, with backoff, and resume.
+let stopping = false;
+async function shutdown() {
+    if (stopping) return;
+    stopping = true;
+    setTimeout(() => process.exit(0), 5000);
+    for (const ws of wss.clients) ws.close(1012, "Server restarting");
+    await Promise.all([...rooms.values()].map((room) => (room.dirty || room.timer ? saveRoom(room) : room.savePromise)).filter(Boolean)).catch(() => undefined);
+    process.exit(0);
+}
+process.on("SIGTERM", () => void shutdown());
+process.on("SIGINT", () => void shutdown());

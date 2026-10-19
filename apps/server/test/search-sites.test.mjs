@@ -141,6 +141,9 @@ describe("published sites and community", () => {
         assert.equal(page.status, 200);
         assert.match(page.text, /Hello site/);
         assert.match(page.headers.get("content-security-policy"), /sandbox/);
+        // Public: a CDN may keep it (revalidating pages with their ETag).
+        assert.equal(page.headers.get("cache-control"), "public, no-cache");
+        assert.equal((await call(server, "GET", "/s/my-site/", { headers: { "if-none-match": page.headers.get("etag") } })).status, 304);
         const other = await createFile(server, outsider.token, { doc: { name: "Other", roots: [], nodes: {}, site: { pages: [] } } });
         assert.equal((await call(server, "PUT", `/files/${other.id}/site/settings`, { token: outsider.token, body: { slug: "my-site" } })).status, 409);
     });
@@ -162,7 +165,10 @@ describe("published sites and community", () => {
         assert.equal(ok.status, 303);
         const cookie = ok.headers.get("set-cookie").split(";")[0];
         assert.match(ok.headers.get("set-cookie"), /HttpOnly/);
-        assert.equal((await call(server, "GET", "/s/my-site/", { headers: { cookie } })).status, 200);
+        const unlocked = await call(server, "GET", "/s/my-site/", { headers: { cookie } });
+        assert.equal(unlocked.status, 200);
+        // Behind a password: never in a shared cache.
+        assert.equal(unlocked.headers.get("cache-control"), "private, no-cache");
         assert.equal((await call(server, "GET", "/s/my-site/", { headers: { cookie: `${cookie}x` } })).status, 401);
         // The same cookie works at /sites/<id>/ too (same site, same access).
         assert.equal((await call(server, "GET", `/sites/${site.id}/`)).status, 401);

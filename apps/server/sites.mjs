@@ -358,5 +358,10 @@ export function createSiteHosting({ readBody, CORS, DATA, loadRoom, roleFor, use
         return Number(exp) > Date.now() && typeof mac === "string" && mac.length === 32 && timingSafeEqual(Buffer.from(mac), Buffer.from(sign(`appdata:${id}:${exp}:${version}`)));
     }
 
-    return { serveSettings, serveSlug, serveHost, allowed, register, summary: (id) => summary(id), appToken, appTokenOk };
+    // Whether a published site or app is behind a password or for its team only (so no shared cache keeps it).
+    const gated = async (id) => {
+        const entry = (await load()).files[id];
+        return Boolean(entry?.passwordHash || entry?.team);
+    };
+    return { serveSettings, serveSlug, serveHost, allowed, gated, register, summary: (id) => summary(id), appToken, appTokenOk };
 }
