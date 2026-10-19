@@ -1,12 +1,15 @@
-import { Check, Server01, X } from "@untitledui/icons";
+import { Check, Globe02, Laptop01, Server01, X } from "@untitledui/icons";
 import { useEffect, useState } from "react";
 import { Button as AriaButton, Dialog as AriaDialog, Modal as AriaModal, ModalOverlay as AriaModalOverlay } from "react-aria-components";
 import { FILE_LINK_PARAMS, connectToServer } from "../engine/auth";
-import { type ServerInfo, checkServer, closeServerPicker, currentServer, currentServerLabel, defaultOrigin, forgetServer, linkedServer, localServerLabel, openServerPicker, rememberServer, useServerPickerOpen, useServers } from "../engine/servers";
+import { connectToHosted } from "../engine/share-hosted";
+import { DOC_LINKS, openDoc } from "../engine/onboarding";
+import { type ServerInfo, checkServer, closeServerPicker, currentServer, currentServerLabel, defaultOrigin, forgetServer, hostedServer, linkedServer, localServerLabel, openServerPicker, rememberServer, useServerPickerOpen, useServers } from "../engine/servers";
 
 // Where this device's shared files, teams and sites live: This computer (the server the app came
-// with) or a Nagma server someone runs for their team (docs/self-hosting.md). Switching reloads the
-// page for that server (engine/auth.ts connectToServer).
+// with), Nagma's hosted server (free, run by the project; engine/servers.ts hostedServer), or a Nagma
+// server someone runs for their team (docs/self-hosting.md). Switching reloads the page for that
+// server (engine/auth.ts connectToServer).
 
 const hostOf = (origin: string) => {
     try {
@@ -36,8 +39,23 @@ export function ServerPicker() {
 }
 
 function ServerList() {
-    const { servers, current } = useServers();
+    const { servers: known, current } = useServers();
     const [adding, setAdding] = useState(false);
+    const [hostedBusy, setHostedBusy] = useState(false);
+    const [hostedError, setHostedError] = useState<string | null>(null);
+    // Not listed twice when this page came from the hosted server itself.
+    const hosted = hostedServer()?.origin === defaultOrigin() ? null : hostedServer();
+    // The hosted server has its own row; the rest are servers of your own (or your team's).
+    const servers = known.filter((s) => s.origin !== hosted?.origin);
+    const pickHosted = async () => {
+        if (current === hosted?.origin) return closeServerPicker();
+        setHostedBusy(true);
+        setHostedError(null);
+        const failed = await connectToHosted();
+        setHostedBusy(false);
+        setHostedError(failed);
+    };
+    const hint = "block text-[11px] leading-snug text-ink-muted";
     const row = "flex w-full items-center gap-3 rounded-md px-3 py-2 text-left outline-none hover:bg-panel-hover focus-visible:ring-2 focus-visible:ring-brand-500";
     return (
         <div className="space-y-3" onKeyDown={(e) => e.stopPropagation()}>
@@ -53,14 +71,28 @@ function ServerList() {
             <div className="-mx-1 space-y-0.5" role="list" aria-label="Servers">
                 <div role="listitem">
                     <button type="button" className={row} onClick={() => (current === null ? closeServerPicker() : connect(null))}>
-                        <Server01 className="size-4 shrink-0 text-ink-muted" />
+                        <Laptop01 className="size-4 shrink-0 text-ink-muted" />
                         <span className="min-w-0 flex-1">
                             <span className="block truncate text-[12px] font-medium">{localServerLabel()}</span>
-                            <span className="block truncate text-[11px] text-ink-subtle">{hostOf(defaultOrigin())}</span>
+                            <span className={hint}>{localServerLabel() === "This computer" ? "Only you. Files stay on this computer." : `The server this page came from, ${hostOf(defaultOrigin())}.`}</span>
                         </span>
                         {current === null && <Check className="size-4 shrink-0 text-brand-500" aria-label="In use" />}
                     </button>
                 </div>
+                {hosted && (
+                    <div role="listitem">
+                        <button type="button" className={row} disabled={hostedBusy} onClick={() => void pickHosted()}>
+                            <Globe02 className="size-4 shrink-0 text-ink-muted" />
+                            <span className="min-w-0 flex-1">
+                                <span className="block truncate text-[12px] font-medium">
+                                    {hosted.name} (hosted), free
+                                </span>
+                                <span className={hint}>{hostedBusy ? "Connecting…" : "Share and collaborate with anyone. Needs an account."}</span>
+                            </span>
+                            {current === hosted.origin && <Check className="size-4 shrink-0 text-brand-500" aria-label="In use" />}
+                        </button>
+                    </div>
+                )}
                 {servers.map((s) => (
                     <div key={s.origin} role="listitem" className="group flex items-center">
                         <button type="button" className={row} onClick={() => (current === s.origin ? closeServerPicker() : connect(s))}>
@@ -82,14 +114,23 @@ function ServerList() {
                     </div>
                 ))}
             </div>
+            {hostedError && <div className="rounded-md bg-red-500/10 px-3 py-2 text-[11px] text-red-400">{hostedError}</div>}
             {adding ? (
                 <AddServer onCancel={() => setAdding(false)} />
             ) : (
-                <button type="button" onClick={() => setAdding(true)} className="h-9 w-full rounded-md border border-panel-border text-[12px] font-medium hover:bg-panel-hover">
-                    Add server…
-                </button>
+                <div>
+                    <button type="button" onClick={() => setAdding(true)} className="h-9 w-full rounded-md border border-panel-border text-[12px] font-medium hover:bg-panel-hover">
+                        Add your own server…
+                    </button>
+                    <p className="mt-1.5 text-[11px] leading-snug text-ink-muted">
+                        Your own server: run it yourself, for you or your team.{" "}
+                        <button type="button" onClick={() => openDoc(DOC_LINKS.selfHost)} className="font-medium text-link hover:underline">
+                            Self-hosting guide
+                        </button>
+                    </p>
+                </div>
             )}
-            <p className="text-[11px] leading-relaxed text-ink-subtle">Switching signs you in to that server's accounts. You can run a server of your own for your team; see the self-hosting guide.</p>
+            <p className="text-[11px] leading-relaxed text-ink-subtle">Switching signs you in to that server's accounts.</p>
         </div>
     );
 }
@@ -128,12 +169,19 @@ function AddServer({ onCancel }: { onCancel: () => void }) {
                     setFound(null);
                     setError(null);
                 }}
-                placeholder="nagma.example.com"
+                placeholder="https://nagma.example.com"
+                aria-describedby="server-address-hint"
                 autoFocus
                 autoComplete="url"
                 spellCheck={false}
                 className={input}
             />
+            <p id="server-address-hint" className="text-[11px] leading-snug text-ink-muted">
+                The address of a Nagma server someone runs, like https://nagma.example.com.{" "}
+                <button type="button" onClick={() => openDoc(DOC_LINKS.connect)} className="font-medium text-link hover:underline">
+                    Where do I get one?
+                </button>
+            </p>
             {found && (
                 <div className="flex items-center gap-2 rounded-md bg-field px-3 py-2 text-[12px]">
                     <Check className="size-4 shrink-0 text-emerald-500" />

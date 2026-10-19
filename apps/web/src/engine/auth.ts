@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { httpBase } from "./server-url";
-import { SERVERS_KEY, authStorageKey, reloadServers, setCurrentServer } from "./servers";
+import { SERVERS_KEY, authStorageKey, reloadServers, remoteLinkBase, setCurrentServer } from "./servers";
 import { changeServer, storageFrozen, switchScope } from "./user-storage";
 
 // Accounts on the sync server: who you are, kept as a session token in this browser. Everything
@@ -212,9 +212,14 @@ const emailToken = () => {
     }
 };
 
+// Where links in mail from the server (verification, password reset) should open: on a server other
+// than This computer, that server's own public address (it serves the editor too), since this page's
+// address may be the desktop app's own (localhost), which the mail's reader can't use; otherwise here.
+export const mailLinkOrigin = () => remoteLinkBase() ?? location.origin;
+
 export async function signUp(name: string, email: string, password: string): Promise<Verification | undefined> {
     const token = emailToken();
-    const r = await call("/auth/signup", { name, email, password, origin: location.origin, ...(token ? { emailToken: token } : {}) });
+    const r = await call("/auth/signup", { name, email, password, origin: mailLinkOrigin(), ...(token ? { emailToken: token } : {}) });
     if (r.user.emailVerified) {
         try {
             sessionStorage.removeItem(EMAIL_TOKEN_KEY);
@@ -265,7 +270,7 @@ export function onVerifyNotice(show: (text: string) => void) {
 
 // Sends the verification link again. Throws the server's reason (too soon, no mail on this server).
 export async function resendVerification(): Promise<Verification & { verified?: boolean }> {
-    const res = await fetch(`${httpBase()}/auth/verify/resend`, { method: "POST", headers: { "content-type": "application/json", ...authHeaders() }, body: JSON.stringify({ origin: location.origin }) });
+    const res = await fetch(`${httpBase()}/auth/verify/resend`, { method: "POST", headers: { "content-type": "application/json", ...authHeaders() }, body: JSON.stringify({ origin: mailLinkOrigin() }) });
     const data = (await res.json().catch(() => ({}))) as Verification & { verified?: boolean; error?: string };
     if (!res.ok) throw new Error(data.error ?? `The server answered ${res.status}.`);
     if (data.verified) void refreshSession();
@@ -306,7 +311,7 @@ export async function signOut() {
 // Whether the server can mail the link (`mailConfigured`) or, on a development server, keeps it in
 // its data folder (`devMailFile`). Neither says whether the account exists.
 export async function requestReset(email: string): Promise<{ mailConfigured: boolean; devMailFile: boolean }> {
-    const res = await fetch(`${httpBase()}/auth/reset-request`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, origin: location.origin }) });
+    const res = await fetch(`${httpBase()}/auth/reset-request`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, origin: mailLinkOrigin() }) });
     if (!res.ok) throw new Error(`The server answered ${res.status}.`);
     const data = (await res.json().catch(() => ({}))) as { mailConfigured?: boolean; devMailFile?: boolean };
     return { mailConfigured: data.mailConfigured !== false, devMailFile: Boolean(data.devMailFile) };

@@ -5,23 +5,26 @@ import { changePassword, closeSignIn, listSessions, requestReset, resetPassword,
 import { acceptInvite, lookupInvite } from "../engine/teams";
 import { editor } from "../engine/store";
 import { currentServerLabel, openServerPicker } from "../engine/servers";
+import { pendingShareHere } from "../engine/share-hosted";
 
 // Sign in or create an account on the sync server.
 export function AuthModal() {
     const open = useAuth((s) => s.open);
+    // Share through Nagma brought you here: the file moves once you're signed in (engine/share-hosted.ts).
+    const pending = open ? pendingShareHere() : null;
     return (
         <AriaModalOverlay isOpen={open} onOpenChange={(o) => !o && closeSignIn()} isDismissable className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-24">
             <AriaModal className="w-[380px] rounded-xl border border-panel-border bg-panel-raised p-5 text-ink shadow-2xl outline-none">
                 <AriaDialog className="outline-none" aria-label="Sign in">
-                    <AuthForm onDone={closeSignIn} />
+                    <AuthForm onDone={closeSignIn} initialMode={pending ? "up" : "in"} intro={pending ? `Sign in or create a free account on ${pending.serverName} to share "${pending.name}". It moves here once you're in.` : undefined} />
                 </AriaDialog>
             </AriaModal>
         </AriaModalOverlay>
     );
 }
 
-export function AuthForm({ onDone, compact }: { onDone?: () => void; compact?: boolean }) {
-    const [mode, setMode] = useState<"in" | "up" | "forgot" | "sso">("in");
+export function AuthForm({ onDone, compact, intro, initialMode = "in" }: { onDone?: () => void; compact?: boolean; intro?: string; initialMode?: "in" | "up" }) {
+    const [mode, setMode] = useState<"in" | "up" | "forgot" | "sso">(initialMode);
     const adding = useAuth((s) => s.adding);
     const [sent, setSent] = useState<{ mailConfigured: boolean; devMailFile: boolean } | null>(null);
     const [name, setName] = useState("");
@@ -64,7 +67,7 @@ export function AuthForm({ onDone, compact }: { onDone?: () => void; compact?: b
                 <div className="flex items-start justify-between">
                     <div>
                         <h2 className="text-[14px] font-semibold">{mode === "up" ? "Create your account" : mode === "forgot" ? "Reset your password" : mode === "sso" ? "Sign in with SSO" : adding ? "Add an account" : "Sign in"}</h2>
-                        <p className="mt-1 text-[12px] text-ink-muted">Accounts live on your Nagma server. They own files and get invited to others.</p>
+                        {intro ? <p className="mt-1 text-[12px] text-ink">{intro}</p> : <p className="mt-1 text-[12px] text-ink-muted">Accounts live on your Nagma server. They own files and get invited to others.</p>}
                         <p className="mt-2 flex items-center gap-1.5 text-[12px] text-ink-muted">
                             <span className="min-w-0 truncate">
                                 Server: <span className="font-medium text-ink">{currentServerLabel()}</span>

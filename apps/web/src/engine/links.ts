@@ -7,7 +7,7 @@ import { pageOf } from "./page";
 import { startScreen } from "./prototype";
 import { editor } from "./store";
 import { refuseExport } from "./share-settings";
-import { remoteLinkBase, shareableUrl, withServer } from "./servers";
+import { isLocalOnlyLink, remoteLinkBase, shareableUrl, withServer } from "./servers";
 
 // Share links: the file, a frame inside it, the file in Inspect, the prototype, and an embed.
 // Opening one lands on what it points at.
@@ -76,12 +76,23 @@ export function linkUnavailable(): boolean {
     return true;
 }
 
-export async function copyLink(kind: LinkKind) {
+// A link that only opens on this computer or its network (localhost, a private address) isn't
+// handed out as if it worked anywhere: copying one needs `allowLocal`, the share menu's "Copy local
+// link (same network only)".
+export const LOCAL_LINK_REFUSED = "This link only works on this computer's network. Share through Nagma for a link that works anywhere, or copy a local link from the Share menu.";
+
+export async function copyLink(kind: LinkKind, { allowLocal = false }: { allowLocal?: boolean } = {}) {
     if (refuseExport() || linkUnavailable()) return;
     const labels: Record<LinkKind, string> = { file: "Link copied.", selection: "Link to selection copied.", dev: "Inspect link copied.", prototype: "Prototype link copied.", focus: "Link to focus view copied." };
+    const link = fileLink(kind);
+    const local = isLocalOnlyLink(link);
+    if (local && !allowLocal) {
+        editor.notify(LOCAL_LINK_REFUSED);
+        return;
+    }
     try {
-        await navigator.clipboard.writeText(fileLink(kind));
-        editor.notify(labels[kind]);
+        await navigator.clipboard.writeText(link);
+        editor.notify(local ? `${labels[kind].replace(/\.$/, "")} (same network only).` : labels[kind]);
     } catch {
         editor.notify("The browser didn't allow copying.");
     }

@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { setAiSettingsOpener } from "./ai-settings";
-import { auth, authHeaders, refreshSession } from "./auth";
+import { auth, authHeaders, mailLinkOrigin, refreshSession } from "./auth";
 import { httpBase } from "./server-url";
 import { editor } from "./store";
 import { getStarredFiles, replaceStarredFiles, subscribeStarredFiles } from "./files";
@@ -101,7 +101,7 @@ export const removeAvatar = async () => setView(await api<AccountView>("/account
 // `mailConfigured` is false when the server has no SMTP set up; `kept` when it wrote the link to its
 // data folder instead (development servers with NAGMA_DEV_MAIL_FILE=1).
 export async function changeEmail(email: string, password: string): Promise<{ sent: boolean; mailConfigured: boolean; kept: boolean }> {
-    const next = await api<AccountView & { sent: boolean; mailConfigured?: boolean; kept?: boolean }>("/account/email", { method: "POST", body: JSON.stringify({ email, password, origin: location.origin }) });
+    const next = await api<AccountView & { sent: boolean; mailConfigured?: boolean; kept?: boolean }>("/account/email", { method: "POST", body: JSON.stringify({ email, password, origin: mailLinkOrigin() }) });
     setView(next);
     return { sent: next.sent, mailConfigured: Boolean(next.mailConfigured), kept: Boolean(next.kept) };
 }

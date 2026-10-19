@@ -1,8 +1,9 @@
 import { Key01, Laptop01, Server01, X } from "@untitledui/icons";
-import { type ReactNode, useEffect } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Button as AriaButton, Dialog as AriaDialog, Heading, Modal as AriaModal, ModalOverlay as AriaModalOverlay } from "react-aria-components";
 import { DOC_LINKS, type WelcomeChoice, chooseWelcome, markSeen, openDoc, showWelcomeOnce, useWelcomeOpen } from "../engine/onboarding";
-import { openServerPicker } from "../engine/servers";
+import { hostedServer, openServerPicker } from "../engine/servers";
+import { connectToHosted } from "../engine/share-hosted";
 import { useEditor } from "../engine/store";
 import { NagmaLogo } from "./nagma-logo";
 
@@ -21,7 +22,7 @@ const CARDS: { choice: WelcomeChoice; icon: ReactNode; title: string; body: stri
         choice: "server",
         icon: <Server01 className="size-5" />,
         title: "Connect to a server",
-        body: "Work with your team on a Nagma server: your company's, or one you run in one command.",
+        body: "Share and work with anyone on Nagma's free hosted server, or on your own: your company's, or one you run in one command.",
         doc: DOC_LINKS.connect,
     },
     {
@@ -36,6 +37,19 @@ const CARDS: { choice: WelcomeChoice; icon: ReactNode; title: string; body: stri
 export function Onboarding() {
     const homeOpen = useEditor((s) => s.homeOpen);
     const open = useWelcomeOpen();
+    const hosted = hostedServer();
+    const [connecting, setConnecting] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    // One click: connect to the hosted server (the page starts over there, signed out).
+    const pickHosted = async () => {
+        setConnecting(true);
+        setError(null);
+        const failed = await connectToHosted();
+        setConnecting(false);
+        if (failed) setError(failed);
+        else chooseWelcome("local");
+    };
+    const small = "h-7 rounded-md px-3 text-[11px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-brand-500";
     useEffect(() => {
         if (homeOpen) showWelcomeOnce();
     }, [homeOpen]);
@@ -72,12 +86,27 @@ export function Onboarding() {
                                         <span className="mt-0.5 block text-[12px] text-ink-muted">{card.body}</span>
                                     </span>
                                 </AriaButton>
-                                <button type="button" onClick={() => openDoc(card.doc)} aria-label={`Learn more: ${card.title}`} className="shrink-0 self-center rounded-md px-3 py-2 text-[11px] font-medium text-link outline-none hover:underline focus-visible:ring-2 focus-visible:ring-brand-500">
-                                    Learn more
-                                </button>
+                                {card.choice === "server" && hosted ? (
+                                    <span className="flex shrink-0 flex-col items-stretch justify-center gap-1 py-2 pr-2">
+                                        <AriaButton onPress={() => void pickHosted()} isDisabled={connecting} className={`${small} bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-60`}>
+                                            {connecting ? "Connecting…" : `Use ${hosted.name} hosted`}
+                                        </AriaButton>
+                                        <AriaButton onPress={() => chooseWelcome("server")} className={`${small} border border-panel-border text-ink hover:bg-panel`}>
+                                            Your own server…
+                                        </AriaButton>
+                                        <button type="button" onClick={() => openDoc(card.doc)} aria-label={`Learn more: ${card.title}`} className={`${small} text-link hover:underline`}>
+                                            Learn more
+                                        </button>
+                                    </span>
+                                ) : (
+                                    <button type="button" onClick={() => openDoc(card.doc)} aria-label={`Learn more: ${card.title}`} className="shrink-0 self-center rounded-md px-3 py-2 text-[11px] font-medium text-link outline-none hover:underline focus-visible:ring-2 focus-visible:ring-brand-500">
+                                        Learn more
+                                    </button>
+                                )}
                             </li>
                         ))}
                     </ul>
+                    {error && <div className="mt-3 rounded-md bg-red-500/10 px-3 py-2 text-[11px] text-red-400">{error}</div>}
                 </AriaDialog>
             </AriaModal>
         </AriaModalOverlay>
@@ -90,7 +119,7 @@ export function ShareNeedsServer({ close }: { close: () => void }) {
     useEffect(() => markSeen("shareNeedsServer"), []);
     return (
         <div role="note" aria-label="Collaboration needs a server" className="rounded-md border border-brand-500/40 bg-brand-500/10 p-3 text-[12px] leading-relaxed">
-            <p>Collaboration needs a server. Connect to one, or run your own in one command.</p>
+            <p>{hostedServer() ? `Collaboration needs a server. Use ${hostedServer()?.name ?? "Nagma"}'s free hosted server, connect to your own, or run one in one command.` : "Collaboration needs a server. Connect to one, or run your own in one command."}</p>
             <div className="mt-2 flex gap-2">
                 <AriaButton
                     onPress={() => {

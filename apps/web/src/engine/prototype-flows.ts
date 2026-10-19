@@ -1,4 +1,5 @@
 import { collab, shareLink } from "./collab";
+import { isLocalOnlyLink } from "./servers";
 import { layerRoots } from "./page";
 import { editor } from "./store";
 import { actionsOf, resolveDestination, screens, subtree, walkActions } from "./prototype";
@@ -99,6 +100,11 @@ export function topLevelIds(doc: NagmaDocument): string[] {
 export function copyFlowLink(flowId: string, hideUi = false) {
     const base = collab.get().fileId ? shareLink("view") : location.href;
     const link = flowLink(base, flowId, hideUi);
+    // A file on this computer's server: its links only open on this network (engine/links.ts).
+    if (collab.get().fileId && isLocalOnlyLink(link)) {
+        editor.notify("This link only works on this computer's network. Share through Nagma for a link that works anywhere.");
+        return;
+    }
     const done = () => editor.notify("Link to flow copied");
     if (navigator.clipboard) void navigator.clipboard.writeText(link).then(done, () => editor.notify("Couldn't copy the link"));
 }

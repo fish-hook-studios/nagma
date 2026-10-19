@@ -11,6 +11,7 @@ import { closeGate, exitPreview, join, requestAccess, restoreVersion, setMyName,
 import { editor } from "../engine/store";
 import { AuthForm } from "./auth";
 import { versionTitle, when } from "../engine/version-format";
+import { takeShareRequest, useShareRequested } from "../engine/share-hosted";
 
 export { Avatar } from "./avatar";
 
@@ -42,6 +43,11 @@ export function PresentButton() {
 // `size="lg"`: the design editor's 32pt Share (56 wide).
 export function ShareButton({ label = "Share", className = "ml-1", size, tone }: { label?: string; className?: string; size?: "lg"; tone?: "dev" }) {
     const [open, setOpen] = useState(false);
+    // A file just moved to a server (Share through Nagma) opens Share for its link.
+    const requested = useShareRequested();
+    useEffect(() => {
+        if (requested && takeShareRequest()) setOpen(true);
+    }, [requested]);
     return (
         <>
             <AriaButton

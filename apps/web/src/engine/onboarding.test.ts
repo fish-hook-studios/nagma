@@ -115,6 +115,17 @@ describe("Get started", () => {
         expect(shown.tab).toBeNull();
     });
 
+    it("Connect to a server offers Nagma hosted in one click, and your own server", async () => {
+        await mount();
+        const li = [...document.querySelectorAll('[aria-label="Ways to start"] li')][1]!;
+        expect(li.textContent).toContain("Nagma's free hosted server");
+        const buttons = [...li.querySelectorAll("button")].map((b) => b.textContent);
+        expect(buttons.slice(1)).toEqual(["Use Nagma hosted", "Your own server…", "Learn more"]);
+        await act(async () => [...li.querySelectorAll("button")].find((b) => b.textContent === "Your own server…")?.click());
+        expect(dialog()).toBeNull();
+        expect(shown.picker).toBe(true);
+    });
+
     it("Add an AI key opens Account settings › AI, the tab the no-key notice opens", async () => {
         await mount();
         expect(dialog()).toBeTruthy();
@@ -188,7 +199,7 @@ describe("Share in a file that's only on this device", () => {
     it("shows in Share the first time, with Connect opening the picker", async () => {
         let closed = 0;
         await act(async () => root.render(createElement("div", null, createElement(ShareDialogContent, { close: () => closed++ }), createElement(Probe))));
-        expect(note()?.textContent).toContain("Collaboration needs a server. Connect to one, or run your own in one command.");
+        expect(note()?.textContent).toContain("Collaboration needs a server. Use Nagma's free hosted server, connect to your own, or run one in one command.");
         expect(onboarding.hasSeen("shareNeedsServer")).toBe(true);
         const connect = [...note()!.querySelectorAll("button")].find((b) => b.textContent === "Connect");
         await act(async () => connect?.click());
@@ -197,7 +208,8 @@ describe("Share in a file that's only on this device", () => {
         await act(async () => root.render(createElement("div")));
         await act(async () => root.render(createElement(ShareDialogContent, { close: () => undefined })));
         expect(note()).toBeNull();
-        expect(host.textContent).toContain("Sign in so this file has an owner");
+        // No link from This computer: Share through Nagma instead (engine/share-hosted.test.ts).
+        expect(host.textContent).toContain("Share through Nagma");
     });
 
     it("the note on its own marks itself seen", async () => {

@@ -11,6 +11,7 @@ import * as filesModule from "./engine/files";
 import * as teamsModule from "./engine/teams";
 import { rejoinShared } from "./engine/collab";
 import { openLastFile } from "./engine/files";
+import { resumePendingShare } from "./engine/share-hosted";
 import { editor, onPageOpened } from "./engine/store";
 import { clearTextCache } from "./engine/text";
 import { watchPresentLink } from "./engine/present-link";
@@ -61,7 +62,11 @@ if (sitePreview) {
             history.replaceState(null, "", url);
         } else void openLastFile(rejoinShared);
     });
-} else if (!startParams.get("file")) void openLastFile(rejoinShared);
+} else if (!startParams.get("file")) {
+    // Back from Share through Nagma (or another server): the file that was going there opens on it,
+    // moved, with Share open (engine/share-hosted.ts). Otherwise the last file.
+    void resumePendingShare().then((resumed) => (resumed ? undefined : openLastFile(rejoinShared)));
+}
 
 // Preferences › Open links in desktop app: hand a file link to the desktop app.
 openLinkInDesktopApp();

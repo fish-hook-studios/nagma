@@ -54,6 +54,29 @@ export function localServerLabel(): string {
     }
 }
 
+// ---- The project's hosted server ----
+
+// The server the Nagma project runs for everyone: free, needs an account (with a verified email
+// before sharing). A fork can point the app at its own with VITE_HOSTED_SERVER_URL at build time, or
+// set it to "" to leave the hosted choice out.
+export const HOSTED_SERVER = { name: "Nagma", url: "https://api.nagma.app" } as const;
+export interface HostedServer {
+    name: string;
+    // http(s) origin, without a trailing slash.
+    origin: string;
+}
+
+// The hosted server for a build setting: unset is the project's, "" turns it off, anything else is
+// that address (null when it isn't one).
+export function hostedServerFrom(setting: string | undefined): HostedServer | null {
+    if (setting === undefined) return { name: HOSTED_SERVER.name, origin: HOSTED_SERVER.url };
+    if (!setting.trim()) return null;
+    const origin = normalizeServerUrl(setting);
+    return origin ? { name: HOSTED_SERVER.name, origin } : null;
+}
+export const hostedServer = (): HostedServer | null => hostedServerFrom(import.meta.env.VITE_HOSTED_SERVER_URL as string | undefined);
+export const isHostedOrigin = (origin: string | null | undefined) => Boolean(origin) && hostedServer()?.origin === origin;
+
 // ---- Addresses ----
 
 function toOrigin(url: string): string | null {
@@ -233,6 +256,30 @@ export function remoteLinkBase(): string | null {
 export function shareableUrl(): URL {
     const remote = remoteLinkBase();
     return remote ? new URL(`${remote}/`) : new URL(location.origin + location.pathname);
+}
+
+// A link whose host only answers on this computer or its local network: localhost and loopback,
+// private and link-local IPv4 (10/8, 172.16/12, 192.168/16, 169.254/16, 100.64/10), IPv6 loopback,
+// unique-local and link-local, names without a dot and .local/.lan/.internal/.home.arpa names. The
+// app never offers such a link to copy unless someone asks for a local link (same network only).
+export function isLocalOnlyLink(href: string): boolean {
+    let host: string;
+    try {
+        host = new URL(href).hostname.toLowerCase().replace(/^\[|\]$/g, "");
+    } catch {
+        return true;
+    }
+    if (!host) return true;
+    if (host === "localhost" || host.endsWith(".localhost") || host === "0.0.0.0") return true;
+    const v4 = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(host);
+    if (v4) {
+        const a = Number(v4[1]);
+        const b = Number(v4[2]);
+        return a === 127 || a === 10 || a === 0 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 169 && b === 254) || (a === 100 && b >= 64 && b <= 127);
+    }
+    if (host.includes(":")) return host === "::1" || host === "::" || /^f[cd][0-9a-f]{0,2}:/.test(host) || /^fe[89ab][0-9a-f]?:/.test(host);
+    if (!host.includes(".")) return true;
+    return /\.(local|lan|internal|home\.arpa)$/.test(host);
 }
 
 // Links to files carry the server they're on when it isn't This computer and the link doesn't

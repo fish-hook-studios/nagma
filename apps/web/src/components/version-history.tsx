@@ -2,6 +2,8 @@ import { ChevronDown, ChevronRight, DotsHorizontal, Plus, X } from "@untitledui/
 import { useEffect, useState } from "react";
 import { Dialog as AriaDialog, Modal as AriaModal, ModalOverlay as AriaModalOverlay } from "react-aria-components";
 import { authHeaders } from "../engine/auth";
+import { LOCAL_LINK_REFUSED } from "../engine/links";
+import { isLocalOnlyLink } from "../engine/servers";
 import { type VersionMeta, collab, exitPreview, openSaveVersion, previewVersion, requestVersions, restoreVersion, saveVersion, shareCurrent, updateVersion, useCollab, versionLink } from "../engine/collab";
 import { rememberShared } from "../engine/files";
 import { httpBase } from "../engine/server-url";
@@ -135,7 +137,8 @@ function VersionRow({ v, nested }: { v: VersionMeta; nested?: boolean }) {
                         if (id === "restore") restoreVersion(v.id);
                         if (id === "duplicate") void duplicateVersion(v);
                         if (id === "clear") updateVersion(v.id, null, null);
-                        if (id === "link")
+                        if (id === "link" && isLocalOnlyLink(versionLink(v.id))) editor.notify(LOCAL_LINK_REFUSED);
+                        else if (id === "link")
                             void navigator.clipboard.writeText(versionLink(v.id)).then(
                                 () => editor.notify("Link copied. People need edit access to open a version."),
                                 () => editor.notify("The browser didn't allow copying."),

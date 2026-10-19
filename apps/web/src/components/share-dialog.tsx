@@ -1,10 +1,10 @@
 import { ChevronDown, ChevronRight, Code02, Cube01, DotsHorizontal, Folder, Globe02, Link01, Lock01, Users01, X } from "@untitledui/icons";
 import { useEffect, useState } from "react";
 import { Button as AriaButton } from "react-aria-components";
-import { authHeaders, useAuth } from "../engine/auth";
+import { authHeaders, refreshSession, useAuth } from "../engine/auth";
 import { collab, currentLinkKey, httpBase, leave, requestAccess, resetLinks, setMyName, shareCurrent, shareLink, useCollab } from "../engine/collab";
 import { isDesktop } from "../engine/desktop";
-import { type LinkKind, copyLink, embedCode } from "../engine/links";
+import { type LinkKind, copyLink, embedCode, fileLink } from "../engine/links";
 import { editor, useEditor } from "../engine/store";
 import { AuthForm } from "./auth";
 import { Avatar } from "./avatar";
@@ -12,6 +12,9 @@ import { DarkMenu } from "./collab-menu";
 import { PublishDialog } from "./community-page";
 import { ShareNeedsServer } from "./onboarding";
 import { shouldNudgeShare } from "../engine/onboarding";
+import { awaitingVerification, currentShareStep, exportCopy, refusedUnverified, shareThroughHosted } from "../engine/share-hosted";
+import { hostedServer, isLocalOnlyLink, openServerPicker } from "../engine/servers";
+import { VerifyEmailMessage } from "./verify-email";
 
 // Share, like the reference's dialog: invite by email with a role, "Who has access" (the link, the project's
 // team, the owner and everyone invited), what each can do, and links to copy or embed.
@@ -101,7 +104,10 @@ export function ShareDialogContent({ close, stacked }: { close: () => void; stac
     const [password, setPassword] = useState("");
     const [asked, setAsked] = useState(false);
     const [publishing, setPublishing] = useState(false);
+    // The server refused a change because the account's email isn't verified yet.
+    const [refused, setRefused] = useState(false);
     const shared = status !== "local";
+    const step = currentShareStep(shared);
     const manage = role === "edit";
     // The first Share in a file only on this device, with This computer as the server: a note that
     // collaboration needs a server (once per device).
@@ -136,7 +142,13 @@ export function ShareDialogContent({ close, stacked }: { close: () => void; stac
         setMessage(null);
         try {
             const res = await fetch(`${httpBase()}/files/${fileId}/access${keyParam()}`, { method: "PUT", headers: { "content-type": "application/json", ...authHeaders() }, body: JSON.stringify(body) });
-            const data = (await res.json()) as Access & { error?: string };
+            const data = (await res.json()) as Access & { error?: string; code?: string };
+            if (refusedUnverified(res.status, data)) {
+                // The Verify your email message (with Resend) says why, rather than a plain error.
+                setRefused(true);
+                void refreshSession().catch(() => undefined);
+                return false;
+            }
             if (!res.ok) throw new Error(data.error ?? "The server refused that.");
             setAccess(data);
             collab.set({ access: { link: data.link, owner: data.owner?.id ?? null, project: data.project?.id ?? null, viewersCanExport: data.viewersCanExport !== false } });
@@ -174,6 +186,10 @@ export function ShareDialogContent({ close, stacked }: { close: () => void; stac
             {body}
         </div>
     );
+
+    // This computer is the server: a link would carry this machine's address, which nobody elsewhere
+    // can open. Share offers a server instead (engine/share-hosted.ts).
+    if (step === "through-hosted" || step === "pick-server") return single(<ShareFromThisComputer close={close} hosted={step === "through-hosted"} nudge={nudge} />);
 
     if (!account) {
         return single(
@@ -221,7 +237,10 @@ export function ShareDialogContent({ close, stacked }: { close: () => void; stac
     const icon = (node: React.ReactNode) => <span className="flex size-4 shrink-0 items-center justify-center text-ink">{node}</span>;
     const sub = "block truncate text-[11px] leading-[14px] text-ink-subtle";
     // Links and actions past Copy link: the second card's More menu.
+    // A server on this computer or its network: its links only open there (engine/servers.ts).
+    const localOnly = Boolean(fileId) && isLocalOnlyLink(fileLink("file"));
     const moreItems = [
+        ...(localOnly ? [{ id: "localLink", label: "Copy local link (same network only)" }, "-" as const] : []),
         { id: "selection", label: "Copy link to selection", disabled: !hasSelection },
         { id: "prototype", label: "Copy prototype link" },
         { id: "embed", label: embed ? "Hide embed code" : "Get embed code" },
@@ -230,7 +249,8 @@ export function ShareDialogContent({ close, stacked }: { close: () => void; stac
         ...(manage && keys ? ["-" as const, { id: "reset", label: "Reset links" }, { id: "leave", label: "Keep working on a copy in this browser" }] : []),
     ];
     const more = (id: string) => {
-        if (id === "embed") setEmbed((v) => !v);
+        if (id === "localLink") void copyLink(selName ? "selection" : "file", { allowLocal: true });
+        else if (id === "embed") setEmbed((v) => !v);
         else if (id === "export") void change({ viewersCanExport: access?.viewersCanExport === false }, access?.viewersCanExport === false ? "People with view access can copy, share and export again." : "People with view access can no longer copy layers, export, save a copy or duplicate the file.");
         else if (id === "desktop") location.href = `nagma://open?url=${encodeURIComponent(shareLink(keys ? "edit" : "view"))}`;
         else if (id === "reset") setConfirmReset(true);
@@ -317,6 +337,11 @@ export function ShareDialogContent({ close, stacked }: { close: () => void; stac
                                 Request edit access
                             </button>
                         )}
+                    </div>
+                )}
+                {(refused || awaitingVerification(account)) && (
+                    <div className="mx-[16px] mt-[12px]">
+                        <VerifyEmailMessage inline refused={refused} />
                     </div>
                 )}
                 {message && <div className={`mx-[16px] mt-[12px] rounded-[5px] px-3 py-2 text-[11px] ${message.error ? "bg-red-500/10 text-red-400" : "bg-emerald-500/10 text-emerald-500"}`}>{message.text}</div>}
@@ -485,7 +510,7 @@ export function ShareDialogContent({ close, stacked }: { close: () => void; stac
                 {embed && (
                     <div className="mx-[16px] mt-[8px] space-y-1.5">
                         <div className="text-[11px] font-semibold">Embed code</div>
-                        <textarea readOnly value={embedCode()} rows={3} onFocus={(e) => e.currentTarget.select()} aria-label="Embed code" className="w-full resize-none rounded-[5px] border border-panel-border bg-field p-2 font-mono text-[10.5px] text-ink-muted outline-none" />
+                        <textarea readOnly value={localOnly ? "" : embedCode()} placeholder={localOnly ? "Embeds need a link that works anywhere. This server is only on this network." : undefined} rows={3} onFocus={(e) => e.currentTarget.select()} aria-label="Embed code" className="w-full resize-none rounded-[5px] border border-panel-border bg-field p-2 font-mono text-[10.5px] text-ink-muted outline-none" />
                         <p className="text-[11px] text-ink-subtle">{anyone ? "The embed shows the file without the editor's panels." : "Only people invited can see the embed after signing in."}</p>
                     </div>
                 )}
@@ -533,6 +558,71 @@ export function ShareDialogContent({ close, stacked }: { close: () => void; stac
         <div className={stacked ? "flex flex-col gap-[10px]" : ""}>
             {access1}
             {access2}
+        </div>
+    );
+}
+
+// Share while This computer is the server. No link: one would carry this machine's own address.
+// Share through Nagma moves the file to the hosted server (signing in or up there) and opens Share
+// with a link that works anywhere; or use your own server; or export a copy to send.
+function ShareFromThisComputer({ close, hosted, nudge }: { close: () => void; hosted: boolean; nudge: boolean }) {
+    const fileId = useCollab((s) => s.fileId);
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const server = hostedServer();
+    const go = async () => {
+        setBusy(true);
+        setError(null);
+        try {
+            await shareThroughHosted();
+        } catch (e) {
+            setError(e instanceof Error ? e.message : String(e));
+            setBusy(false);
+        }
+    };
+    const secondary = "h-8 rounded-md border border-panel-border px-3 text-[11px] font-medium text-ink outline-none hover:bg-panel-hover focus-visible:ring-2 focus-visible:ring-brand-500";
+    return (
+        <div className="space-y-3 p-4" aria-label="Share from this computer" role="group">
+            {nudge && <ShareNeedsServer close={close} />}
+            <p className="text-[12px] leading-relaxed text-ink-muted">
+                This file is only on this computer, so a link to it wouldn't open for anyone else.{" "}
+                {hosted && server ? `Share it through ${server.name}, the free hosted server, to get a link that works anywhere.` : "Move it to a Nagma server to get a link that works anywhere."}
+            </p>
+            {hosted && server && (
+                <>
+                    <AriaButton onPress={() => void go()} isDisabled={busy} className="h-9 w-full rounded-md bg-brand-500 text-[12px] font-semibold text-white outline-none hover:bg-brand-600 focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1 disabled:opacity-60">
+                        {busy ? `Connecting to ${server.name}…` : `Share through ${server.name}`}
+                    </AriaButton>
+                    <p className="text-[11px] leading-relaxed text-ink-subtle">You sign in or create a free account there. The file moves to {server.name} and Share opens with its link. The original stays on this computer.</p>
+                </>
+            )}
+            {error && <div className="rounded-md bg-red-500/10 px-3 py-2 text-[11px] text-red-400">{error}</div>}
+            <div className="flex flex-wrap items-center gap-2">
+                <AriaButton
+                    onPress={() => {
+                        close();
+                        openServerPicker();
+                    }}
+                    className={hosted ? secondary : "h-8 rounded-md bg-brand-500 px-3 text-[11px] font-semibold text-white outline-none hover:bg-brand-600 focus-visible:ring-2 focus-visible:ring-brand-500"}
+                >
+                    Use your own server…
+                </AriaButton>
+                <AriaButton onPress={exportCopy} className={secondary}>
+                    Export a copy
+                </AriaButton>
+                <span className="flex-1" />
+                {fileId && (
+                    <DarkMenu
+                        label="Local link"
+                        className="flex size-8 items-center justify-center rounded-md text-ink-muted outline-none hover:bg-panel-hover hover:text-ink focus-visible:ring-2 focus-visible:ring-brand-500"
+                        placement="bottom end"
+                        width="w-64"
+                        trigger={<DotsHorizontal className="size-4" />}
+                        items={[{ id: "local", label: "Copy local link (same network only)" }]}
+                        onAction={() => void copyLink("file", { allowLocal: true })}
+                    />
+                )}
+            </div>
         </div>
     );
 }

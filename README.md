@@ -43,7 +43,7 @@ Open http://localhost:5173. Shared files are stored in `apps/server/data/`.
 
 To host it, build the editor (`npm run build` in apps/web) and run only the sync server: it serves the editor too, on one port. The Dockerfile does both; `fly.toml` is ready for Fly.io.
 
-Everything is free, and anyone can run a Nagma server for their team: `docker-compose.yml` (with Caddy for automatic HTTPS), `.env.example` and the one-command `tools/install.sh` are described in [docs/self-hosting.md](docs/self-hosting.md). The web and desktop apps connect to any Nagma server from the server picker (the badge next to your account on Home, or Nagma > Server… in the desktop app); "This computer" is the server the app came with.
+Everything is free, and anyone can run a Nagma server for their team: `docker-compose.yml` (with Caddy for automatic HTTPS), `.env.example` and the one-command `tools/install.sh` are described in [docs/self-hosting.md](docs/self-hosting.md). The web and desktop apps connect to any Nagma server from the server picker (the badge next to your account on Home, or Nagma > Server… in the desktop app); "This computer" is the server the app came with. Don't want to run one? The project's hosted server, "Nagma (hosted)" in the picker, is free: sign up in the app and Share gives you links that work anywhere.
 
 ## What works today
 

@@ -12,10 +12,19 @@ const err = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 // Shown under the tab bar until the account's email is verified (when the server requires it).
 export function VerifyBanner() {
+    return <VerifyEmailMessage />;
+}
+
+// The same message where sharing was held back (components/share-dialog.tsx): `inline` draws it as a
+// box inside a dialog, and `refused` shows it even when this device still thinks the account is
+// verified (the server said otherwise).
+export function VerifyEmailMessage({ inline = false, refused = false }: { inline?: boolean; refused?: boolean }) {
     const user = useAuth((s) => s.user);
     const [status, setStatus] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
-    if (!user || user.emailVerified !== false || !user.verifyRequired) return null;
+    if (!user || (!refused && (user.emailVerified !== false || !user.verifyRequired))) return null;
+    // A refusal from a server this device knows little about: it can send the link unless it said not.
+    const mailReady = refused ? user.mailReady !== false : user.mailReady;
     const resend = async () => {
         setBusy(true);
         try {
@@ -28,9 +37,13 @@ export function VerifyBanner() {
         }
     };
     return (
-        <div role="status" aria-label="Verify your email" className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-panel-border bg-amber-500/10 px-4 py-1.5 text-[12px] text-ink">
+        <div
+            role="status"
+            aria-label="Verify your email"
+            className={inline ? "flex flex-wrap items-center gap-x-3 gap-y-1 rounded-[5px] bg-amber-500/10 px-3 py-2 text-[11px] text-ink" : "flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-panel-border bg-amber-500/10 px-4 py-1.5 text-[12px] text-ink"}
+        >
             <span className="font-semibold">Verify your email</span>
-            {user.mailReady ? (
+            {mailReady ? (
                 <span className="text-ink-muted">
                     Open the link we sent to {user.email} to invite people, share, publish and join teams. Your drafts work meanwhile.
                 </span>
@@ -39,7 +52,7 @@ export function VerifyBanner() {
             )}
             <span className="flex-1" />
             {status && <span className="text-ink-muted">{status}</span>}
-            {user.mailReady && (
+            {mailReady && (
                 <button type="button" disabled={busy} onClick={() => void resend()} className="font-medium text-link hover:underline disabled:opacity-50">
                     Resend
                 </button>

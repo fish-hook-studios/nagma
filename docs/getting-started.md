@@ -25,8 +25,10 @@ Nagma opens on **Home**, the file browser. The first time, it shows three ways t
 
 - **Use Nagma on this computer** (the default). Just closes the cards. Everything you make is a
   draft on this device. No account, no server, no limits.
-- **Connect to a server**. Opens the server picker, to join your team's Nagma server or one you
-  run yourself. See [Connect to a server](connect-to-a-server.md).
+- **Connect to a server**. **Use Nagma hosted** connects in one click to the free server the Nagma
+  project runs, where you can share with anyone (it needs an account). **Your own server…** opens
+  the server picker, to join your team's Nagma server or one you run yourself. See
+  [Connect to a server](connect-to-a-server.md).
 - **Add an AI key**. Opens **Account settings › AI**, where you add a key from Claude, OpenAI or an
   OpenAI-compatible server. See [AI keys](ai-keys.md).
 
@@ -36,6 +38,15 @@ editor's main menu › Help and account, the desktop app's Help menu, or the acc
 The cards show once per device, not once per account or server: signing in, switching account or
 connecting to another server doesn't show them again.
 
+## Where your files live
+
+There are three choices, and you can switch any time from the server picker:
+
+- **This computer**: only you. Files stay on this computer. No account.
+- **Nagma (hosted)**: free, run by the Nagma project. Share and collaborate with anyone. Needs an
+  account, with a verified email before you share.
+- **Your own server**: run it yourself, or use your company's ([Self-hosting](self-hosting.md)).
+
 ## Drafts
 
 A file you create without a server is a **draft**. Drafts live on this device (in the desktop app,
@@ -43,9 +54,11 @@ in its own storage; in a browser, in that browser's storage) and appear under **
 
 - Drafts save as you work. Close the app and they're there next time.
 - Drafts are kept apart per account and per server, so nothing from one shows up in another.
-- To work on a draft with someone, choose **Share**. On a team server, Share moves the file to the
-  server (owned by you) and gives you links and invitations. On This computer, Share tells you (the first time)
-  that collaboration needs a server, with **Connect** (the server picker) and **Learn more**.
+- To work on a draft with someone, choose **Share**. On the hosted server or a team server, Share
+  moves the file to the server (owned by you) and gives you links and invitations. On This
+  computer, a link would only open on your machine, so Share offers **Share through Nagma** instead:
+  it connects to the free hosted server, signs you in or up there, moves the file and gives you a
+  link that works anywhere. **Use your own server…** and **Export a copy** are there too.
 - Keep backups of what matters: **File › Save local copy…** downloads the file as `.nagma.json`.
 
 ## Create
@@ -69,6 +82,6 @@ that make these formats.
 
 ## Next
 
-- [Connect to a server](connect-to-a-server.md): work with your team.
+- [Connect to a server](connect-to-a-server.md): the hosted server, your team's, or your own.
 - [AI keys](ai-keys.md): where keys go, which providers, what it costs.
 - [Self-hosting](self-hosting.md): run your own Nagma server in one command.
