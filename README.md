@@ -1,3 +1,5 @@
+<img src="apps/landing/logo-mark.svg" width="72" height="72" alt="">
+
 # Nagma
 
 [![CI](https://github.com/fish-hook-studios/nagma/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/fish-hook-studios/nagma/actions/workflows/ci.yml)
