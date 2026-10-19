@@ -14,7 +14,7 @@ const PREFIX = "nagma_pat_";
 const MAX_TOKENS = 20;
 const hashOf = (token) => createHash("sha256").update(token).digest("hex");
 
-export function createApiTokens({ DATA, rooms, userById, publicUser, userFromReq, loadRoom, roleFor, listFiles, readBody, CORS }) {
+export function createApiTokens({ DATA, rooms, refreshPresence, userById, publicUser, userFromReq, loadRoom, roleFor, listFiles, readBody, CORS }) {
     const PATH = join(DATA, "tokens.json");
     let store = { tokens: [] };
     let loaded = false;
@@ -141,6 +141,8 @@ export function createApiTokens({ DATA, rooms, userById, publicUser, userFromReq
             const doc = room.file.doc;
             if (file[2] === "/selection") {
                 // What the token's owner has selected in the file right now (in any open editor), newest first.
+                // (With room workers, live presence is in the file's worker: fetched first.)
+                await refreshPresence?.(rooms.get(file[1]));
                 const live = [...(rooms.get(file[1])?.clients.values() ?? [])].filter((c) => c.user?.id === user.id && c.presence);
                 const sel = live.map((c) => ({ pageId: c.presence.pageId ?? null, selection: (c.presence.selection ?? []).filter((id) => doc.nodes?.[id]) })).find((p) => p.selection.length) ?? { pageId: live[0]?.presence.pageId ?? null, selection: [] };
                 return json(200, { open: live.length > 0, ...sel, nodes: Object.fromEntries(sel.selection.map((id) => [id, { root: id, nodes: subtree(doc, id, null) }])) });

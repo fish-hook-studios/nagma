@@ -297,6 +297,48 @@ Whatever the store, the server holds these (each person sees the reason when one
 Backups (above) cover the disk only: with a bucket, back the bucket up with your provider's tools or
 `rclone sync`, since that's where the media is.
 
+## Many people at once
+
+One server process carries everyone's live sessions: their cursors, edits and comments go through
+it, on one CPU core. With every cursor moving, that core is full at about 1,000 people on a cloud ARM
+core (about 3,000 on a fast laptop core); real sessions are lighter. Past that, give live sessions
+more cores with `NAGMA_WORKERS`:
+
+```bash
+# .env: one room worker per core but one (on 4 cores: 3 workers and the main process)
+NAGMA_WORKERS=auto
+```
+
+With `NAGMA_WORKERS=N` (N above 1) the server starts N room worker processes beside the main one.
+Every open file belongs to one worker (by its id), and the worker holds the connections of everyone in
+that file: it reads their messages, gathers and sends cursors, applies the per-connection limits and
+writes to the sockets, which is most of the work. The main process keeps everything else as before:
+the documents (each change is put in order and saved there), accounts, sharing, comments, versions,
+the API, media and sites. Nothing changes for clients or for the data folder.
+
+When to set it:
+
+- **Leave it at 1** for a team or a small server, the desktop app, and machines with one or two
+  cores: one process has no messages between processes and the least memory.
+- **Set `auto` (or a number)** when `/health` (as a server admin, or with `NAGMA_HEALTH_STATS=1`)
+  shows the CPU near 100% (one core) with many people connected, or edits arriving late. On a
+  4-core machine, `auto` (3 workers) uses every core. More workers than cores but one only adds
+  memory.
+- **Memory**: each worker is a Node.js process of its own, about 80 MB at rest; each connection
+  costs about 150 KB wherever it is. Measured on a 4-core ARM server with 5,000 connections: 1.1 GB
+  in all with 3 workers, 0.9 GB in one process. Size the machine, and any container memory limit,
+  for that.
+- **Cursors are most of the traffic**: every person in a file gets the others' cursors up to 20
+  times a second. If the server is still short of CPU, `NAGMA_PRESENCE_HZ=10` halves that traffic
+  (clients are told the rate and send at it too), at the cost of slightly less smooth cursors.
+- **Restarts**: a worker that stops (a crash, an out-of-memory kill) is started again within a
+  second; the people in its files reconnect on their own and carry on from where they were. Their
+  documents were never in the worker, so nothing is lost. The main process logs it
+  (`Room worker 1 (pid …) stopped`).
+
+`/health` statistics then add up every process (CPU, memory, connections, counters) and list each
+one under `processes`. Measurements are in [load-testing.md](load-testing.md).
+
 ## Environment reference
 
 Every setting, with a one-line explanation, is in [`.env.example`](../.env.example). Leave settings
@@ -326,6 +368,8 @@ you don't use commented out rather than empty: an empty value counts as set. The
 | `NAGMA_ROOM_EDITORS`, `NAGMA_WS_PER_SECOND`, `NAGMA_WS_PER_ACCOUNT` | Editors at once per file (100; more join as viewers until a spot frees up), messages a second per connection (60, cursors aside), open connections per account (10). |
 | `NAGMA_ROOM_IDLE_MS`, `NAGMA_ROOM_OPS`, `NAGMA_SAVE_MS`, `NAGMA_SAVE_OPS`, `NAGMA_BUSY_ROOM` | Memory and disk for open files: unused files leave memory after 10 minutes, the last 1000 changes are kept for reconnecting clients, a file is written at most every 2 s (or after 500 changes), and files with more than 50 people send cursors 5 times a second instead of 20. See [load-testing.md](load-testing.md). |
 | `NAGMA_HEALTH_STATS` | `1` adds CPU, memory, connections, rooms and event-loop delay to `/health` (server admins always see them). |
+| `NAGMA_WORKERS` | Processes for live sessions: `1` (the default) is one process; `N` above 1 adds N room workers; `auto` is one per core but one. See [Many people at once](#many-people-at-once). |
+| `NAGMA_PRESENCE_HZ` | Presence (cursor) messages a second per person, 20 by default and at most; lower cuts cursor traffic both ways. |
 | `PORT`, `DATA_DIR`, `STATIC_DIR` | Set inside the container (8080, `/data`, the built editor). |
 | `NAGMA_UPDATE_URL`, `NAGMA_UPDATE_CHANNEL`, `NAGMA_NO_UPDATES` | For building the desktop app: a folder of your own its updates are published to (by default, the project's GitHub Releases), or `NAGMA_NO_UPDATES=1` for builds that never update. See [releasing.md](releasing.md). |
 

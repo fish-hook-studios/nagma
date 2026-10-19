@@ -19,6 +19,8 @@ import { Worker, isMainThread, parentPort, workerData } from "node:worker_thread
 
 const now = () => performance.timeOrigin + performance.now();
 const PRESENCE_SAMPLE = 10;
+const PRESENCE_PREFIX = Buffer.from('{"type":"presence');
+const LT_MARK = Buffer.from('"lt:');
 
 // ---- Latency histograms: 0.1 ms buckets up to 1 s, then 10 ms buckets up to 60 s (mergeable) ----
 const FINE = 10_000;
@@ -317,6 +319,7 @@ async function main() {
         for (const w of workers) w.worker.postMessage({ type: "measure" });
         const samples = [];
         let lastCpu = null;
+        const lastProcCpu = new Map();
         let sampling = false;
         const sampleTimer = setInterval(async () => {
             // One sample at a time: a busy server answering late mustn't pile requests up.
@@ -330,6 +333,15 @@ async function main() {
             const cpuNow = h?.stats?.cpu ? (h.stats.cpu.user + h.stats.cpu.system) / 1e6 : ps?.cpuSeconds;
             if (Number.isFinite(cpuNow) && lastCpu) s.cpuPercent = ((cpuNow - lastCpu.seconds) / ((s.at - lastCpu.at) / 1000)) * 100;
             if (Number.isFinite(cpuNow)) lastCpu = { at: s.at, seconds: cpuNow };
+            // With room workers (NAGMA_WORKERS > 1), /health lists each process: the main one and each
+            // worker's CPU, by pid (a restarted worker starts over).
+            for (const p of h?.stats?.processes ?? []) {
+                if (!p.cpu) continue;
+                const seconds = (p.cpu.user + p.cpu.system) / 1e6;
+                const prev = lastProcCpu.get(p.pid);
+                if (prev) (s.procCpu ??= []).push({ role: p.role, index: p.index, pid: p.pid, percent: ((seconds - prev.seconds) / ((s.at - prev.at) / 1000)) * 100, loopP99: p.eventLoop?.p99 });
+                lastProcCpu.set(p.pid, { at: s.at, seconds });
+            }
             samples.push(s);
             const ticks = workers.map((w) => w.tick).filter(Boolean);
             const sum = (k) => ticks.reduce((t, x) => t + (x[k] ?? 0), 0);
@@ -361,6 +373,12 @@ async function main() {
         const cpuSamples = samples.map((s) => s.cpuPercent).filter((v) => Number.isFinite(v));
         const rssSamples = samples.map((s) => (s.stats?.rss ? s.stats.rss / 1048576 : s.ps?.rssMb)).filter((v) => Number.isFinite(v));
         const loopP99 = samples.map((s) => s.stats?.eventLoop?.p99).filter((v) => Number.isFinite(v));
+        // Per process (room workers): the main process, and the busiest worker in each sample.
+        const mainCpu = samples.flatMap((s) => (s.procCpu ?? []).filter((p) => p.role === "main").map((p) => p.percent));
+        const workerCpu = samples.map((s) => Math.max(...(s.procCpu ?? []).filter((p) => p.role === "worker").map((p) => p.percent))).filter((v) => Number.isFinite(v));
+        const mainLoop = samples.flatMap((s) => (s.procCpu ?? []).filter((p) => p.role === "main").map((p) => p.loopP99)).filter((v) => Number.isFinite(v));
+        const workerLoop = samples.flatMap((s) => (s.procCpu ?? []).filter((p) => p.role === "worker").map((p) => p.loopP99)).filter((v) => Number.isFinite(v));
+        const avg = (list) => (list.length ? list.reduce((a, b) => a + b, 0) / list.length : null);
         const result = {
             label: opts.label || null,
             options: { users: opts.users, files: opts.files, pages: opts.pages, editors: opts.editors, editRate: opts.editRate, presenceRate: opts.presenceRate, duration: opts.duration, workers: workerCount, env: opts.env },
@@ -385,6 +403,13 @@ async function main() {
                 cpuMax: cpuSamples.length ? Math.max(...cpuSamples) : null,
                 rssMaxMb: rssSamples.length ? Math.max(...rssSamples) : null,
                 eventLoopP99Max: loopP99.length ? Math.max(...loopP99) : null,
+                processes: samples.at(-1)?.stats?.processes?.length ?? 1,
+                mainCpuAvg: avg(mainCpu),
+                mainCpuMax: mainCpu.length ? Math.max(...mainCpu) : null,
+                busiestWorkerCpuAvg: avg(workerCpu),
+                busiestWorkerCpuMax: workerCpu.length ? Math.max(...workerCpu) : null,
+                mainLoopP99Max: mainLoop.length ? Math.max(...mainLoop) : null,
+                workerLoopP99Max: workerLoop.length ? Math.max(...workerLoop) : null,
             },
             // When this is high the load generator itself was busy and the latencies include its delay.
             generatorLoopP99,
@@ -446,7 +471,8 @@ function printReport(r) {
         `  presence  sent ${fmt(r.rates.presenceSent, 0)}/s, received ${fmt(r.rates.presenceReceived, 0)}/s`,
         `  messages received ${fmt(r.rates.messagesReceived, 0)}/s, ${fmt(r.rates.mbReceived, 2)} MB/s`,
         `  problems: dropped patches ${r.problems.droppedPatches}, unexpected closes ${r.problems.unexpectedCloses}, errors ${r.problems.errors}, rate-limited ${r.problems.rateLimited}, rejected ${r.problems.rejected}, capped to view ${r.problems.demoted}`,
-        `  server: CPU avg ${fmt(r.server.cpuAvg)}% max ${fmt(r.server.cpuMax)}%, RSS max ${fmt(r.server.rssMaxMb, 0)} MB, event-loop delay p99 max ${fmt(r.server.eventLoopP99Max)} ms`,
+        `  server: CPU avg ${fmt(r.server.cpuAvg)}% max ${fmt(r.server.cpuMax)}%, RSS max ${fmt(r.server.rssMaxMb, 0)} MB, event-loop delay p99 max ${fmt(r.server.eventLoopP99Max)} ms${r.server.processes > 1 ? ` (all ${r.server.processes} processes)` : ""}`,
+        r.server.mainCpuAvg !== null ? `  room workers: main process CPU avg ${fmt(r.server.mainCpuAvg)}% max ${fmt(r.server.mainCpuMax)}%, busiest worker avg ${fmt(r.server.busiestWorkerCpuAvg)}% max ${fmt(r.server.busiestWorkerCpuMax)}%; event-loop delay p99 max: main ${fmt(r.server.mainLoopP99Max)} ms, workers ${fmt(r.server.workerLoopP99Max)} ms` : null,
         `  load generator: event-loop delay p99 ${fmt(r.generatorLoopP99)} ms, max ${fmt(r.generatorLoopMax)} ms${r.generatorLoopMax > 250 ? " (busy: latencies include the generator's own delay)" : ""}`,
         r.drop ? `  drop all: server alive ${r.drop.serverAlive}, /health answered after ${r.drop.healthAfterMs} ms, connections ${r.drop.connectionsBefore ?? "?"} → ${r.drop.connectionsAfter ?? "?"}, RSS after ${fmt(r.drop.rssAfterMb, 0)} MB` : null,
         "",
@@ -505,20 +531,21 @@ async function runWorker() {
             });
             ws.on("message", (raw) => {
                 const t = now();
-                const text = String(raw);
                 if (measuring) {
                     count.received++;
-                    count.bytesIn += text.length;
+                    count.bytesIn += raw.length;
                 }
-                // Presence is most of the traffic: counted from the text, and one message in
-                // PRESENCE_SAMPLE parsed for its latency, so the generator keeps up with the server.
-                if (text.startsWith('{"type":"presence')) {
+                // Presence is most of the traffic: counted from the bytes (not decoded), and one
+                // message in PRESENCE_SAMPLE parsed for its latency, so the generator keeps up with the
+                // server.
+                if (raw.length >= PRESENCE_PREFIX.length && raw.compare(PRESENCE_PREFIX, 0, PRESENCE_PREFIX.length, 0, PRESENCE_PREFIX.length) === 0) {
                     if (!measuring) return;
                     let n = 0;
-                    for (let at = text.indexOf('"lt:'); at >= 0; at = text.indexOf('"lt:', at + 4)) n++;
+                    for (let at = raw.indexOf(LT_MARK); at >= 0; at = raw.indexOf(LT_MARK, at + 4)) n++;
                     count.presenceIn += n;
                     if (Math.random() >= 1 / PRESENCE_SAMPLE) return;
                 }
+                const text = String(raw);
                 let m;
                 try {
                     m = JSON.parse(text);
@@ -583,7 +610,8 @@ async function runWorker() {
         if (s.ws.readyState !== 1) return;
         s.x += (Math.random() - 0.5) * 20;
         s.y += (Math.random() - 0.5) * 20;
-        s.ws.send(JSON.stringify({ type: "presence", name: `Load ${s.c.i}`, color: "#0D99FF", cursor: { x: s.x, y: s.y }, selection: [`lt:${now()}`], pageId: s.c.page, camera: { x: 0, y: 0, zoom: 1, w: 1440, h: 900 } }));
+        // Written out rather than JSON.stringify'd: the generator sends tens of thousands a second.
+        s.ws.send(`{"type":"presence","name":"Load ${s.c.i}","color":"#0D99FF","cursor":{"x":${s.x},"y":${s.y}},"selection":["lt:${now()}"],"pageId":${JSON.stringify(s.c.page)},"camera":{"x":0,"y":0,"zoom":1,"w":1440,"h":900}}`);
         add("presenceSent");
     }
     function restartPresence(s) {

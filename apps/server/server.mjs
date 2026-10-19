@@ -27,7 +27,8 @@ import { createSaml, safeReturnUrl } from "./saml.mjs";
 import { createImageProxy } from "./image-proxy.mjs";
 import { parseObject } from "./json-body.mjs";
 import { saveLater, writeAtomic } from "./atomic-write.mjs";
-import { alreadyApplied, flushPresence, msUntilToken, opsSince, presenceAllowed, presenceHz, queuePresence, recordOp, resetOps, syncSettings, takeToken, updatePresenceRate } from "./sync-scale.mjs";
+import { alreadyApplied, opsSince, presenceFrom, presenceHz, queuePresence, readMessages, recordOp, resetOps, socketOptions, syncSettings, updatePresenceRate } from "./sync-scale.mjs";
+import { createRoomWorkers, workerCount } from "./room-workers.mjs";
 import { monitorEventLoopDelay } from "node:perf_hooks";
 import { clientAddress, etagOf, sendCached } from "./http-cache.mjs";
 import { createMediaStore, validMediaType, validSha256 } from "./media-store.mjs";
@@ -49,6 +50,13 @@ const SYNC = syncSettings();
 
 /** @type {Map<string, {id: string, file: any, version: number, clients: Map<any, any>, dirty: boolean, timer: any, ops: any[], lastUsed: number}>} */
 const rooms = new Map();
+
+// Room workers (NAGMA_WORKERS > 1, room-workers.mjs): the sockets, presence and per-connection
+// limits live in worker processes, each with the rooms whose file ids hash to it, so live sessions
+// use more than one core; this process keeps each room's document, order of changes, history,
+// access and saving, and everything else. With 1 (the default) everything runs here.
+const WORKERS = workerCount();
+const roomWorkers = WORKERS > 1 ? createRoomWorkers({ count: WORKERS, onOpen: (ws, id) => openConnection(ws, id, newClient()) }) : null;
 
 const validId = (id) => typeof id === "string" && /^[A-Za-z0-9_-]{6,64}$/.test(id);
 const filePath = (id) => join(DATA, `${id}.json`);
@@ -3320,6 +3328,11 @@ function send(ws, message) {
 // their hello got them in (a role), and stop when their access goes. The message is encoded once
 // for the whole room (one buffer, sent as text to each socket).
 function broadcast(room, message, except) {
+    // With room workers: one message to the room's worker, which writes it to each socket.
+    if (roomWorkers) {
+        if (room.clients.size) roomWorkers.broadcast(room.id, JSON.stringify(message), except);
+        return;
+    }
     let data = null;
     for (const [ws, client] of room.clients) {
         if (ws === except || !client.role || ws.readyState !== 1) continue;
@@ -3780,7 +3793,7 @@ const make = createMake({ ai, readBody, CORS, DATA, userFromReq, needsVerificati
 siteHosting.register("app", make.hosting);
 
 // Personal access tokens (Account settings › Tokens) and the read-only /v1 API they open (api-tokens.mjs).
-const apiTokens = createApiTokens({ DATA, rooms, userById, publicUser, userFromReq, loadRoom, roleFor, listFiles, readBody, CORS });
+const apiTokens = createApiTokens({ DATA, rooms, refreshPresence: (room) => (roomWorkers && room ? roomWorkers.refreshPresence([...room.clients]) : undefined), userById, publicUser, userFromReq, loadRoom, roleFor, listFiles, readBody, CORS });
 // Team integrations: Slack and Teams webhooks for Inspect status notices, and Inspect settings (integrations.mjs).
 const integrations = createIntegrations({ DATA, teamById, teamRole, projectById, userFromReq, loadRoom, roleFor, readBody, CORS, postChat });
 // Home: account settings, search, stars, inbox actions, the community and media providers (home.mjs).
@@ -3911,7 +3924,7 @@ async function route(req, res) {
             // the apps' server picker shows when someone connects to it.
             // Process and room statistics (load tests, monitoring) with NAGMA_HEALTH_STATS=1, or for a
             // signed-in server admin.
-            const stats = process.env.NAGMA_HEALTH_STATS === "1" || isServerAdmin(userFromReq(req)) ? serverStats() : undefined;
+            const stats = process.env.NAGMA_HEALTH_STATS === "1" || isServerAdmin(userFromReq(req)) ? await serverStats() : undefined;
             res.end(JSON.stringify({ ok: true, name: serverName(), version: SERVER_VERSION, publicUrl: configuredPublicUrl(), rooms: rooms.size, addresses: lanAddresses(), stats }));
             return;
         }
@@ -3936,7 +3949,7 @@ const counters = { messagesIn: 0, presenceIn: 0, patchesIn: 0, presenceMessagesO
 const loopDelay = monitorEventLoopDelay({ resolution: 10 });
 loopDelay.enable();
 
-function serverStats() {
+async function serverStats() {
     const mem = process.memoryUsage();
     let joined = 0;
     let editors = 0;
@@ -3952,26 +3965,43 @@ function serverStats() {
     const ms = (ns) => Math.round(ns / 1e4) / 100;
     const eventLoop = { p50: ms(loopDelay.percentile(50)), p99: ms(loopDelay.percentile(99)), max: ms(loopDelay.max) };
     loopDelay.reset();
-    return { pid: process.pid, uptime: Math.round(process.uptime()), cpu: process.cpuUsage(), rss: mem.rss, heapUsed: mem.heapUsed, connections: wss.clients.size, rooms: rooms.size, joined, editors, busiestRoom: busiest, eventLoop, counters: { ...counters }, limits: SYNC };
+    const own = { pid: process.pid, uptime: Math.round(process.uptime()), cpu: process.cpuUsage(), rss: mem.rss, heapUsed: mem.heapUsed, connections: wss ? wss.clients.size : 0, rooms: rooms.size, joined, editors, busiestRoom: busiest, eventLoop, counters: { ...counters }, limits: SYNC };
+    if (!roomWorkers) return own;
+    // With room workers: CPU, memory and counters added up over every process, the event loop's
+    // worst; each process on its own under `processes`.
+    const list = await roomWorkers.stats();
+    const all = { ...own, workers: WORKERS, cpu: { ...own.cpu }, counters: { ...counters }, eventLoop: { ...eventLoop } };
+    const processes = [{ role: "main", pid: own.pid, cpu: own.cpu, rss: own.rss, eventLoop }];
+    for (const w of list) {
+        if (w.down) {
+            processes.push({ role: "worker", index: w.index, down: true });
+            continue;
+        }
+        all.cpu.user += w.cpu.user;
+        all.cpu.system += w.cpu.system;
+        all.rss += w.rss;
+        all.heapUsed += w.heapUsed;
+        all.connections += w.connections;
+        for (const [k, v] of Object.entries(w.counters)) all.counters[k] = (all.counters[k] ?? 0) + v;
+        for (const k of ["p50", "p99", "max"]) all.eventLoop[k] = Math.max(all.eventLoop[k], w.eventLoop[k]);
+        processes.push({ role: "worker", index: w.index, pid: w.pid, cpu: w.cpu, rss: w.rss, connections: w.connections, rooms: w.rooms, eventLoop: w.eventLoop });
+    }
+    all.processes = processes;
+    return all;
 }
 
 // Open sockets per account that got into a file (NAGMA_WS_PER_ACCOUNT).
 const accountSockets = new Map();
 
-const wss = new WebSocketServer({
-    server: http,
-    maxPayload: MAX_MESSAGE,
-    // Big messages (snapshots, large patches) are compressed, small ones (cursors, and presence,
-    // sent uncompressed) aren't. Fast compression with a small window and no context kept between
-    // messages, so thousands of sockets don't each hold a large compressor (about 25 KB each instead
-    // of 200+ KB).
-    perMessageDeflate: { threshold: 1024, serverMaxWindowBits: 11, zlibDeflateOptions: { level: 1, memLevel: 5 }, serverNoContextTakeover: true, clientNoContextTakeover: true, concurrencyLimit: 10 },
-});
+// One process: the sockets are here (compression and size limits: socketOptions in sync-scale.mjs).
+// With room workers, each upgrade is handed to its file's worker instead.
+const wss = roomWorkers ? null : new WebSocketServer({ server: http, ...socketOptions });
+if (roomWorkers) http.on("upgrade", roomWorkers.upgrade);
 
 // A socket that stops answering pings (a closed laptop, a lost network) is closed within a minute,
-// so it doesn't keep a seat in a room or count against its account.
+// so it doesn't keep a seat in a room or count against its account. (Room workers do the same.)
 setInterval(() => {
-    for (const ws of wss.clients) {
+    for (const ws of wss?.clients ?? []) {
         if (ws.isAlive === false) {
             ws.terminate();
             continue;
@@ -3993,11 +4023,11 @@ const sendPresenceText = (ws, text) => {
     ws.send(text, { compress: false });
     counters.presenceMessagesOut++;
 };
-const presenceOptions = { busyRoom: SYNC.busyRoom, send: sendPresenceText };
+const presenceOptions = { busyRoom: SYNC.busyRoom, hz: SYNC.presenceHz, send: sendPresenceText };
 
 // The busy-room presence rate, when a join or a leave crossed the line.
 function presenceRateChanged(room) {
-    updatePresenceRate(room, { busyRoom: SYNC.busyRoom, sendAll: (m) => broadcast(room, m) });
+    updatePresenceRate(room, { busyRoom: SYNC.busyRoom, hz: SYNC.presenceHz, sendAll: (m) => broadcast(room, m) });
 }
 
 // People leaving at the same moment (a network blip, a server restart elsewhere) are announced in
@@ -4014,23 +4044,37 @@ function queueLeave(room, userId) {
     });
 }
 
-const num = (v) => (Number.isFinite(v) ? v : 0);
+const newClient = () => ({ presence: { userId: randomUUID(), name: "Guest", color: "#7C5CFF", cursor: null, selection: [], pageId: null } });
 
-wss.on("connection", (ws, req) => {
-    // A bad frame (text that isn't UTF-8, a frame over the size limit) closes this socket; without a
-    // listener the error event would throw and take the whole server down.
-    ws.on("error", (error) => console.warn(`socket error: ${error?.code ?? error?.message ?? error}`));
-    ws.isAlive = true;
-    ws.on("pong", () => (ws.isAlive = true));
-    const match = /^\/files\/([^/?]+)/.exec(req.url ?? "");
-    const id = match?.[1];
-    if (!validId(id)) {
-        ws.close(4000, "Unknown file");
-        return;
-    }
-    const client = { presence: { userId: randomUUID(), name: "Guest", color: "#7C5CFF", cursor: null, selection: [], pageId: null } };
-    // The listeners go on now, before the file is read: clients say hello as soon as the socket opens,
-    // and a message that arrived while the room was loading used to be dropped (the client then waited
+if (wss)
+    wss.on("connection", (ws, req) => {
+        // A bad frame (text that isn't UTF-8, a frame over the size limit) closes this socket; without a
+        // listener the error event would throw and take the whole server down.
+        ws.on("error", (error) => console.warn(`socket error: ${error?.code ?? error?.message ?? error}`));
+        ws.isAlive = true;
+        ws.on("pong", () => (ws.isAlive = true));
+        const match = /^\/files\/([^/?]+)/.exec(req.url ?? "");
+        const id = match?.[1];
+        if (!validId(id)) {
+            ws.close(4000, "Unknown file");
+            return;
+        }
+        const client = newClient();
+        const conn = openConnection(ws, id, client);
+        // Parsed and limited here (NAGMA_WS_PER_SECOND, presence aside: sync-scale.mjs), then handled
+        // in order once the room is loaded.
+        const reader = readMessages(ws, client, { perSecond: SYNC.wsPerSecond, counters, send, onPresence: conn.run, onMessage: conn.run });
+        ws.on("close", () => {
+            reader.stop();
+            void conn.closed();
+        });
+    });
+
+// The room side of one connection: what its messages do to the file. `ws` is the socket (one
+// process) or a room worker's stand-in for it (send, close, readyState; ws.remote).
+function openConnection(ws, id, client) {
+    // The room is loaded as soon as the socket is in: clients say hello as soon as it opens, and a
+    // message that arrived while the room was loading used to be dropped (the client then waited
     // for a snapshot that never came). Messages wait for the room, in the order they came.
     let room = null;
     const ready = loadRoom(id).then((r) => {
@@ -4045,52 +4089,6 @@ wss.on("connection", (ws, req) => {
         ready
             .then(() => handleMessage(message))
             .catch((error) => console.warn(`socket message (${String(message.type).slice(0, 40)}) failed: ${error?.stack ?? error}`));
-
-    // NAGMA_WS_PER_SECOND messages a second (presence aside). Beyond that, messages wait in line and
-    // are handled in order as the allowance comes back, with a "rate-limited" (429) message so the
-    // client knows; more than five seconds' worth waiting closes the connection (4013), and the
-    // client reconnects and sends again what the server never confirmed.
-    const waiting = [];
-    let drainTimer = null;
-    let toldLimitedAt = 0;
-    const drain = () => {
-        drainTimer = null;
-        while (waiting.length && takeToken(client, SYNC.wsPerSecond)) run(waiting.shift());
-        if (waiting.length) drainTimer = setTimeout(drain, msUntilToken(client, SYNC.wsPerSecond));
-    };
-
-    ws.on("message", (raw) => {
-        let message;
-        try {
-            message = JSON.parse(String(raw));
-        } catch {
-            return;
-        }
-        // Anything but an object ("null", "42") is ignored.
-        if (!plainObject(message)) return;
-        counters.messagesIn++;
-        if (message.type === "presence") {
-            counters.presenceIn++;
-            if (presenceAllowed(client)) run(message);
-            return;
-        }
-        if (!waiting.length && takeToken(client, SYNC.wsPerSecond)) return void run(message);
-        if (waiting.length >= SYNC.wsPerSecond * 5) {
-            counters.flooded++;
-            waiting.length = 0;
-            clearTimeout(drainTimer);
-            send(ws, { type: "rate-limited", code: 429, limit: SYNC.wsPerSecond, text: "Too many changes at once: reconnecting to send the rest." });
-            ws.close(4013, "Too many messages");
-            return;
-        }
-        waiting.push(message);
-        drainTimer ??= setTimeout(drain, msUntilToken(client, SYNC.wsPerSecond));
-        if (Date.now() - toldLimitedAt > 5000) {
-            toldLimitedAt = Date.now();
-            counters.rateLimited++;
-            send(ws, { type: "rate-limited", code: 429, limit: SYNC.wsPerSecond, retryAfterMs: msUntilToken(client, SYNC.wsPerSecond), text: `Sending changes more slowly: the server takes ${SYNC.wsPerSecond} a second from each connection. Nothing is lost.` });
-        }
-    });
 
     async function handleMessage(message) {
         switch (message.type) {
@@ -4169,10 +4167,10 @@ wss.on("connection", (ws, req) => {
                 const missed = Number.isInteger(message.since) ? opsSince(room, message.since) : null;
                 if (missed) counters.resumed++;
                 else counters.fullSnapshots++;
-                send(ws, {
+                const snapshot = {
                     type: "snapshot",
                     ...(missed ? { resume: true, ops: missed } : { doc: room.file.doc }),
-                    presenceHz: presenceHz(room, SYNC.busyRoom),
+                    presenceHz: ws.remote ? undefined : presenceHz(room, SYNC.busyRoom, SYNC.presenceHz),
                     capped: client.capped || undefined,
                     cappedText: client.capped ? cappedText() : undefined,
                     comments: room.file.comments ?? [],
@@ -4180,17 +4178,23 @@ wss.on("connection", (ws, req) => {
                     viewers: Object.values(room.file.viewers ?? {}).sort((a, b) => b.at - a.at).slice(0, 50),
                     uid: client.uid,
                     version: room.version,
-                    peers: peers(room, ws),
+                    // People already in the file, and the presence rate: where presence is (a room
+                    // worker adds both itself).
+                    peers: ws.remote ? undefined : peers(room, ws),
                     you: client.presence.userId,
                     role: client.role,
                     // Only editors can hand out links.
                     keys: client.role === "edit" ? room.file.keys : undefined,
                     access: { link: accessOf(room.file).link, owner: room.file.owner ?? null, project: room.file.project ?? null, viewersCanExport: room.file.viewersCanExport !== false },
                     branch: room.file.branchOf ? { of: room.file.branchOf, name: room.file.branchName ?? "Branch" } : null,
-                });
+                };
+                if (ws.remote) roomWorkers.join(ws, snapshot, client);
+                else send(ws, snapshot);
                 client.joined = true;
-                queuePresence(room, ws, client, presenceOptions);
-                presenceRateChanged(room);
+                if (!ws.remote) {
+                    queuePresence(room, ws, client, presenceOptions);
+                    presenceRateChanged(room);
+                }
                 // A timed voting session that ran out with nobody in the file shows its results now;
                 // an open one tells this person their own ballot and the turnout.
                 revealBallots(room);
@@ -4239,34 +4243,8 @@ wss.on("connection", (ws, req) => {
                 // Only from someone in the file (a socket that hasn't said hello, or was turned away, can't
                 // show a cursor to the people in it).
                 if (!room.file || !client.role) return;
-                const name = typeof message.name === "string" ? message.name.slice(0, 60) : client.presence.name;
-                const color = typeof message.color === "string" && /^#[0-9a-fA-F]{6}$/.test(message.color) ? message.color : client.presence.color;
-                const camera = message.camera && typeof message.camera === "object" ? { x: num(message.camera.x), y: num(message.camera.y), zoom: num(message.camera.zoom) || 1, w: num(message.camera.w), h: num(message.camera.h) } : null;
-                client.presence = {
-                    ...client.presence,
-                    name,
-                    color,
-                    // A point on the canvas, and the ids of selected layers: nothing else is passed on.
-                    cursor: plainObject(message.cursor) ? { x: num(message.cursor.x), y: num(message.cursor.y) } : null,
-                    selection: Array.isArray(message.selection) ? message.selection.slice(0, 200).filter((s) => typeof s === "string").map((s) => s.slice(0, 64)) : [],
-                    pageId: typeof message.pageId === "string" ? message.pageId.slice(0, 64) : null,
-                    // Follow and spotlight need where each person is looking; cursor chat is a short message.
-                    camera,
-                    spotlight: Boolean(message.spotlight),
-                    chat: typeof message.chat === "string" && message.chat ? message.chat.slice(0, 200) : null,
-                    mode: typeof message.mode === "string" ? message.mode.slice(0, 12) : null,
-                    // A board emote burst: an emoji at a point, with an id so each burst plays once.
-                    highFive: Boolean(message.highFive),
-                    // Asking someone to spotlight.
-                    ask: message.ask && typeof message.ask.to === "string" ? { to: message.ask.to.slice(0, 64), id: String(message.ask.id ?? "").slice(0, 24) } : null,
-                    // In the audio call (muted or not), and their live caption.
-                    audio: Boolean(message.audio),
-                    muted: Boolean(message.muted),
-                    caption: typeof message.caption === "string" && message.caption ? message.caption.slice(0, 300) : null,
-                    // The screen they're on in a prototype, so spotlight and follow work while presenting.
-                    prototype: message.prototype && typeof message.prototype === "object" && typeof message.prototype.screen === "string" ? { screen: message.prototype.screen.slice(0, 64) } : null,
-                    emote: message.emote && typeof message.emote === "object" && typeof message.emote.glyph === "string" ? { id: String(message.emote.id).slice(0, 24), glyph: message.emote.glyph.slice(0, 16), x: num(message.emote.x), y: num(message.emote.y) } : null,
-                };
+                // Cleaned (sync-scale.mjs): a point, layer ids, a camera and short texts; nothing else.
+                client.presence = presenceFrom(message, client.presence);
                 // Gathered with everyone else's and sent at the room's presence rate, never back to its sender.
                 if (client.joined) queuePresence(room, ws, client, presenceOptions);
                 break;
@@ -4393,9 +4371,7 @@ wss.on("connection", (ws, req) => {
         }
     }
 
-    ws.on("close", async () => {
-        clearTimeout(drainTimer);
-        waiting.length = 0;
+    async function closed() {
         if (client.counted) {
             const open = accountSockets.get(client.counted);
             open?.delete(ws);
@@ -4403,22 +4379,29 @@ wss.on("connection", (ws, req) => {
         }
         await ready;
         room.clients.delete(ws);
-        room.presenceDirty?.delete(ws);
         room.lastUsed = Date.now();
-        // Only people who were in the file were announced, so only they are said to leave.
-        if (client.joined) queueLeave(room, client.presence.userId);
+        // Only people who were in the file were announced, so only they are said to leave. (A room
+        // worker does this, and the presence rate, for its own sockets.)
+        if (!ws.remote) {
+            room.presenceDirty?.delete(ws);
+            if (client.joined) queueLeave(room, client.presence.userId);
+        }
         // An editor's spot is free: the first person waiting for one gets it.
         if (client.joined && client.role === "edit") promoteWaiting(room);
-        presenceRateChanged(room);
+        if (!ws.remote) presenceRateChanged(room);
         if (room.clients.size === 0 && room.file && room.changedSinceVersion) {
             // Everyone left: keep a checkpoint of where they got to.
             void saveVersion(room, client, null, true);
         }
         // An empty room stays in memory for NAGMA_ROOM_IDLE_MS (evictIdleRooms), so a quick
         // reconnect doesn't reload it from disk.
-    });
-});
+    }
 
+    return { client, run, closed };
+}
+
+// With room workers, connections come once every worker is ready.
+if (roomWorkers) await roomWorkers.ready;
 http.listen(PORT, () => console.log(`Nagma sync server on :${PORT}`));
 
 // Stopping (a deploy, docker stop): files with unsaved changes are written first, and clients are
@@ -4428,8 +4411,11 @@ async function shutdown() {
     if (stopping) return;
     stopping = true;
     setTimeout(() => process.exit(0), 5000);
-    for (const ws of wss.clients) ws.close(1012, "Server restarting");
+    for (const ws of wss?.clients ?? []) ws.close(1012, "Server restarting");
+    // Room workers tell their clients the same and exit; this process waits for them.
+    const workersDone = roomWorkers?.stop();
     await Promise.all([...rooms.values()].map((room) => (room.dirty || room.timer ? saveRoom(room) : room.savePromise)).filter(Boolean)).catch(() => undefined);
+    await workersDone;
     process.exit(0);
 }
 process.on("SIGTERM", () => void shutdown());

@@ -31,6 +31,9 @@ export function syncSettings(env = process.env) {
         saveOps: envNumber(env, "NAGMA_SAVE_OPS", 500, 1),
         // Above this many people, a room's presence slows to 5 updates a second per person.
         busyRoom: envNumber(env, "NAGMA_BUSY_ROOM", 50, 1),
+        // Presence messages a second per person (at most 20): fewer means fewer messages for everyone,
+        // in both directions (clients send at the rate the server gives them).
+        presenceHz: Math.min(PRESENCE_HZ, envNumber(env, "NAGMA_PRESENCE_HZ", PRESENCE_HZ, 1)),
     };
 }
 
@@ -91,25 +94,29 @@ export function alreadyApplied(room, id, uid) {
 const ROOM_FIELDS = ["name", "color", "pageId", "spotlight", "chat", "mode", "highFive", "ask", "audio", "muted", "caption", "prototype", "emote"];
 const roomPart = (p) => JSON.stringify(ROOM_FIELDS.map((k) => p[k] ?? null));
 
-export const presenceHz = (room, busyRoom) => (room.clients.size > busyRoom ? BUSY_PRESENCE_HZ : PRESENCE_HZ);
+export const presenceHz = (room, busyRoom, hz = PRESENCE_HZ) => (room.clients.size > busyRoom ? Math.min(BUSY_PRESENCE_HZ, hz) : hz);
 
 // A person's presence changed: it goes out with the room's next presence message. A room sends one
 // at most every 50 ms (200 ms when busy), right away after a quiet spell, each with at most one
 // update per person: so nobody's presence is relayed more than 20 times a second (5 when busy),
 // however fast they send, and a cursor waits 25 ms on average. (Measured at 3,000 connections, a
 // 25 ms tick halved that wait but cost a fifth more CPU in socket writes.)
-export function queuePresence(room, ws, client, { busyRoom, send, now = Date.now() }) {
+// `run(flush)`, when given, runs the room's flush when its time comes (a room worker spreads them
+// out); otherwise it runs straight from the timer.
+export function queuePresence(room, ws, client, { busyRoom, hz, send, run, now = Date.now() }) {
     const scope = roomPart(client.presence) !== client.relayedRoomPart ? "room" : "page";
     room.presenceDirty ??= new Map();
     if (room.presenceDirty.get(ws) !== "room") room.presenceDirty.set(ws, scope);
-    schedulePresence(room, { busyRoom, send, now });
+    schedulePresence(room, { busyRoom, hz, send, run, now });
 }
 
-function schedulePresence(room, { busyRoom, send, now = Date.now() }) {
+function schedulePresence(room, { busyRoom, hz, send, run, now = Date.now() }) {
     if (room.presenceTimer || !room.presenceDirty?.size) return;
-    const tick = 1000 / presenceHz(room, busyRoom);
+    const tick = 1000 / presenceHz(room, busyRoom, hz);
     const wait = Math.max(0, (room.presenceFlushedAt ?? 0) + tick - now);
-    room.presenceTimer = setTimeout(() => flushPresence(room, { busyRoom, send }), wait);
+    const flush = () => flushPresence(room, { busyRoom, send });
+    // (The timer stays set until the flush has run, so the room isn't scheduled twice meanwhile.)
+    room.presenceTimer = setTimeout(run ? () => run(flush) : flush, wait);
 }
 
 // One message per person with what changed for them: everyone else's latest presence that is
@@ -165,8 +172,8 @@ export function flushPresence(room, { busyRoom = 50, send, now = Date.now() }) {
 }
 
 // The room grew past (or shrank below) the busy size: tell its clients the presence rate to use.
-export function updatePresenceRate(room, { busyRoom, sendAll }) {
-    const hz = presenceHz(room, busyRoom);
+export function updatePresenceRate(room, { busyRoom, hz: base, sendAll }) {
+    const hz = presenceHz(room, busyRoom, base);
     if (room.presenceHz === hz) return;
     const before = room.presenceHz;
     room.presenceHz = hz;
@@ -197,3 +204,104 @@ export function presenceAllowed(client, now = Date.now()) {
     w.n += 1;
     return w.n <= PRESENCE_HZ * 4;
 }
+
+// ---- One connection's messages ----
+
+const num = (v) => (Number.isFinite(v) ? v : 0);
+const plainObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+
+// A presence message, cleaned: only these fields, each of its kind and size, are passed on.
+export function presenceFrom(message, prev) {
+    const name = typeof message.name === "string" ? message.name.slice(0, 60) : prev.name;
+    const color = typeof message.color === "string" && /^#[0-9a-fA-F]{6}$/.test(message.color) ? message.color : prev.color;
+    const camera = message.camera && typeof message.camera === "object" ? { x: num(message.camera.x), y: num(message.camera.y), zoom: num(message.camera.zoom) || 1, w: num(message.camera.w), h: num(message.camera.h) } : null;
+    return {
+        ...prev,
+        name,
+        color,
+        // A point on the canvas, and the ids of selected layers: nothing else is passed on.
+        cursor: plainObject(message.cursor) ? { x: num(message.cursor.x), y: num(message.cursor.y) } : null,
+        selection: Array.isArray(message.selection) ? message.selection.slice(0, 200).filter((s) => typeof s === "string").map((s) => s.slice(0, 64)) : [],
+        pageId: typeof message.pageId === "string" ? message.pageId.slice(0, 64) : null,
+        // Follow and spotlight need where each person is looking; cursor chat is a short message.
+        camera,
+        spotlight: Boolean(message.spotlight),
+        chat: typeof message.chat === "string" && message.chat ? message.chat.slice(0, 200) : null,
+        mode: typeof message.mode === "string" ? message.mode.slice(0, 12) : null,
+        // A board emote burst: an emoji at a point, with an id so each burst plays once.
+        highFive: Boolean(message.highFive),
+        // Asking someone to spotlight.
+        ask: message.ask && typeof message.ask.to === "string" ? { to: message.ask.to.slice(0, 64), id: String(message.ask.id ?? "").slice(0, 24) } : null,
+        // In the audio call (muted or not), and their live caption.
+        audio: Boolean(message.audio),
+        muted: Boolean(message.muted),
+        caption: typeof message.caption === "string" && message.caption ? message.caption.slice(0, 300) : null,
+        // The screen they're on in a prototype, so spotlight and follow work while presenting.
+        prototype: message.prototype && typeof message.prototype === "object" && typeof message.prototype.screen === "string" ? { screen: message.prototype.screen.slice(0, 64) } : null,
+        emote: message.emote && typeof message.emote === "object" && typeof message.emote.glyph === "string" ? { id: String(message.emote.id).slice(0, 24), glyph: message.emote.glyph.slice(0, 16), x: num(message.emote.x), y: num(message.emote.y) } : null,
+    };
+}
+
+// Reads one socket's messages (wherever the socket is: the server, or a room worker): each is
+// parsed and counted; presence goes straight to `onPresence` (beyond its own limit it's dropped);
+// everything else goes to `onMessage` at `perSecond` messages a second. Beyond that, messages wait in
+// line and are handled in order as the allowance comes back, with a "rate-limited" (429) message so
+// the client knows; more than five seconds' worth waiting closes the connection (4013), and the
+// client reconnects and sends again what the server never confirmed. Returns `stop()` for the close.
+export function readMessages(ws, client, { perSecond, counters, onPresence, onMessage, send }) {
+    const waiting = [];
+    let drainTimer = null;
+    let toldLimitedAt = 0;
+    const drain = () => {
+        drainTimer = null;
+        while (waiting.length && takeToken(client, perSecond)) onMessage(waiting.shift());
+        if (waiting.length) drainTimer = setTimeout(drain, msUntilToken(client, perSecond));
+    };
+    ws.on("message", (raw) => {
+        let message;
+        try {
+            message = JSON.parse(String(raw));
+        } catch {
+            return;
+        }
+        // Anything but an object ("null", "42") is ignored.
+        if (!plainObject(message)) return;
+        counters.messagesIn++;
+        if (message.type === "presence") {
+            counters.presenceIn++;
+            if (presenceAllowed(client)) onPresence(message);
+            return;
+        }
+        if (!waiting.length && takeToken(client, perSecond)) return void onMessage(message);
+        if (waiting.length >= perSecond * 5) {
+            counters.flooded++;
+            waiting.length = 0;
+            clearTimeout(drainTimer);
+            send(ws, { type: "rate-limited", code: 429, limit: perSecond, text: "Too many changes at once: reconnecting to send the rest." });
+            ws.close(4013, "Too many messages");
+            return;
+        }
+        waiting.push(message);
+        drainTimer ??= setTimeout(drain, msUntilToken(client, perSecond));
+        if (Date.now() - toldLimitedAt > 5000) {
+            toldLimitedAt = Date.now();
+            counters.rateLimited++;
+            send(ws, { type: "rate-limited", code: 429, limit: perSecond, retryAfterMs: msUntilToken(client, perSecond), text: `Sending changes more slowly: the server takes ${perSecond} a second from each connection. Nothing is lost.` });
+        }
+    });
+    return {
+        stop() {
+            clearTimeout(drainTimer);
+            waiting.length = 0;
+        },
+    };
+}
+
+// The WebSocket server's options, the same wherever sockets are held (the server, room workers).
+// Big messages (snapshots, large patches) are compressed, small ones (cursors, and presence, sent
+// uncompressed) aren't. Fast compression with a small window and no context kept between messages,
+// so thousands of sockets don't each hold a large compressor (about 25 KB each instead of 200+ KB).
+export const socketOptions = {
+    maxPayload: 32 * 1024 * 1024,
+    perMessageDeflate: { threshold: 1024, serverMaxWindowBits: 11, zlibDeflateOptions: { level: 1, memLevel: 5 }, serverNoContextTakeover: true, clientNoContextTakeover: true, concurrencyLimit: 10 },
+};

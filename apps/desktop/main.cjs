@@ -100,9 +100,10 @@ async function startServer() {
     const dataDir = path.join(app.getPath("userData"), "data");
     // Electron runs the server as plain Node (no window), with its own copy of the runtime.
     // NAGMA_LOCAL_DEVICE: this computer's own server keeps an AI key for drafts without an account
-    // (only for this computer's pages) and may reach local model servers.
+    // (only for this computer's pages) and may reach local model servers. One process for live
+    // sessions (NAGMA_WORKERS=1), whatever the environment says: room workers are for big servers.
     server = fork(serverPath, [], {
-        env: { NAGMA_SERVER_NAME: "This computer", ...process.env, ELECTRON_RUN_AS_NODE: "1", PORT: String(port), DATA_DIR: dataDir, STATIC_DIR: web, NAGMA_LOCAL_DEVICE: "1", NAGMA_VERSION: app.getVersion() },
+        env: { NAGMA_SERVER_NAME: "This computer", ...process.env, ELECTRON_RUN_AS_NODE: "1", PORT: String(port), DATA_DIR: dataDir, STATIC_DIR: web, NAGMA_LOCAL_DEVICE: "1", NAGMA_VERSION: app.getVersion(), NAGMA_WORKERS: "1" },
         stdio: ["ignore", "pipe", "pipe", "ipc"],
     });
     server.stdout?.on("data", (d) => process.stdout.write(`[server] ${d}`));
