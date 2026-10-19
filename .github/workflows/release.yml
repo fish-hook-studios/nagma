@@ -219,7 +219,8 @@ jobs:
           link() { src=$(ls $1 2>/dev/null | head -n 1 || true); [ -n "$src" ] && cp "$src" "$2" && echo "$2 <- $src" || echo "no match for $1"; }
           link 'Nagma-*-arm64.dmg'          Nagma-mac-arm64.dmg
           link 'Nagma-*-x64.dmg'            Nagma-mac-x64.dmg
-          link 'Nagma-Setup-*.exe'          Nagma-Setup-x64.exe
+          link 'Nagma-Setup-*-x64.exe'      Nagma-Setup-x64.exe
+          link 'Nagma-Setup-*-arm64.exe'    Nagma-Setup-arm64.exe
           link 'Nagma-*-portable.exe'       Nagma-portable-x64.exe
           link 'Nagma-*-x86_64.AppImage'    Nagma-x86_64.AppImage
           link 'Nagma-*-x64.AppImage'       Nagma-x86_64.AppImage
