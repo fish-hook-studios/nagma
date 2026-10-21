@@ -1,0 +1,534 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nagma reel</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="favicon.svg">
+<style>
+@font-face { font-family: "Coconat"; src: url("fonts/Coconat-Regular.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Absans"; src: url("fonts/Absans-Regular.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+:root {
+  --cream: #F6F1E7; --ink: #141413; --ink-2: #3D3B37; --mute: #6B675F;
+  --orange: #EF7F42; --pink: #FC829A; --bubble: #F7B3C8; --green: #4FAF78; --mint: #BFE6C8; --brown: #5B3A2B; --yellow: #F5C842; --sky: #8FC1F0; --lime: #BFE6C8; --lilac: #C9B8F2; --red: #E4572E;
+  --display: "Coconat", Georgia, serif; --body: "Absans", system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--ink); color: var(--cream); font-family: var(--body); font-synthesis: none; -webkit-font-smoothing: antialiased; }
+body { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px 16px; }
+.top { width: min(96vw, 1280px); display: flex; justify-content: space-between; align-items: center; color: #B9B4A8; font-size: 13px; }
+.top b { font-family: var(--display); font-weight: 400; font-size: 18px; color: var(--cream); }
+.top kbd { font: inherit; padding: 1px 6px; border: 1px solid #4a4741; border-radius: 6px; color: var(--cream); }
+
+/* The stage: 16:9, every size in cqw so it scales with the window. */
+.stage { position: relative; width: min(96vw, 1280px); aspect-ratio: 16 / 9; overflow: hidden; border-radius: 18px; background: var(--cream); container-type: inline-size; cursor: pointer; user-select: none; box-shadow: 0 30px 80px -40px rgba(0,0,0,.8); }
+.scene { position: absolute; inset: 0; opacity: 0; }
+.scene > * { position: absolute; }
+.bg { inset: 0; }
+.h { font-family: var(--display); font-weight: 400; line-height: .92; letter-spacing: -.02em; color: var(--ink); }
+.h .w { display: inline-block; white-space: pre; opacity: 0; }
+.cap { font-size: 2.1cqw; color: var(--ink-2); opacity: 0; }
+.hl { position: relative; display: inline-block; white-space: pre; }
+.hl i { position: absolute; left: -.08em; right: -.08em; top: .08em; bottom: -.02em; background: var(--pink); z-index: -1; transform-origin: left; transform: scaleX(0); border-radius: .12em; }
+.sh { width: 8cqw; height: 8cqw; opacity: 0; }
+.sh svg { width: 100%; height: 100%; fill: currentColor; overflow: visible; }
+.sticker { padding: 1.1cqw 2cqw; border: .22cqw solid var(--ink); border-radius: 999px; background: var(--cream); color: var(--ink); font-family: var(--display); font-size: 2.4cqw; box-shadow: .45cqw .45cqw 0 var(--ink); white-space: nowrap; opacity: 0; }
+.cur { width: 2.2cqw; opacity: 0; z-index: 5; }
+.cur svg { width: 2.2cqw; height: 2.2cqw; fill: var(--c, var(--pink)); stroke: var(--ink); stroke-width: 1.6; stroke-linejoin: round; filter: drop-shadow(.1cqw .2cqw 0 rgba(20,20,19,.25)); }
+.cur span { position: absolute; left: 1.4cqw; top: 1.6cqw; padding: .25cqw .8cqw; border-radius: 999px; background: var(--c, var(--pink)); color: var(--ink); border: .12cqw solid var(--ink); font-size: 1.15cqw; line-height: 1.3; white-space: nowrap; }
+.wipe { inset: 0; background: var(--ink); transform: translateX(100%); z-index: 20; }
+
+/* Product UI mock-ups: one window, in the editor's own grey, drawn in HTML. */
+.win { background: #fff; border: .2cqw solid var(--ink); border-radius: 1.4cqw; box-shadow: .8cqw .8cqw 0 var(--ink); overflow: hidden; opacity: 0; font-size: 1.2cqw; color: #1f1d1a; }
+.win .bar { height: 3.2cqw; display: flex; align-items: center; gap: .6cqw; padding: 0 1.2cqw; border-bottom: 1px solid #e6e2da; background: #faf9f6; }
+.win .bar i { width: .9cqw; height: .9cqw; border-radius: 50%; background: #e2ded5; }
+.win .bar i:nth-child(1) { background: var(--pink); } .win .bar i:nth-child(2) { background: var(--yellow); } .win .bar i:nth-child(3) { background: var(--green); }
+.win .bar b { margin-left: .6cqw; font-weight: 400; font-size: 1.15cqw; color: #6B675F; }
+.win .bar .tab { margin-left: auto; padding: .35cqw 1cqw; border-radius: 999px; background: var(--orange); color: #fff; font-size: 1.05cqw; }
+.body { position: relative; display: flex; }
+.panel { width: 22%; background: #faf9f6; border-right: 1px solid #e6e2da; padding: 1cqw; font-size: 1.05cqw; color: #6B675F; }
+.panel div { padding: .35cqw .5cqw; border-radius: .5cqw; }
+.panel .on { background: #eee9df; color: #1f1d1a; }
+.canvas { position: relative; flex: 1; background: #ecebe7; overflow: hidden; }
+.props { width: 24%; background: #faf9f6; border-left: 1px solid #e6e2da; padding: 1cqw; font-size: 1.05cqw; color: #6B675F; }
+.props .row { display: flex; justify-content: space-between; padding: .4cqw .3cqw; border-bottom: 1px solid #efece5; }
+.props .row b { font-weight: 400; color: #1f1d1a; }
+.frame { position: absolute; background: #fff; border-radius: .6cqw; box-shadow: 0 0 0 1px #d9d5cc; }
+.frame .t { position: absolute; left: 0; top: -1.6cqw; font-size: 1cqw; color: #6B675F; }
+.sel { outline: .18cqw solid #3B82F6; outline-offset: -.09cqw; }
+.btn { position: absolute; height: 3.4cqw; padding: 0 1.6cqw; border-radius: 999px; background: var(--ink); color: #fff; display: flex; align-items: center; font-size: 1.15cqw; }
+.pcard { position: absolute; width: 10cqw; height: 7cqw; border-radius: .8cqw; background: var(--mint); }
+
+/* The player. */
+.player { width: min(96vw, 1280px); display: grid; grid-template-columns: auto auto 1fr auto auto; align-items: center; gap: 14px; padding: 10px 14px; border-radius: 999px; background: #262522; }
+.player button { width: 40px; height: 40px; border-radius: 50%; border: 0; background: var(--cream); color: var(--ink); display: grid; place-items: center; cursor: pointer; }
+.player button:hover { background: var(--orange); }
+.player button svg { width: 18px; height: 18px; fill: currentColor; }
+.time { font-variant-numeric: tabular-nums; font-size: 14px; color: #B9B4A8; min-width: 92px; }
+.scrub { position: relative; height: 40px; display: flex; align-items: center; }
+.scrub input { position: absolute; inset: 0; width: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.track { position: relative; width: 100%; height: 8px; border-radius: 999px; background: #3b3934; overflow: hidden; }
+.track i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--orange); }
+.track em { position: absolute; top: 0; bottom: 0; width: 2px; background: rgba(246,241,231,.25); }
+.chapters { width: min(96vw, 1280px); display: flex; flex-wrap: wrap; gap: 8px; }
+.chapters button { font: inherit; font-size: 12px; padding: 6px 12px; border-radius: 999px; border: 1px solid #4a4741; background: transparent; color: #B9B4A8; cursor: pointer; }
+.chapters button:hover, .chapters button.on { background: var(--cream); color: var(--ink); border-color: var(--cream); }
+.hint { width: min(96vw, 1280px); color: #7d786e; font-size: 12px; }
+.start { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(20,20,19,.35); z-index: 30; }
+.start div { padding: 18px 30px; border-radius: 999px; background: var(--cream); color: var(--ink); font-family: var(--display); font-size: 2.4cqw; border: .22cqw solid var(--ink); box-shadow: .5cqw .5cqw 0 var(--ink); }
+</style>
+</head>
+<body>
+<div class="top"><b>Nagma reel · review cut</b><span><kbd>Space</kbd> play · <kbd>←</kbd> <kbd>→</kbd> 2 s · <kbd>⇧</kbd>+arrows 10 s · <kbd>M</kbd> mute · <kbd>Home</kbd> / <kbd>End</kbd></span></div>
+
+<div class="stage" id="stage">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="sh-flower" viewBox="0 0 100 100"><path d="M50 4c9 0 15 7 16 14 7-3 16-1 20 6s2 16-4 21c6 5 8 14 4 21s-13 9-20 6c-1 7-7 14-16 14s-15-7-16-14c-7 3-16 1-20-6s-2-16 4-21c-6-5-8-14-4-21s13-9 20-6C35 11 41 4 50 4z"/></symbol>
+    <symbol id="sh-sparkle" viewBox="0 0 100 100"><path d="M50 0c4 28 18 42 50 50-32 8-46 22-50 50-4-28-18-42-50-50 32-8 46-22 50-50z"/></symbol>
+    <symbol id="sh-star" viewBox="0 0 100 100"><path d="M50 2l14 32 35 3-26 23 8 34-31-18-31 18 8-34L1 37l35-3z"/></symbol>
+    <symbol id="sh-squiggle" viewBox="0 0 200 60"><path d="M4 30c20-36 40-36 60 0s40 36 60 0 40-36 60 0" fill="none" stroke="currentColor" stroke-width="12" stroke-linecap="round"/></symbol>
+    <symbol id="sh-ring" viewBox="0 0 100 100"><path d="M50 2a48 48 0 1 0 0 96 48 48 0 0 0 0-96zm0 26a22 22 0 1 1 0 44 22 22 0 0 1 0-44z"/></symbol>
+    <symbol id="sh-bolt" viewBox="0 0 100 100"><path d="M58 0L14 58h26L36 100l50-62H58z"/></symbol>
+    <symbol id="sh-asterisk" viewBox="0 0 100 100"><path d="M43 0h14v34l30-17 7 12-30 17 30 17-7 12-30-17v34H43V66L13 83l-7-12 30-17L6 37l7-12 30 17z"/></symbol>
+    <symbol id="sh-arch" viewBox="0 0 100 100"><path d="M5 100V50a45 45 0 0 1 90 0v50H70V50a20 20 0 0 0-40 0v50z"/></symbol>
+    <symbol id="sh-halfmoon" viewBox="0 0 100 100"><path d="M50 0a50 50 0 0 1 0 100z"/></symbol>
+    <symbol id="cursor" viewBox="0 0 24 24"><path d="M4 3l16 7.5-7.2 1.8L10 20z"/></symbol>
+  </svg>
+  <div class="start" id="start"><div>Play the reel</div></div>
+</div>
+
+<div class="player">
+  <button id="play" aria-label="Play"><svg viewBox="0 0 24 24"><path d="M7 4l14 8-14 8z"/></svg></button>
+  <span class="time" id="time">0:00 / 0:00</span>
+  <div class="scrub"><div class="track"><i id="fill"></i></div><input id="range" type="range" min="0" max="100" step="0.01" value="0" aria-label="Scrub"></div>
+  <button id="mute" aria-label="Mute"><svg viewBox="0 0 24 24"><path id="spk" d="M3 9v6h4l5 4V5L7 9zM16 8a4.5 4.5 0 0 1 0 8v-2a2.5 2.5 0 0 0 0-4zM16 4a8 8 0 0 1 0 16v-2a6 6 0 0 0 0-12z"/></svg></button>
+  <button id="restart" aria-label="Restart"><svg viewBox="0 0 24 24"><path d="M12 5a7 7 0 1 1-6.3 4H3.5A9 9 0 1 0 12 3V0L7 4l5 4z"/></svg></button>
+</div>
+<div class="chapters" id="chapters"></div>
+<div class="hint">Everything on the stage is HTML. The music and sound effects are synthesised in the page, so there is nothing to license. Scrub anywhere; every frame is reproducible.</div>
+
+<script>
+// ---- The clock, and every animation on it ----
+const stage = document.getElementById("stage");
+const ANIMS = [];
+const EASE = "cubic-bezier(.2,.8,.2,1)", POP = "cubic-bezier(.34,1.56,.64,1)", OUT = "cubic-bezier(.4,0,1,1)";
+// An animation parked on the master clock: `at` seconds in, `dur` long. Enter animations fill both
+// ways (hidden before they start); exits fill forwards only.
+function anim(el, frames, { at, dur, ease = EASE, fill = "both" }) {
+  const a = el.animate(frames, { delay: at * 1000, duration: Math.max(1, dur * 1000), easing: ease, fill });
+  a.pause();
+  ANIMS.push(a);
+  return a;
+}
+const el = (tag, cls, html = "", style = "") => { const e = document.createElement(tag); if (cls) e.className = cls; e.innerHTML = html; if (style) e.style.cssText = style; return e; };
+const shape = (id, cls = "", style = "") => { const d = el("div", "sh " + cls, "<svg><use/></svg>", style); d.querySelector("use").setAttribute("href", "#" + id); return d; };
+const cursorEl = (name, color, style) => el("div", "cur", `<svg><use href="#cursor"/></svg><span>${name}</span>`, `--c:${color};${style}`);
+const SCENES = [];
+function scene(name, at, end, bg, build) {
+  const s = el("div", "scene", "", `background:${bg}`);
+  stage.appendChild(s);
+  // In with a wipe from the right; the previous scene fades under it.
+  anim(s, [{ opacity: 0 }, { opacity: 1 }], { at: at - 0.05, dur: 0.1, ease: "linear" });
+  anim(s, [{ opacity: 1 }, { opacity: 0 }], { at: end, dur: 0.1, ease: "linear", fill: "forwards" });
+  SCENES.push({ name, at, end, node: s });
+  build(s, at, end);
+  return s;
+}
+// A line of display type: words pop in one after another.
+function headline(s, text, { at, size = 9, x = 6, y = 10, color = "var(--ink)", stagger = 0.08, hl = null, width = "" }) {
+  const h = el("div", "h", "", `left:${x}cqw;top:${y}cqw;font-size:${size}cqw;color:${color};${width ? "width:" + width : ""}`);
+  text.split(" ").forEach((word, i) => {
+    let w;
+    if (hl && word.replace(/[.,!]/g, "") === hl) { w = el("span", "w hl", `<i></i>${word} `); anim(w.querySelector("i"), [{ transform: "scaleX(0)" }, { transform: "scaleX(1)" }], { at: at + i * stagger + 0.35, dur: 0.45, ease: EASE }); }
+    else w = el("span", "w", word + " ");
+    h.appendChild(w);
+    anim(w, [{ opacity: 0, transform: "translateY(.6em) rotate(4deg) scale(.8)" }, { opacity: 1, transform: "none" }], { at: at + i * stagger, dur: 0.55, ease: POP });
+  });
+  s.appendChild(h);
+  return h;
+}
+function caption(s, text, { at, x = 6, y = 40, color = "var(--ink-2)", size = 2.1, w = 0 }) {
+  const c = el("div", "cap", text, `left:${x}cqw;top:${y}cqw;color:${color};font-size:${size}cqw;${w ? "width:" + w + "cqw" : ""}`);
+  s.appendChild(c);
+  anim(c, [{ opacity: 0, transform: "translateY(1cqw)" }, { opacity: 1, transform: "none" }], { at, dur: 0.5 });
+  return c;
+}
+function sticker(s, text, { at, x, y, r = -6, bg = "var(--cream)", color = "var(--ink)" }) {
+  const k = el("div", "sticker", text, `left:${x}cqw;top:${y}cqw;background:${bg};color:${color};transform:rotate(${r}deg)`);
+  s.appendChild(k);
+  anim(k, [{ opacity: 0, transform: `rotate(${r - 20}deg) scale(.4)` }, { opacity: 1, transform: `rotate(${r}deg) scale(1)` }], { at, dur: 0.55, ease: POP });
+  return k;
+}
+function popShape(s, id, { at, x, y, size = 8, color = "var(--ink)", spin = 0 }) {
+  const d = shape(id, "", `left:${x}cqw;top:${y}cqw;width:${size}cqw;height:${size}cqw;color:${color}`);
+  s.appendChild(d);
+  anim(d, [{ opacity: 0, transform: "scale(0) rotate(-40deg)" }, { opacity: 1, transform: `scale(1) rotate(${spin}deg)` }], { at, dur: 0.6, ease: POP });
+  return d;
+}
+function wipe(at, color = "var(--ink)") {
+  const w = el("div", "wipe", "", `background:${color}`);
+  stage.appendChild(w);
+  anim(w, [{ transform: "translateX(100%)" }, { transform: "translateX(0)" }, { transform: "translateX(-100%)" }], { at: at - 0.25, dur: 0.5, ease: "cubic-bezier(.7,0,.3,1)", fill: "none" });
+}
+function window_(s, { at, x, y, w, h, title, tab = "", body = "" }) {
+  const win = el("div", "win", `<div class="bar"><i></i><i></i><i></i><b>${title}</b>${tab ? `<span class="tab">${tab}</span>` : ""}</div><div class="body" style="height:calc(100% - 3.2cqw)">${body}</div>`, `left:${x}cqw;top:${y}cqw;width:${w}cqw;height:${h}cqw`);
+  s.appendChild(win);
+  anim(win, [{ opacity: 0, transform: "translateY(4cqw) rotate(2deg)" }, { opacity: 1, transform: "none" }], { at, dur: 0.6, ease: POP });
+  return win;
+}
+const move = (c, path, at, step) => { path.forEach(([x, y], i) => { if (i) anim(c, [{ left: path[i - 1][0] + "cqw", top: path[i - 1][1] + "cqw" }, { left: x + "cqw", top: y + "cqw" }], { at: at + (i - 1) * step, dur: step, ease: "cubic-bezier(.4,0,.2,1)" }); }); };
+const SFX = []; // [time, kind]
+const sfx = (t, kind) => SFX.push([t, kind]);
+// Typed text: one character per step, with a tick each.
+function typed(node, text, at, perChar = 0.05) {
+  node.textContent = "";
+  for (let i = 1; i <= text.length; i++) { const sp = el("span", "", text[i - 1]); sp.style.opacity = 0; node.appendChild(sp); anim(sp, [{ opacity: 0 }, { opacity: 1 }], { at: at + (i - 1) * perChar, dur: 0.01, ease: "steps(1)" }); if (i % 2) sfx(at + (i - 1) * perChar, "tick"); }
+}
+
+// ---- Scene 0: hello ----
+scene("Hello", 0, 5.6, "var(--cream)", (s, at) => {
+  const tile = el("img", "", "", "left:44cqw;top:6cqw;width:12cqw;height:12cqw;opacity:0"); tile.src = "insignia.svg"; s.appendChild(tile);
+  anim(tile, [{ opacity: 0, transform: "translateY(-30cqw) rotate(-30deg)" }, { opacity: 1, transform: "none" }], { at: 0.1, dur: 0.8, ease: POP }); sfx(0.55, "thud");
+  const wm = el("img", "", "", "left:40cqw;top:19.5cqw;width:20cqw;opacity:0"); wm.src = "wordmark.svg"; s.appendChild(wm);
+  anim(wm, [{ opacity: 0, transform: "scale(.6)" }, { opacity: 1, transform: "none" }], { at: 0.7, dur: 0.5, ease: POP }); sfx(0.75, "pop");
+  anim(tile, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(-6cqw) scale(.7)" }], { at: 1.35, dur: 0.35, fill: "forwards" });
+  anim(wm, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(-4cqw) scale(.7)" }], { at: 1.35, dur: 0.35, fill: "forwards" });
+  headline(s, "MAKE", { at: 1.6, size: 15, x: 8, y: 7 }); sfx(1.6, "slam");
+  headline(s, "ANYTHING.", { at: 2.1, size: 15, x: 8, y: 21 }); sfx(2.1, "slam");
+  headline(s, "for free.", { at: 2.9, size: 11, x: 8, y: 35.5, hl: "free", color: "var(--ink)" }); sfx(3.25, "swish");
+  popShape(s, "sh-flower", { at: 3.3, x: 78, y: 6, size: 14, color: "var(--yellow)" }); sfx(3.3, "pop");
+  popShape(s, "sh-asterisk", { at: 3.45, x: 64, y: 14, size: 9, color: "var(--sky)", spin: 15 }); sfx(3.45, "pop");
+  popShape(s, "sh-star", { at: 3.6, x: 88, y: 28, size: 8, color: "var(--pink)", spin: -10 }); sfx(3.6, "pop");
+  popShape(s, "sh-squiggle", { at: 3.75, x: 56, y: 24, size: 14, color: "var(--green)", spin: -8 }); sfx(3.75, "pop");
+  popShape(s, "sh-bolt", { at: 3.9, x: 2, y: 2, size: 9, color: "var(--orange)", spin: 10 }); sfx(3.9, "pop");
+  caption(s, "One app. Eight products. Runs on your computer. Never sends a bill.", { at: 4.3, x: 8, y: 48.5, size: 2.4 });
+  sticker(s, "No account to start", { at: 4.6, x: 62, y: 36, r: 6, bg: "var(--mint)" }); sfx(4.6, "pop");
+});
+wipe(5.6);
+
+// ---- Scene 1: Design ----
+scene("Design", 5.6, 12.4, "var(--sky)", (s, at) => {
+  headline(s, "Design", { at: at + 0.1, size: 11, x: 6, y: 5 }); sfx(at + 0.1, "slam");
+  caption(s, "Screens, auto layout, components, prototypes.", { at: at + 0.6, x: 6, y: 16.5, size: 2.2 });
+  const body = `<div class="panel"><div>Pages</div><div class="on">Home</div><div>Checkout</div><div>Components</div></div><div class="canvas" id="d-canvas"></div><div class="props"><div class="row"><span>W</span><b id="d-w">280</b></div><div class="row"><span>H</span><b id="d-h">120</b></div><div class="row"><span>Gap</span><b id="d-gap">0</b></div><div class="row"><span>Fill</span><b>FC829A</b></div><div class="row"><span>Radius</span><b>999</b></div></div>`;
+  const win = window_(s, { at: at + 0.4, x: 6, y: 21, w: 88, h: 32, title: "Premalu 2 · Design", tab: "Share", body });
+  sfx(at + 0.5, "whoosh");
+  const cv = win.querySelector("#d-canvas");
+  const frame = el("div", "frame", `<span class="t">Home</span>`, "left:4cqw;top:3.6cqw;width:28cqw;height:20cqw"); cv.appendChild(frame);
+  // A rectangle drawn out, then three buttons snapping into auto layout.
+  const rect = el("div", "", "", "position:absolute;left:3cqw;top:2.5cqw;width:0;height:0;background:var(--pink);border-radius:.6cqw;outline:.15cqw solid #3B82F6");
+  frame.appendChild(rect);
+  anim(rect, [{ width: "0cqw", height: "0cqw" }, { width: "22cqw", height: "6cqw" }], { at: at + 1.2, dur: 0.7, ease: EASE }); sfx(at + 1.2, "draw");
+  const c1 = cursorEl("you", "var(--pink)", "left:38cqw;top:40cqw"); s.appendChild(c1);
+  anim(c1, [{ opacity: 0 }, { opacity: 1 }], { at: at + 0.9, dur: 0.2 });
+  move(c1, [[20, 30], [34, 34.5], [34, 34.5], [52, 44], [66, 30]], at + 1.0, 0.7);
+  const names = ["Book", "Trailer", "Cast"];
+  names.forEach((n, i) => {
+    const b = el("div", "btn", n, `left:${3 + i * 8}cqw;top:${10 + (i % 2) * 2.5}cqw;opacity:0;transform:rotate(${i * 9 - 9}deg)`);
+    frame.appendChild(b);
+    anim(b, [{ opacity: 0, transform: `scale(.3) rotate(${i * 9 - 9}deg)` }, { opacity: 1, transform: `scale(1) rotate(${i * 9 - 9}deg)` }], { at: at + 2.2 + i * 0.15, dur: 0.4, ease: POP }); sfx(at + 2.2 + i * 0.15, "pop");
+    anim(b, [{ left: `${3 + i * 8}cqw`, top: `${10 + (i % 2) * 2.5}cqw`, transform: `rotate(${i * 9 - 9}deg)` }, { left: `${3 + i * 7.6}cqw`, top: "11cqw", transform: "rotate(0)" }], { at: at + 3.4, dur: 0.55, ease: POP });
+  });
+  sfx(at + 3.4, "snap");
+  const chip = sticker(s, "Auto layout", { at: at + 3.5, x: 40, y: 27, r: -5, bg: "var(--yellow)" });
+  const gap = win.querySelector("#d-gap"); anim(gap, [{ opacity: 1 }], { at: 0, dur: 0.01 });
+  [["0", 0], ["8", 3.45], ["12", 3.55], ["16", 3.65]].forEach(([v, t]) => { const sp = el("span", "", v); sp.style.position = "absolute"; sp.style.right = 0; sp.style.opacity = 0; gap.style.position = "relative"; gap.appendChild(sp); anim(sp, [{ opacity: 0 }, { opacity: 1 }], { at: at + t, dur: 0.01, ease: "steps(1)" }); });
+  gap.firstChild.textContent = "";
+  // Components: an instance drops in, the main changes colour and the instance follows.
+  const comp = el("div", "pcard", "<div style='position:absolute;left:.8cqw;top:.8cqw;font-size:1cqw;color:#6B675F'>◆ Card</div>", "left:40cqw;top:4cqw;background:var(--mint)"); cv.appendChild(comp);
+  const inst = el("div", "pcard", "", "left:52cqw;top:4cqw;background:var(--mint)"); cv.appendChild(inst);
+  anim(comp, [{ opacity: 0, transform: "scale(.6)" }, { opacity: 1, transform: "none" }], { at: at + 4.3, dur: 0.4, ease: POP }); sfx(at + 4.3, "pop");
+  anim(inst, [{ opacity: 0, transform: "translateX(-8cqw)" }, { opacity: 1, transform: "none" }], { at: at + 4.6, dur: 0.45, ease: POP }); sfx(at + 4.6, "pop");
+  anim(comp, [{ background: "#BFE6C8" }, { background: "#F5C842" }], { at: at + 5.3, dur: 0.3 });
+  anim(inst, [{ background: "#BFE6C8" }, { background: "#F5C842" }], { at: at + 5.45, dur: 0.3 }); sfx(at + 5.4, "ding");
+  sticker(s, "Components follow", { at: at + 5.6, x: 62, y: 46, r: 4, bg: "var(--bubble)" });
+});
+wipe(12.4);
+
+// ---- Scene 2: Board ----
+scene("Board", 12.4, 18.4, "var(--yellow)", (s, at) => {
+  headline(s, "Board", { at: at + 0.1, size: 11, x: 6, y: 5 }); sfx(at + 0.1, "slam");
+  caption(s, "Workshops and whiteboards, everyone's cursor in the room.", { at: at + 0.6, x: 6, y: 16.5, size: 2.2 });
+  const win = window_(s, { at: at + 0.4, x: 6, y: 21, w: 88, h: 32, title: "Jailer 2 Cameos · Board", tab: "Share", body: `<div class="canvas" id="b-canvas" style="background:#f4f2ee"></div>` });
+  sfx(at + 0.5, "whoosh");
+  const cv = win.querySelector("#b-canvas");
+  const notes = [["Mohanlal", "var(--pink)", 6, 4], ["Shiva Rajkumar", "var(--yellow)", 26, 7], ["Jacky Shroff", "var(--mint)", 48, 3], ["Roshan Bhai", "var(--lilac)", 66, 9], ["Sethu", "var(--sky)", 14, 16]];
+  const target = [[6, 3], [24, 3], [42, 3], [60, 3], [78, 3]];
+  notes.forEach(([n, c, x, y], i) => {
+    const d = el("div", "", n, `position:absolute;left:${x}cqw;top:${y}cqw;width:14cqw;height:9cqw;padding:1cqw;background:${c};border-radius:.4cqw;box-shadow:.3cqw .4cqw 0 rgba(20,20,19,.15);font-size:1.3cqw;transform:rotate(${(i % 3) * 4 - 4}deg);opacity:0`);
+    cv.appendChild(d);
+    anim(d, [{ opacity: 0, transform: `translateY(-6cqw) rotate(${(i % 3) * 4 - 4}deg)` }, { opacity: 1, transform: `rotate(${(i % 3) * 4 - 4}deg)` }], { at: at + 1 + i * 0.12, dur: 0.45, ease: POP }); sfx(at + 1 + i * 0.12, "pop");
+    anim(d, [{ left: `${x}cqw`, top: `${y}cqw`, transform: `rotate(${(i % 3) * 4 - 4}deg)` }, { left: `${target[i][0]}cqw`, top: `${target[i][1] + 14}cqw`, transform: "rotate(0)" }], { at: at + 2.6 + i * 0.1, dur: 0.6, ease: POP });
+  });
+  sfx(at + 2.7, "snap");
+  const who = [["Nelson", "var(--green)", [[70, 50], [30, 30], [12, 38]]], ["Thalaivar", "var(--pink)", [[90, 26], [52, 30], [44, 40]]], ["Maran", "var(--sky)", [[20, 52], [70, 32], [80, 40]]]];
+  who.forEach(([n, c, path], i) => { const cur = cursorEl(n, c, `left:${path[0][0]}cqw;top:${path[0][1]}cqw`); s.appendChild(cur); anim(cur, [{ opacity: 0 }, { opacity: 1 }], { at: at + 1.4 + i * 0.2, dur: 0.2 }); move(cur, path, at + 1.6 + i * 0.2, 0.9); });
+  // A connector draws between two notes.
+  const line = el("svg", "", "", "position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none"); line.innerHTML = `<path d="M 20 24 C 30 10, 40 10, 50 24" fill="none" stroke="#141413" stroke-width=".35" stroke-dasharray="60" stroke-dashoffset="60" vector-effect="non-scaling-stroke"/>`;
+  line.setAttribute("viewBox", "0 0 88 32"); line.setAttribute("preserveAspectRatio", "none"); cv.appendChild(line);
+  anim(line.querySelector("path"), [{ strokeDashoffset: 60 }, { strokeDashoffset: 0 }], { at: at + 3.6, dur: 0.6 }); sfx(at + 3.6, "draw");
+  sticker(s, "3 people here", { at: at + 4.2, x: 62, y: 45, r: 5, bg: "var(--mint)" }); sfx(at + 4.2, "pop");
+  popShape(s, "sh-sparkle", { at: at + 4.6, x: 84, y: 4, size: 9, color: "var(--ink)" });
+});
+wipe(18.4);
+
+// ---- Scene 3: Slides ----
+scene("Slides", 18.4, 24.2, "var(--lilac)", (s, at) => {
+  headline(s, "Slides", { at: at + 0.1, size: 11, x: 6, y: 5 }); sfx(at + 0.1, "slam");
+  caption(s, "Decks with real layers, and a presenter view.", { at: at + 0.6, x: 6, y: 16.5, size: 2.2 });
+  const win = window_(s, { at: at + 0.4, x: 6, y: 21, w: 88, h: 32, title: "Ramayana hype deck · Slides", tab: "Present", body: `<div class="panel" id="s-strip" style="width:18%"></div><div class="canvas" id="s-view" style="background:#e8e2b8"></div>` });
+  sfx(at + 0.5, "whoosh");
+  const strip = win.querySelector("#s-strip"), view = win.querySelector("#s-view");
+  const slides = [["RAMAYANA", "#1F3A8A", "#E8E2B8"], ["WE KNOW THE STORY.", "#C8372D", "#E8E2B8"], ["ONE STORM.", "#E8E2B8", "#1F3A8A"]];
+  slides.forEach(([t, fg, bg], i) => { const th = el("div", i === 0 ? "on" : "", `<div style="height:3.6cqw;border-radius:.3cqw;background:${bg};color:${fg};font-family:var(--display);font-size:.9cqw;padding:.4cqw;overflow:hidden">${t}</div>`); th.style.marginBottom = ".5cqw"; strip.appendChild(th); anim(th, [{ opacity: 0, transform: "translateX(-2cqw)" }, { opacity: 1, transform: "none" }], { at: at + 0.9 + i * 0.15, dur: 0.4 }); });
+  const mk = ([t, fg, bg]) => el("div", "", `<div style="font-family:var(--display);font-size:5cqw;line-height:.95;color:${fg};padding:3cqw">${t}</div><div style="position:absolute;right:3cqw;top:2.4cqw;width:9cqw;height:9cqw;border-radius:50%;background:#C8372D"></div>`, `position:absolute;inset:0;background:${bg}`);
+  const a = mk(slides[0]), b = mk(slides[1]); view.appendChild(a); view.appendChild(b);
+  b.style.transform = "translateX(100%)";
+  anim(a, [{ transform: "none" }, { transform: "translateX(-100%)" }], { at: at + 2.6, dur: 0.6, ease: "cubic-bezier(.7,0,.3,1)" });
+  anim(b, [{ transform: "translateX(100%)" }, { transform: "none" }], { at: at + 2.6, dur: 0.6, ease: "cubic-bezier(.7,0,.3,1)" }); sfx(at + 2.6, "swish");
+  anim(strip.children[0], [{ background: "#eee9df" }, { background: "transparent" }], { at: at + 2.6, dur: 0.2 });
+  anim(strip.children[1], [{ background: "transparent" }, { background: "#eee9df" }], { at: at + 2.6, dur: 0.2 });
+  const c = cursorEl("you", "var(--pink)", "left:70cqw;top:50cqw"); s.appendChild(c); anim(c, [{ opacity: 0 }, { opacity: 1 }], { at: at + 1.2, dur: 0.2 }); move(c, [[70, 50], [14, 32], [14, 32], [88, 22.6]], at + 1.4, 0.9);
+  sfx(at + 4.1, "click");
+  const pres = el("div", "", "RAMAYANA", `position:absolute;inset:0;background:#E8E2B8;color:#1F3A8A;font-family:var(--display);font-size:14cqw;display:grid;place-items:center;opacity:0`); s.appendChild(pres);
+  anim(pres, [{ opacity: 0, transform: "scale(1.1)" }, { opacity: 1, transform: "none" }], { at: at + 4.2, dur: 0.5 }); sfx(at + 4.2, "whoosh");
+  sticker(s, "Presenting", { at: at + 4.5, x: 72, y: 6, r: 6, bg: "var(--pink)" });
+});
+wipe(24.2);
+
+// ---- Scene 4: Campaign ----
+scene("Campaign", 24.2, 30, "var(--orange)", (s, at) => {
+  headline(s, "Campaign", { at: at + 0.1, size: 11, x: 6, y: 5, color: "var(--ink)" }); sfx(at + 0.1, "slam");
+  caption(s, "One post. Every size at once.", { at: at + 0.6, x: 6, y: 16.5, size: 2.2, color: "var(--ink)" });
+  const post = (x, y, w, h, t, delay) => { const p = el("div", "", `<div style="font-family:var(--display);font-size:${Math.min(w, h) * 0.22}cqw;line-height:.95;color:var(--ink);padding:${Math.min(w, h) * .12}cqw">Free.<br>Forever.</div><span style="position:absolute;left:0;top:-1.9cqw;font-size:1.2cqw;color:var(--ink)">${t}</span>`, `position:absolute;left:${x}cqw;top:${y}cqw;width:${w}cqw;height:${h}cqw;background:var(--cream);border:.2cqw solid var(--ink);border-radius:.8cqw;box-shadow:.5cqw .5cqw 0 var(--ink);overflow:visible`); s.appendChild(p); anim(p, [{ opacity: 0, transform: "scale(.5) rotate(-6deg)" }, { opacity: 1, transform: "none" }], { at: at + delay, dur: 0.55, ease: POP }); sfx(at + delay, "pop"); return p; };
+  post(8, 24, 24, 24, "Square post", 1.0);
+  post(37, 24, 14, 25, "Story", 2.0);
+  post(55, 24, 36, 16, "Landscape", 2.6);
+  post(55, 43.5, 20, 8.5, "Banner", 3.2);
+  post(78, 43.5, 13, 8.5, "Feed", 3.5);
+  sticker(s, "Resize to… 5 sizes", { at: at + 4.0, x: 60, y: 6, r: 5, bg: "var(--yellow)" }); sfx(at + 4, "ding");
+  popShape(s, "sh-asterisk", { at: at + 4.4, x: 88, y: 14, size: 8, color: "var(--ink)", spin: 20 });
+});
+wipe(30);
+
+// ---- Scene 5: Sites ----
+scene("Sites", 30, 36, "var(--green)", (s, at) => {
+  headline(s, "Sites", { at: at + 0.1, size: 11, x: 6, y: 5, color: "var(--cream)" }); sfx(at + 0.1, "slam");
+  caption(s, "Sections that reflow at every width. Publish in a click.", { at: at + 0.6, x: 6, y: 16.5, size: 2.2, color: "#E6F5EA" });
+  const page = el("div", "", "", "position:absolute;left:8cqw;top:21cqw;width:60cqw;height:32cqw;background:#fff;border:.2cqw solid var(--ink);border-radius:1cqw;box-shadow:.6cqw .6cqw 0 var(--ink);overflow:hidden;opacity:0"); s.appendChild(page);
+  anim(page, [{ opacity: 0, transform: "translateY(4cqw)" }, { opacity: 1, transform: "none" }], { at: at + 0.4, dur: 0.5, ease: POP }); sfx(at + 0.5, "whoosh");
+  const secs = [["nav", "height:3cqw;background:#082438"], ["hero", "height:11cqw;background:#F6CC36;display:flex;gap:1cqw;padding:1.2cqw"], ["cards", "height:9cqw;background:#F3EBD8;display:flex;gap:1cqw;padding:1.2cqw"], ["foot", "height:9cqw;background:#D92128"]];
+  const inner = {
+    hero: `<div style="flex:1;font-family:var(--display);font-size:3cqw;line-height:.95;color:#082438">LOCAL HERO.<br>HIGH VOLTAGE.</div><div class="col" style="flex:1;background:#082438;border-radius:.5cqw"></div>`,
+    cards: `<div class="col" style="flex:1;background:#fff;border-radius:.5cqw"></div><div class="col" style="flex:1;background:#fff;border-radius:.5cqw"></div><div class="col" style="flex:1;background:#fff;border-radius:.5cqw"></div>`,
+  };
+  secs.forEach(([k, st], i) => { const d = el("div", "sec " + k, inner[k] || "", st + ";opacity:0"); page.appendChild(d); anim(d, [{ opacity: 0, transform: "translateX(-6cqw)" }, { opacity: 1, transform: "none" }], { at: at + 1 + i * 0.25, dur: 0.45, ease: POP }); sfx(at + 1 + i * 0.25, "pop"); });
+  // The width handle drags in: the page narrows and stacks.
+  anim(page, [{ width: "60cqw" }, { width: "24cqw" }], { at: at + 3.2, dur: 1.0, ease: EASE }); sfx(at + 3.2, "draw");
+  page.querySelectorAll(".hero, .cards").forEach((d) => anim(d, [{ flexDirection: "row" }, { flexDirection: "column" }], { at: at + 3.7, dur: 0.01, ease: "steps(1)" }));
+  anim(page.querySelector(".hero"), [{ height: "11cqw" }, { height: "17cqw" }], { at: at + 3.6, dur: 0.6 });
+  anim(page.querySelector(".cards"), [{ height: "9cqw" }, { height: "12cqw" }], { at: at + 3.6, dur: 0.6 });
+  const handle = el("div", "", "", "position:absolute;left:68.6cqw;top:30cqw;width:.9cqw;height:14cqw;border-radius:999px;background:var(--ink);opacity:0"); s.appendChild(handle);
+  anim(handle, [{ opacity: 0 }, { opacity: 1 }], { at: at + 2.8, dur: 0.2 });
+  anim(handle, [{ left: "68.6cqw" }, { left: "32.6cqw" }], { at: at + 3.2, dur: 1.0, ease: EASE });
+  const c = cursorEl("you", "var(--pink)", "left:80cqw;top:48cqw"); s.appendChild(c); anim(c, [{ opacity: 0 }, { opacity: 1 }], { at: at + 2.4, dur: 0.2 }); move(c, [[80, 48], [69, 37], [69, 37], [33, 37]], at + 2.5, 0.5);
+  anim(c, [{ left: "69cqw" }, { left: "33cqw" }], { at: at + 3.2, dur: 1.0, ease: EASE });
+  sticker(s, "Mobile · 375", { at: at + 4.3, x: 40, y: 24, r: 4, bg: "var(--cream)" });
+  sticker(s, "Published ✓", { at: at + 4.9, x: 64, y: 44, r: -5, bg: "var(--yellow)" }); sfx(at + 4.9, "ding");
+});
+wipe(36);
+
+// ---- Scene 6: Make ----
+scene("Make", 36, 42.4, "var(--bubble)", (s, at) => {
+  headline(s, "Make", { at: at + 0.1, size: 11, x: 6, y: 5 }); sfx(at + 0.1, "slam");
+  caption(s, "Describe it. Your own AI key writes it. It runs right here.", { at: at + 0.6, x: 6, y: 16.5, size: 2.2, w: 46 });
+  const box = el("div", "", `<div id="m-prompt" style="font-size:1.6cqw;min-height:5cqw;color:#1f1d1a"></div><div style="position:absolute;right:1cqw;bottom:1cqw;width:3cqw;height:3cqw;border-radius:50%;background:#3B82F6"></div>`, "position:absolute;left:6cqw;top:22cqw;width:38cqw;height:12cqw;background:#fff;border:.2cqw solid var(--ink);border-radius:1.2cqw;padding:1.4cqw;box-shadow:.5cqw .5cqw 0 var(--ink);opacity:0"); s.appendChild(box);
+  anim(box, [{ opacity: 0, transform: "translateY(3cqw)" }, { opacity: 1, transform: "none" }], { at: at + 0.4, dur: 0.5, ease: POP });
+  typed(box.querySelector("#m-prompt"), "An app that helps Balan find his mother", at + 0.9, 0.045);
+  sfx(at + 2.75, "click");
+  const files = ["index.html", "src/App.tsx", "src/styles.css", "src/assets.ts"];
+  const list = el("div", "", "", "position:absolute;left:6cqw;top:36cqw;width:38cqw;font-size:1.5cqw;color:#1f1d1a;font-family:ui-monospace,monospace"); s.appendChild(list);
+  files.forEach((f, i) => { const r = el("div", "", `<span style="display:inline-block;width:1cqw;height:1cqw;border-radius:50%;background:var(--green);margin-right:.8cqw"></span>Writing ${f}`, "opacity:0;padding:.5cqw 0"); list.appendChild(r); anim(r, [{ opacity: 0, transform: "translateX(-1cqw)" }, { opacity: 1, transform: "none" }], { at: at + 3.0 + i * 0.3, dur: 0.3 }); sfx(at + 3.0 + i * 0.3, "tick"); });
+  // The app: a phone.
+  const phone = el("div", "", `<div style="background:#A64E32;padding:1.6cqw 1.4cqw 1.2cqw;color:#F5E7C8"><div style="font-family:var(--display);font-size:2.6cqw">amma.</div><div style="font-size:1cqw;letter-spacing:.1em;text-transform:uppercase;opacity:.85">Balan's search journal</div><div style="font-family:var(--display);font-size:2cqw;line-height:1.05;margin-top:.6cqw">every memory brings me closer.</div></div><div style="height:7cqw;background:#155366"></div><div style="padding:1.2cqw;color:#352924"><div style="font-size:.9cqw;letter-spacing:.1em;text-transform:uppercase;color:#A64E32">Continue the search</div><div style="font-family:var(--display);font-size:1.6cqw;margin:.4cqw 0">The house we stayed in</div><div style="display:flex;gap:.8cqw;margin-top:.8cqw"><div style="flex:1;height:5cqw;border:1px solid #D5C2A3;border-radius:.4cqw;background:#fbf1dc"></div><div style="flex:1;height:5cqw;border:1px solid #D5C2A3;border-radius:.4cqw;background:#fbf1dc"></div></div><div style="margin-top:1cqw;height:3cqw;border-radius:.5cqw;background:#541C18;color:#F5E7C8;display:grid;place-items:center;font-size:1.1cqw">+ Add a memory</div></div>`, "position:absolute;left:58cqw;top:5cqw;width:26cqw;height:48cqw;background:#F5E7C8;border:.25cqw solid var(--ink);border-radius:2.4cqw;overflow:hidden;box-shadow:.7cqw .7cqw 0 var(--ink);opacity:0"); s.appendChild(phone);
+  anim(phone, [{ opacity: 0, transform: "translateY(10cqw) rotate(6deg)" }, { opacity: 1, transform: "none" }], { at: at + 4.4, dur: 0.7, ease: POP }); sfx(at + 4.4, "whoosh"); sfx(at + 4.9, "ding");
+  sticker(s, "Your key, any model", { at: at + 5.3, x: 30, y: 46, r: -4, bg: "var(--yellow)" });
+});
+wipe(42.4);
+
+// ---- Scene 7: Video ----
+scene("Video", 42.4, 48.4, "var(--brown)", (s, at) => {
+  headline(s, "Video", { at: at + 0.1, size: 11, x: 6, y: 5, color: "var(--cream)" }); sfx(at + 0.1, "slam");
+  caption(s, "Clips, titles, keyframes, MP4 out.", { at: at + 0.6, x: 6, y: 16.5, size: 2.2, color: "#E8DCCB" });
+  const mon = el("div", "", `<div id="v-word" style="position:absolute;left:8%;top:34%;font-family:var(--display);font-size:5.4cqw;color:#EEDBB8;opacity:0">YODHA</div><div id="v-hand" style="position:absolute;right:10%;bottom:-6%;width:12cqw;height:18cqw;border-radius:6cqw 6cqw 1cqw 1cqw;background:#2E0A01;transform:translateY(100%)"></div>`, "position:absolute;left:6cqw;top:21cqw;width:40cqw;height:22.5cqw;background:#AA3F25;border:.2cqw solid var(--ink);border-radius:1cqw;overflow:hidden;opacity:0"); s.appendChild(mon);
+  anim(mon, [{ opacity: 0, transform: "scale(.9)" }, { opacity: 1, transform: "none" }], { at: at + 0.4, dur: 0.5, ease: POP }); sfx(at + 0.5, "whoosh");
+  const tl = el("div", "", "", "position:absolute;left:6cqw;top:45cqw;width:88cqw;height:9cqw;background:#2b2520;border-radius:1cqw;overflow:hidden;opacity:0"); s.appendChild(tl);
+  anim(tl, [{ opacity: 0, transform: "translateY(3cqw)" }, { opacity: 1, transform: "none" }], { at: at + 0.7, dur: 0.5, ease: POP });
+  const clips = [["Hand", 2, 84, 1, "#6B4FBB"], ["Ashokan", 14, 40, 3.2, "#8C6AE0"], ["YODHA", 40, 46, 5.4, "#B298F0"]];
+  clips.forEach(([n, x, w, y, c], i) => { const d = el("div", "", n, `position:absolute;left:${x}%;top:${y}cqw;width:${w}%;height:1.9cqw;border-radius:.4cqw;background:${c};color:#fff;font-size:1cqw;padding:.3cqw .6cqw;opacity:0`); tl.appendChild(d); anim(d, [{ opacity: 0, transform: "translateX(-2cqw)" }, { opacity: 1, transform: "none" }], { at: at + 1.1 + i * 0.15, dur: 0.4 }); sfx(at + 1.1 + i * 0.15, "pop"); });
+  [20, 30, 44, 58].forEach((x, i) => { const k = el("div", "", "", `position:absolute;left:${x}%;top:3.5cqw;width:1cqw;height:1cqw;background:#F5C842;transform:rotate(45deg) scale(0)`); tl.appendChild(k); anim(k, [{ transform: "rotate(45deg) scale(0)" }, { transform: "rotate(45deg) scale(1)" }], { at: at + 2.0 + i * 0.12, dur: 0.3, ease: POP }); sfx(at + 2.0 + i * 0.12, "tick"); });
+  const head = el("div", "", "", "position:absolute;left:2%;top:0;width:.2cqw;height:100%;background:#F5C842"); tl.appendChild(head);
+  anim(head, [{ left: "2%" }, { left: "86%" }], { at: at + 2.8, dur: 2.6, ease: "linear" }); sfx(at + 2.8, "click");
+  anim(mon.querySelector("#v-hand"), [{ transform: "translateY(100%)" }, { transform: "none" }], { at: at + 2.9, dur: 0.8, ease: POP });
+  anim(mon.querySelector("#v-word"), [{ opacity: 0, transform: "scale(0)" }, { opacity: 1, transform: "none" }], { at: at + 4.0, dur: 0.5, ease: POP }); sfx(at + 4.0, "pop");
+  sticker(s, "Export MP4", { at: at + 5.0, x: 62, y: 28, r: 5, bg: "var(--yellow)" }); sfx(at + 5, "ding");
+  popShape(s, "sh-ring", { at: at + 1.6, x: 80, y: 4, size: 10, color: "var(--pink)" });
+});
+wipe(48.4);
+
+// ---- Scene 8: Document ----
+scene("Document", 48.4, 53.2, "var(--mint)", (s, at) => {
+  headline(s, "Document", { at: at + 0.1, size: 11, x: 6, y: 5 }); sfx(at + 0.1, "slam");
+  caption(s, "PDFs you can edit, fill and sign.", { at: at + 0.6, x: 6, y: 16.5, size: 2.2, w: 42 });
+  const pg = el("div", "", `<div style="font-family:var(--display);font-size:2.4cqw;color:#1f1d1a">Premalu 2 · Cast agreement</div>${[92, 80, 86, 60, 88, 74].map((w) => `<div style="height:.9cqw;width:${w}%;background:#e4e0d6;border-radius:999px;margin-top:1.1cqw"></div>`).join("")}<div style="margin-top:2.4cqw;font-size:1.2cqw;color:#6B675F">Signed</div><svg id="sig" viewBox="0 0 300 90" style="width:22cqw;height:6.6cqw;overflow:visible"><path d="M8 62c20-40 40-50 48-30s-10 40-4 44 20-30 36-36 10 26 30 10 30-22 44-14-8 30 10 24 26-20 44-20 20 16 40 6 28-14 36-6" fill="none" stroke="#1f1d1a" stroke-width="3" stroke-linecap="round" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/></svg>`, "position:absolute;left:52cqw;top:3cqw;width:42cqw;height:50cqw;background:#fff;border:.2cqw solid var(--ink);border-radius:1cqw;padding:3cqw;box-shadow:.6cqw .6cqw 0 var(--ink);opacity:0"); s.appendChild(pg);
+  anim(pg, [{ opacity: 0, transform: "translateY(4cqw) rotate(-2deg)" }, { opacity: 1, transform: "none" }], { at: at + 0.4, dur: 0.55, ease: POP }); sfx(at + 0.5, "whoosh");
+  anim(pg.querySelector("#sig path"), [{ strokeDashoffset: 1 }, { strokeDashoffset: 0 }], { at: at + 1.6, dur: 1.4, ease: "cubic-bezier(.4,0,.6,1)" }); sfx(at + 1.6, "draw");
+  const c = cursorEl("Sonu", "var(--yellow)", "left:80cqw;top:50cqw"); s.appendChild(c); anim(c, [{ opacity: 0 }, { opacity: 1 }], { at: at + 1.0, dur: 0.2 }); move(c, [[80, 52], [58, 46], [80, 44]], at + 1.2, 1.2);
+  sticker(s, "Signed ✓", { at: at + 3.2, x: 30, y: 36, r: 6, bg: "var(--yellow)" }); sfx(at + 3.2, "ding");
+  popShape(s, "sh-halfmoon", { at: at + 1.2, x: 10, y: 30, size: 12, color: "var(--green)", spin: 0 });
+});
+wipe(53.2);
+
+// ---- Scene 9: Together, anywhere ----
+scene("Together", 53.2, 58.2, "var(--cream)", (s, at) => {
+  headline(s, "Your files.", { at: at + 0.1, size: 10, x: 6, y: 6 }); sfx(at + 0.1, "slam");
+  headline(s, "Your server.", { at: at + 0.5, size: 10, x: 6, y: 17 }); sfx(at + 0.5, "slam");
+  headline(s, "Your team.", { at: at + 0.9, size: 10, x: 6, y: 28, hl: "team" }); sfx(at + 0.9, "slam");
+  caption(s, "Works offline on your computer. Connect to the free hosted server, or run your own with one command.", { at: at + 1.5, x: 6, y: 39, size: 2.1, color: "var(--ink-2)", w: 48 });
+  const who = [["Koduman Potti", "var(--pink)", 70, 10], ["Michael", "var(--sky)", 82, 18], ["Bilal John", "var(--yellow)", 64, 26], ["Pranchiyettan", "var(--green)", 86, 34], ["Balram", "var(--lilac)", 72, 40], ["Achootty", "var(--orange)", 60, 16], ["Joseph Alex", "var(--mint)", 80, 46]];
+  who.forEach(([n, c, x, y], i) => { const cur = cursorEl(n, c, `left:${x + 30}cqw;top:${y - 20}cqw`); s.appendChild(cur); anim(cur, [{ opacity: 0 }, { opacity: 1 }], { at: at + 1.6 + i * 0.1, dur: 0.1 }); anim(cur, [{ left: `${x + 30}cqw`, top: `${y - 20}cqw` }, { left: `${x}cqw`, top: `${y}cqw` }], { at: at + 1.6 + i * 0.1, dur: 0.7, ease: POP }); sfx(at + 1.6 + i * 0.1, "pop"); });
+  const strike = (t, x, y, d) => { const k = sticker(s, t, { at: at + d, x, y, r: -4, bg: "var(--cream)" }); const line = el("i", "", "", "position:absolute;left:6%;right:6%;top:50%;height:.35cqw;background:var(--red);transform:scaleX(0);transform-origin:left;border-radius:999px"); k.appendChild(line); anim(line, [{ transform: "scaleX(0)" }, { transform: "scaleX(1)" }], { at: at + d + 0.4, dur: 0.3 }); sfx(at + d + 0.4, "swish"); };
+  strike("No seats", 6, 47, 2.9); strike("No credits", 22, 47, 3.15); strike("No bill", 40, 47, 3.4);
+});
+wipe(58.2, "var(--orange)");
+
+// ---- Scene 10: end card ----
+scene("Download", 58.2, 64, "var(--orange)", (s, at) => {
+  const cat = el("img", "", "", "left:40cqw;top:5cqw;width:20cqw;height:20cqw;opacity:0"); cat.src = "insignia-cat.svg"; s.appendChild(cat);
+  anim(cat, [{ opacity: 0, transform: "translateY(-20cqw) rotate(-20deg)" }, { opacity: 1, transform: "none" }], { at: at + 0.2, dur: 0.7, ease: POP }); sfx(at + 0.6, "thud");
+  const wm = el("img", "", "", "left:35cqw;top:26cqw;width:30cqw;opacity:0"); wm.src = "wordmark.svg"; s.appendChild(wm);
+  anim(wm, [{ opacity: 0, transform: "scale(.5)" }, { opacity: 1, transform: "none" }], { at: at + 0.8, dur: 0.5, ease: POP }); sfx(at + 0.8, "pop");
+  caption(s, "Free. Forever. Open source.", { at: at + 1.4, x: 32, y: 41, size: 3.2, color: "var(--ink)" });
+  const btn = el("div", "", "Download for macOS  →", "position:absolute;left:33cqw;top:47cqw;padding:1.3cqw 3cqw;border-radius:999px;background:var(--ink);color:var(--cream);font-family:var(--display);font-size:2.6cqw;opacity:0"); s.appendChild(btn);
+  anim(btn, [{ opacity: 0, transform: "scale(.6)" }, { opacity: 1, transform: "none" }], { at: at + 2.0, dur: 0.5, ease: POP }); sfx(at + 2.0, "ding");
+  caption(s, "nagma.app", { at: at + 2.5, x: 44.5, y: 54, size: 2, color: "var(--ink)" });
+  [["sh-sparkle", 8, 8, "var(--yellow)"], ["sh-flower", 80, 10, "var(--pink)"], ["sh-star", 12, 40, "var(--cream)"], ["sh-bolt", 84, 40, "var(--ink)"], ["sh-ring", 70, 46, "var(--mint)"]].forEach(([id, x, y, c], i) => { popShape(s, id, { at: at + 1.0 + i * 0.12, x, y, size: 9, color: c, spin: i * 7 }); sfx(at + 1 + i * 0.12, "pop"); });
+  sticker(s, "Free forever", { at: at + 2.9, x: 8, y: 22, r: -8, bg: "var(--mint)" });
+  sticker(s, "No account to start", { at: at + 3.1, x: 66, y: 24, r: 6, bg: "var(--cream)" });
+});
+const DURATION = 64;
+
+// ---- Playback ----
+let t = 0, playing = false, muted = false, raf = 0, last = 0;
+const rangeEl = document.getElementById("range"), fillEl = document.getElementById("fill"), timeEl = document.getElementById("time"), playBtn = document.getElementById("play"), muteBtn = document.getElementById("mute"), startEl = document.getElementById("start");
+rangeEl.max = DURATION;
+const fmt = (x) => `${Math.floor(x / 60)}:${String(Math.floor(x % 60)).padStart(2, "0")}`;
+function seek(x, fromUser = false) {
+  t = Math.max(0, Math.min(DURATION, x));
+  for (const a of ANIMS) a.currentTime = t * 1000;
+  rangeEl.value = t; fillEl.style.width = (t / DURATION * 100) + "%"; timeEl.textContent = `${fmt(t)} / ${fmt(DURATION)}`;
+  document.querySelectorAll("#chapters button").forEach((b, i) => b.classList.toggle("on", SCENES[i].at <= t && t < SCENES[i].end));
+  if (fromUser) audio.resync();
+}
+function tick(now) {
+  if (!playing) return;
+  const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  t += dt;
+  if (t >= DURATION) { seek(DURATION); pause(); return; }
+  seek(t);
+  audio.schedule(t);
+  raf = requestAnimationFrame(tick);
+}
+function play() { if (playing) return; if (t >= DURATION - 0.01) seek(0); playing = true; startEl.style.display = "none"; playBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>'; playBtn.setAttribute("aria-label", "Pause"); audio.start(t); last = performance.now(); raf = requestAnimationFrame(tick); }
+function pause() { if (!playing) return; playing = false; cancelAnimationFrame(raf); audio.stop(); playBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M7 4l14 8-14 8z"/></svg>'; playBtn.setAttribute("aria-label", "Play"); }
+const toggle = () => (playing ? pause() : play());
+playBtn.onclick = toggle;
+stage.onclick = toggle;
+document.getElementById("restart").onclick = () => { seek(0, true); play(); };
+rangeEl.oninput = () => seek(+rangeEl.value, true);
+muteBtn.onclick = () => setMuted(!muted);
+function setMuted(m) { muted = m; audio.setMuted(m); muteBtn.innerHTML = m ? '<svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 4V5L7 9zM16 9l5 5m0-5-5 5" stroke="currentColor" stroke-width="2" fill="none"/></svg>' : '<svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 4V5L7 9zM16 8a4.5 4.5 0 0 1 0 8v-2a2.5 2.5 0 0 0 0-4zM16 4a8 8 0 0 1 0 16v-2a6 6 0 0 0 0-12z"/></svg>'; muteBtn.setAttribute("aria-label", m ? "Unmute" : "Mute"); }
+addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT" && e.key !== " ") return;
+  const big = e.shiftKey ? 10 : 2;
+  if (e.key === " ") { e.preventDefault(); toggle(); }
+  else if (e.key === "ArrowRight") { e.preventDefault(); seek(t + big, true); }
+  else if (e.key === "ArrowLeft") { e.preventDefault(); seek(t - big, true); }
+  else if (e.key === "Home") seek(0, true);
+  else if (e.key === "End") seek(DURATION - 0.01, true);
+  else if (e.key.toLowerCase() === "m") setMuted(!muted);
+  else if (/^[0-9]$/.test(e.key)) seek(DURATION * (+e.key) / 10, true);
+});
+const chapters = document.getElementById("chapters");
+SCENES.forEach((sc) => { const b = el("button", "", `${sc.name} <span style="opacity:.6">${fmt(sc.at)}</span>`); b.onclick = () => { seek(sc.at + 0.02, true); if (!playing) play(); }; chapters.appendChild(b); });
+const trackEl = document.querySelector(".track");
+SCENES.forEach((sc) => { if (sc.at) { const m = el("em", "", "", `left:${sc.at / DURATION * 100}%`); trackEl.appendChild(m); } });
+
+// ---- Sound: a synthesised soundtrack and effects, scheduled on the same clock ----
+const audio = (() => {
+  let ctx = null, master = null, music = null, fx = null, base = 0, step = 0, fxIndex = 0, running = false;
+  const BPM = 124, STEP = 60 / BPM / 4; // sixteenths
+  const N = (n) => 440 * Math.pow(2, (n - 69) / 12);
+  const ensure = () => { if (ctx) return; ctx = new (window.AudioContext || window.webkitAudioContext)(); master = ctx.createGain(); master.gain.value = muted ? 0 : 0.9; master.connect(ctx.destination); music = ctx.createGain(); music.gain.value = 0.5; music.connect(master); fx = ctx.createGain(); fx.gain.value = 0.9; fx.connect(master); };
+  const noiseBuf = () => { const b = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate); const d = b.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; return b; };
+  let noise = null;
+  const env = (g, at, a, d, peak = 1, sustain = 0) => { g.gain.cancelScheduledValues(at); g.gain.setValueAtTime(0.0001, at); g.gain.linearRampToValueAtTime(peak, at + a); g.gain.exponentialRampToValueAtTime(Math.max(0.0001, sustain), at + a + d); };
+  const osc = (type, f, at, len, out, { a = 0.005, d = 0.2, peak = 0.3, slide = null, filter = null } = {}) => { const o = ctx.createOscillator(); o.type = type; o.frequency.setValueAtTime(f, at); if (slide) o.frequency.exponentialRampToValueAtTime(slide, at + len); const g = ctx.createGain(); env(g, at, a, d, peak); o.connect(g); if (filter) { const fl = ctx.createBiquadFilter(); fl.type = "lowpass"; fl.frequency.value = filter; g.connect(fl); fl.connect(out); } else g.connect(out); o.start(at); o.stop(at + len + 0.05); };
+  const burst = (at, len, out, { hp = 1000, lp = 12000, peak = 0.4, d = 0.08 } = {}) => { noise ||= noiseBuf(); const src = ctx.createBufferSource(); src.buffer = noise; const h = ctx.createBiquadFilter(); h.type = "highpass"; h.frequency.value = hp; const l = ctx.createBiquadFilter(); l.type = "lowpass"; l.frequency.value = lp; const g = ctx.createGain(); env(g, at, 0.002, d, peak); src.connect(h); h.connect(l); l.connect(g); g.connect(out); src.start(at); src.stop(at + len + 0.05); };
+  // Drums and instruments.
+  const kick = (at) => osc("sine", 150, at, 0.3, music, { d: 0.25, peak: 0.9, slide: 45 });
+  const snare = (at) => { burst(at, 0.2, music, { hp: 1800, peak: 0.35, d: 0.12 }); osc("triangle", 190, at, 0.15, music, { d: 0.1, peak: 0.25, slide: 120 }); };
+  const hat = (at, open = false) => burst(at, open ? 0.25 : 0.06, music, { hp: 7000, peak: open ? 0.16 : 0.12, d: open ? 0.2 : 0.04 });
+  const bass = (at, n, len) => osc("sawtooth", N(n), at, len, music, { d: len * 0.9, peak: 0.28, filter: 700 });
+  const pluck = (at, n) => osc("triangle", N(n), at, 0.35, music, { d: 0.3, peak: 0.16 });
+  const stab = (at, ns) => ns.forEach((n) => osc("square", N(n), at, 0.22, music, { d: 0.18, peak: 0.06, filter: 2200 }));
+  // The song: A major, four chords, sections follow the scenes.
+  const CH = [[57, 61, 64, 68], [52, 56, 59, 64], [54, 57, 61, 64], [50, 54, 57, 61]]; // A, E, F#m, D (maj7-ish)
+  const ARP = [[69, 73, 76, 80], [64, 68, 71, 76], [66, 69, 73, 76], [62, 66, 69, 73]];
+  const section = (tt) => (tt < 5.6 ? 0 : tt < 53.2 ? 1 : tt < 58.2 ? 2 : 3);
+  const atStep = (i, when) => {
+    const bar = Math.floor(i / 16), s16 = i % 16, chord = CH[bar % 4], arp = ARP[bar % 4], sec = section(i * STEP);
+    const beat = s16 % 4 === 0;
+    if (sec === 0) { if (s16 === 0 || s16 === 10) kick(when); if (s16 % 2 === 0) pluck(when, arp[(s16 / 2) % 4]); if (s16 === 8) hat(when, true); }
+    else if (sec === 1) {
+      if (s16 === 0 || s16 === 6 || s16 === 8 || s16 === 14) kick(when);
+      if (s16 === 4 || s16 === 12) snare(when);
+      if (s16 % 2 === 0) hat(when, s16 === 10);
+      if (s16 % 2 === 0) bass(when, chord[0] - 24 + (s16 === 14 ? 12 : 0), STEP * 1.8);
+      if (s16 === 0 || s16 === 7 || s16 === 10) stab(when, chord);
+      if ([2, 5, 9, 13].includes(s16)) pluck(when, arp[(s16 + bar) % 4]);
+    } else if (sec === 2) { if (beat) kick(when); if (s16 === 4 || s16 === 12) snare(when); if (s16 % 2) hat(when); if (s16 % 4 === 0) stab(when, chord); if (s16 % 2 === 0) bass(when, chord[0] - 24, STEP * 1.6); if (s16 % 2 === 1) pluck(when, arp[(s16 >> 1) % 4] + 12); }
+    else { if (s16 === 0 && bar % 2 === 0) { kick(when); stab(when, chord); chord.forEach((n) => osc("triangle", N(n + 12), when, 1.6, music, { a: 0.02, d: 1.4, peak: 0.12 })); } if (s16 === 8) hat(when, true); if (s16 % 4 === 2) pluck(when, arp[(s16 >> 2) % 4] + 12); }
+  };
+  const effects = {
+    pop: (w) => osc("sine", 520, w, 0.12, fx, { d: 0.1, peak: 0.35, slide: 900 }),
+    tick: (w) => burst(w, 0.03, fx, { hp: 3000, peak: 0.25, d: 0.02 }),
+    click: (w) => { burst(w, 0.04, fx, { hp: 2000, peak: 0.3, d: 0.03 }); osc("square", 1200, w, 0.04, fx, { d: 0.03, peak: 0.08 }); },
+    slam: (w) => { osc("sine", 120, w, 0.35, fx, { d: 0.3, peak: 0.8, slide: 40 }); burst(w, 0.12, fx, { hp: 400, lp: 3000, peak: 0.3, d: 0.1 }); },
+    thud: (w) => { osc("sine", 90, w, 0.4, fx, { d: 0.35, peak: 0.9, slide: 35 }); burst(w, 0.08, fx, { hp: 200, lp: 1500, peak: 0.25, d: 0.06 }); },
+    whoosh: (w) => burst(w, 0.45, fx, { hp: 600, lp: 6000, peak: 0.3, d: 0.4 }),
+    swish: (w) => burst(w, 0.3, fx, { hp: 2500, lp: 10000, peak: 0.25, d: 0.25 }),
+    draw: (w) => burst(w, 0.5, fx, { hp: 4000, lp: 9000, peak: 0.12, d: 0.45 }),
+    snap: (w) => { osc("sine", 700, w, 0.1, fx, { d: 0.08, peak: 0.3, slide: 1400 }); burst(w, 0.05, fx, { hp: 2500, peak: 0.2, d: 0.04 }); },
+    ding: (w) => { osc("sine", N(88), w, 0.6, fx, { d: 0.5, peak: 0.25 }); osc("sine", N(95), w + 0.06, 0.6, fx, { d: 0.5, peak: 0.18 }); },
+  };
+  SFX.sort((a, b) => a[0] - b[0]);
+  const LOOK = 0.25;
+  function start(at) { ensure(); if (ctx.state === "suspended") ctx.resume(); base = ctx.currentTime - at; step = Math.ceil(at / STEP); fxIndex = SFX.findIndex(([x]) => x >= at); if (fxIndex < 0) fxIndex = SFX.length; running = true; schedule(at); }
+  function schedule(now) {
+    if (!running) return;
+    while (step * STEP < now + LOOK && step * STEP < DURATION) { atStep(step, Math.max(ctx.currentTime, base + step * STEP)); step++; }
+    while (fxIndex < SFX.length && SFX[fxIndex][0] < now + LOOK) { const [when, kind] = SFX[fxIndex++]; effects[kind]?.(Math.max(ctx.currentTime, base + when)); }
+  }
+  function stop() { running = false; }
+  function resync() { if (running) start(t); }
+  function setMuted(m) { if (master) master.gain.setTargetAtTime(m ? 0 : 0.9, ctx.currentTime, 0.02); }
+  return { start, schedule, stop, resync, setMuted };
+})();
+
+seek(0);
+startEl.onclick = (e) => { e.stopPropagation(); play(); };
+</script>
+</body>
+</html>

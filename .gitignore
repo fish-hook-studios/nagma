@@ -12,3 +12,6 @@ apps/desktop/release
 # Self-hosting: the server settings and backups (docs/self-hosting.md)
 .env
 backups/
+
+# The built website (apps/landing/tools/build-site.mjs)
+apps/landing/dist/

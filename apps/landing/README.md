@@ -1,64 +1,55 @@
 # nagma.app
 
-The website at https://nagma.app: static files, no build step. Plain HTML, one stylesheet and a
-small script (the Download button picks the visitor's system; Copy on the code snippets). Everything
-works without JavaScript.
+The website at https://nagma.app. A small build script with no dependencies turns the home page,
+the guides and the project's own files into a static site.
 
-| File | What it is |
-|---|---|
-| `index.html` | The page |
-| `styles.css`, `main.js` | Styles (light and dark from the system setting) and the script |
-| `img/` | Screenshots of the app at 1440×900 (and 720-wide copies), plus `og.png` for link previews |
-| `favicon.svg` | The N mark, the same as `apps/web/public/favicon.svg` |
-| `404.html` | Served by Cloudflare Pages for unknown paths |
-| `_headers` | Security headers (CSP, HSTS, frame and referrer rules) and cache times |
-| `_redirects` | `/download/mac`, `/download/windows`, `/download/linux`, `/download`, `/github`, `/docs`, `/self-host` |
+## Build
+
+```bash
+node apps/landing/tools/build-site.mjs
+```
+
+This writes `apps/landing/dist/` (not committed) and then checks every internal link and `#anchor`
+on every page; a broken one fails the build. Preview it with any static server:
+
+```bash
+python3 -m http.server 5392 --bind 127.0.0.1 --directory apps/landing/dist
+```
+
+`NAGMA_RELEASES_JSON=<file>` makes the releases page read its list from a file instead of GitHub.
 
 ## Cloudflare Pages
-
-Create a Pages project connected to the GitHub repository (`fish-hook-studios/nagma`) with:
 
 | Setting | Value |
 |---|---|
 | Production branch | `main` |
 | Framework preset | None |
-| Build command | *(none, leave empty)* |
-| Build output directory | `apps/landing` |
+| Build command | `node apps/landing/tools/build-site.mjs` |
+| Build output directory | `apps/landing/dist` |
 | Root directory | *(repository root, leave empty)* |
+| Environment variable | `NODE_VERSION` = `22` |
 
-Then add the custom domain `nagma.app` (and `www.nagma.app`, redirected to it) under **Custom
-domains**. With the domain's DNS on Cloudflare, Pages creates the records itself; elsewhere, point a
-CNAME at the project's `*.pages.dev` address.
+Optionally set `GITHUB_TOKEN` (a read-only token) so the releases list isn't subject to GitHub's
+anonymous rate limit. Set **Build watch paths** to `apps/landing/*`, `docs/*`, `*.md` and `LICENSE`
+so the site rebuilds when a guide changes.
 
-To skip builds for commits that don't touch the site, set **Build watch paths** to include only
-`apps/landing/*`.
+## Where pages come from
 
-## Downloads
-
-`_redirects` sends `/download/<system>` to the newest GitHub release, so the release assets must
-keep these names on every release:
-
-| Link | Asset |
+| Page | Source |
 |---|---|
-| `/download/mac` | `Nagma-mac-arm64.dmg` |
-| `/download/windows` | `Nagma-Setup-x64.exe` |
-| `/download/linux` | `Nagma-x86_64.AppImage` |
+| `/` | `home.html` (self-contained: its own styles and scripts) |
+| `/docs/<name>/` | `docs/<name>.md`; the file's first heading is the title |
+| `/contributing/`, `/security/`, `/code-of-conduct/`, `/third-party/` | `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, `THIRD_PARTY_NOTICES.md` |
+| `/licence/` | `LICENSE` (plain text) |
+| `/about/`, `/contact/` | `pages/about.md`, `pages/contact.md` (`title:` in the front matter) |
+| `/releases/` | GitHub's releases list, fetched at build time; the stable download links if that fails |
+| `/404.html` | Built in the script |
 
-`/download` itself opens the latest release page, which lists every asset.
+Every generated page uses the home page's nav, footer and cursor (taken from `home.html` at build
+time), with `site.css` and `site.js`. Links between these files become links between pages; links to
+other repository files go to GitHub. To add a page, add it to the lists at the top of
+`tools/build-site.mjs`.
 
-## Preview locally
-
-Any static file server works, for example from the repository root:
-
-```bash
-python3 -m http.server 8000 --directory apps/landing
-```
-
-(`_headers` and `_redirects` apply only on Cloudflare Pages.) Check the links with
-`node tools/check-landing-links.mjs`.
-
-## Screenshots
-
-The pictures in `img/` are of the app itself, taken at 1440×900 in the dark theme from files made
-with its own starter files and templates. Keep each one under 300 KB (WebP), with `width` and
-`height` set in the HTML, and `loading="lazy"` below the first screen.
+`_redirects` sends `/download/<system>` to the newest GitHub release, so the release assets must keep
+the names `Nagma-mac-arm64.dmg`, `Nagma-mac-x64.dmg`, `Nagma-Setup-x64.exe`, `Nagma-x86_64.AppImage`
+and `Nagma-amd64.deb`.

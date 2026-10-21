@@ -12,8 +12,14 @@ export function resizedCopy(nodes: SceneNode[], w: number, h: number): SceneNode
     const root = nodes[0];
     if (!root) return nodes;
     const k = Math.min(w / root.w, h / root.h);
+    // Copies arrive with empty children lists (createCommands rebuilds them); the constraint pass
+    // walks parents' children, so they are filled in here.
     const byId: Record<string, SceneNode> = {};
-    for (const node of nodes) byId[node.id] = { ...node };
+    for (const node of nodes) byId[node.id] = { ...node, children: [] };
+    for (const node of nodes) {
+        const parent = node.parentId ? byId[node.parentId] : undefined;
+        if (parent) parent.children = [...parent.children, node.id];
+    }
     const scaleNode = (node: SceneNode): SceneNode => {
         const next: SceneNode = { ...node };
         if (node.fontSize) next.fontSize = Math.max(6, Math.round(node.fontSize * k));
@@ -42,7 +48,7 @@ export function resizedCopy(nodes: SceneNode[], w: number, h: number): SceneNode
     }
     let from = { x: root.x, y: root.y, w: root.w, h: root.h };
     const to = { x: root.x, y: root.y, w, h };
-    byId[root.id] = { ...scaleNode(root), w, h };
+    byId[root.id] = { ...scaleNode(byId[root.id] as SceneNode), w, h };
     if (!root.layout) {
         // Without auto layout the layers first scale with the type (their places and sizes, so a
         // 14px line in a 133px box doesn't become 50px type in the same box), then follow their

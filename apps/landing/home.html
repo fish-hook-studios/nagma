@@ -26,7 +26,8 @@
 body { font-synthesis: none; }
 html { scroll-behavior: smooth; }
 body { margin: 0; font-family: var(--body); color: var(--fg); background: var(--bg); line-height: 1.5; overflow-x: hidden; -webkit-font-smoothing: antialiased; transition: background-color .9s cubic-bezier(.2,.8,.2,1), color .9s; cursor: none; }
-@media (hover: none) { body { cursor: auto; } }
+a, button, [role="button"], input, select, textarea, label, summary { cursor: none; }
+@media (hover: none) { body, a, button, [role="button"], input, select, textarea, label, summary { cursor: auto; } }
 a { color: inherit; }
 img { max-width: 100%; display: block; }
 h1, h2, h3, .display { font-family: var(--display); letter-spacing: -0.02em; line-height: .94; margin: 0; font-weight: 400; }
@@ -56,7 +57,7 @@ h1 .hl .hlm, h2 .hl .hlm { mix-blend-mode: multiply; }
 .btn.small { min-height: 46px; padding: 0 20px; font-size: 16px; }
 
 /* Custom cursor: a collaborator's arrow with a name tag. */
-.cur { position: fixed; left: 0; top: 0; pointer-events: none; z-index: 1000; transition: transform .15s; }
+.cur { position: fixed; left: 0; top: 0; pointer-events: none; z-index: 1000; will-change: transform; }
 .cur svg { position: absolute; left: 0; top: 0; width: 22px; height: 22px; fill: var(--pink); stroke: var(--ink); stroke-width: 1.6; stroke-linejoin: round; filter: drop-shadow(1px 2px 0 rgba(20,20,19,.25)); }
 .cur span { position: absolute; left: 14px; top: 16px; padding: 3px 9px; border-radius: 999px; background: var(--pink); color: var(--ink); border: 1.5px solid var(--ink); font-family: var(--body); font-size: 12px; line-height: 1.3; white-space: nowrap; }
 .cur.big svg { fill: var(--green); } .cur.big span { background: var(--green); }
@@ -66,23 +67,38 @@ h1 .hl .hlm, h2 .hl .hlm { mix-blend-mode: multiply; }
 /* Labs behaviour: any scroll down slides the bar away, any scroll up brings it back; its surface follows the section underneath. */
 .nav-wrap { position: fixed; top: 0; left: 0; right: 0; z-index: 60; background: var(--bg); color: var(--fg); border-bottom: 2px solid var(--fg); transition: transform .3s ease-in-out, background-color .9s cubic-bezier(.2,.8,.2,1), color .9s, border-color .9s; }
 .nav-wrap.hide { transform: translateY(-110%); }
-.nav { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 14px 32px; }
+.nav { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 32px; }
 .brand { display: flex; align-items: center; gap: 12px; color: inherit; text-decoration: none; }
 .brand .wm { height: 28px; width: auto; fill: currentColor; display: block; }
 .brand img { width: 44px; height: 44px; transition: transform .4s cubic-bezier(.2,.8,.2,1); }
 .brand:hover img { transform: rotate(-14deg) scale(1.15); }
 .nav-links { display: flex; gap: 6px; }
-.nav-links a { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; text-transform: uppercase; letter-spacing: .06em; font-size: 15px; padding: 10px 14px; border-radius: 999px; color: inherit; transition: background .2s, color .2s; }
+.nav-links a { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; text-decoration: none; text-transform: uppercase; letter-spacing: .05em; font-size: 14px; padding: 10px 12px; border-radius: 999px; color: inherit; transition: background .2s, color .2s; }
 .nav-links a:hover { background: var(--mint); color: var(--ink); }
 .nav-links .ic { width: 16px; height: 16px; fill: var(--green); }
+.menu { position: relative; }
+.menu > button { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; font: inherit; text-transform: uppercase; letter-spacing: .05em; font-size: 14px; padding: 10px 12px; border-radius: 999px; color: inherit; background: none; border: 0; cursor: none; transition: background .2s, color .2s; }
+.menu > button:hover, .menu.open > button { background: var(--mint); color: var(--ink); }
+.menu-panel { position: absolute; left: 0; top: calc(100% + 10px); min-width: 300px; display: none; grid-template-columns: 1fr; gap: 2px; padding: 10px; background: var(--cream); color: var(--ink); border: 2.5px solid var(--ink); border-radius: 20px; box-shadow: 8px 8px 0 var(--ink); z-index: 70; }
+.menu.open .menu-panel { display: grid; }
+#menu-products { grid-template-columns: 1fr 1fr; min-width: 520px; }
+.menu-panel a { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 12px; text-decoration: none; text-transform: none; letter-spacing: 0; color: var(--ink); }
+.menu-panel a:hover { background: var(--yellow); }
+.menu-panel b { font-family: var(--display); font-weight: 400; font-size: 18px; }
+.menu-panel span { font-size: 13px; color: var(--mute); }
+.menu-panel .ar { display: none; }
+/* A dotted rule under each item (not the last row). */
+.menu-panel a { position: relative; }
+.menu-panel a::after { content: ""; position: absolute; left: 12px; right: 12px; bottom: -1px; border-bottom: 2px dotted rgba(20, 20, 19, .35); }
+.menu-panel a:last-child::after, #menu-products a:nth-last-child(-n+2)::after { display: none; }
 .nav-links .ar, .cta .ar { font-family: var(--body); }
-.nav .cta { background: var(--pink); border-color: var(--pink); color: var(--ink); min-height: 50px; padding: 0 22px; font-family: var(--body); text-transform: uppercase; letter-spacing: .06em; font-size: 15px; }
-.nav .cta:hover { background: var(--green); border-color: var(--green); box-shadow: none; transform: none; }
+.nav .cta { background: var(--orange); border-color: var(--orange); color: var(--ink); min-height: 50px; padding: 0 22px; font-family: var(--body); text-transform: uppercase; letter-spacing: .06em; font-size: 15px; }
+.nav .cta:hover { background: var(--ink); border-color: var(--ink); color: var(--cream); box-shadow: none; transform: none; }
 /* HERO: a playground. Shapes and stickers are draggable. */
 .hero { position: relative; min-height: 100vh; display: flex; flex-direction: column; justify-content: center; padding: 200px 0 0; overflow: hidden; }
 .play { position: absolute; inset: 0; z-index: 0; }
-.toy { position: absolute; cursor: grab; touch-action: none; user-select: none; transition: transform .15s; will-change: transform; }
-.toy:active { cursor: grabbing; }
+.toy { position: absolute; cursor: none; touch-action: none; user-select: none; transition: transform .15s; will-change: transform; }
+.toy:active { cursor: none; }
 .toy.shape { animation: float var(--dur, 12s) ease-in-out infinite alternate; }
 /* Big shapes: flat, anchored to the edges, easing in from their own edge, then drifting very slowly. */
 .fun { position: absolute; height: auto; aspect-ratio: 1; fill: currentColor; overflow: visible; transition: scale .6s cubic-bezier(.2,.8,.2,1); will-change: transform; }
@@ -108,7 +124,7 @@ h1 .hl .hlm, h2 .hl .hlm { mix-blend-mode: multiply; }
 .hero h1 .l3 { text-transform: none; }
 .hero .lead { font-size: clamp(18px, 1.6vw, 24px); max-width: 680px; font-weight: 400; }
 .hero-ctas { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
-.cat-peek { position: absolute; z-index: 1; right: 4vw; top: calc(10vh - 14.5vw); width: clamp(140px, 16vw, 260px); box-shadow: 0 30px 80px -30px rgba(20,20,19,.5); animation: peek 1.4s .4s cubic-bezier(.2,.8,.2,1) both; pointer-events: none; }
+.cat-peek { position: absolute; z-index: 1; right: 4vw; top: calc(10vh - 14.5vw); width: clamp(140px, 16vw, 260px); animation: peek 1.4s .4s cubic-bezier(.2,.8,.2,1) both; pointer-events: none; }
 @keyframes peek { from { transform: translateY(60%) rotate(8deg); } to { transform: translateY(0) rotate(-4deg); } }
 .hint { position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); font-size: 13px; font-weight: 400; letter-spacing: .1em; text-transform: uppercase; z-index: 2; display: flex; gap: 10px; align-items: center; }
 .hint i { width: 10px; height: 10px; border-radius: 50%; background: var(--ink); animation: bounce 1.2s infinite; display: inline-block; }
@@ -117,7 +133,8 @@ h1 .hl .hlm, h2 .hl .hlm { mix-blend-mode: multiply; }
 /* The glance: a stylised Nagma window */
 .hero { min-height: auto; padding-bottom: 8vh; }
 .hero-center { gap: 32px; }
-.stage { width: min(100%, 1180px); margin-top: 24px; background: var(--cream); border: 2.5px solid var(--ink); border-radius: 28px; box-shadow: 14px 14px 0 var(--ink); overflow: hidden; text-align: left; pointer-events: auto; font-family: var(--display); animation: stage-in 1.2s .5s cubic-bezier(.2,.8,.2,1) both; }
+.stage-wrap { position: relative; width: min(100%, 1180px); margin-top: 24px; }
+.stage { width: 100%; margin-top: 0; background: var(--cream); border: 2.5px solid var(--ink); border-radius: 28px; box-shadow: 14px 14px 0 var(--ink); overflow: hidden; text-align: left; pointer-events: auto; font-family: var(--display); animation: stage-in 1.2s .5s cubic-bezier(.2,.8,.2,1) both; }
 @keyframes stage-in { from { opacity: 0; transform: translateY(80px) rotate(1deg); } to { opacity: 1; transform: none; } }
 .stage .bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 16px; border-bottom: 2.5px solid var(--ink); background: #fff; }
 .stage .dots { display: flex; gap: 6px; } .stage .dots i { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--ink); background: var(--pink); }
@@ -277,7 +294,8 @@ h1 .hl .hlm, h2 .hl .hlm { mix-blend-mode: multiply; }
 .scard .copy { display: flex; flex-direction: column; gap: 22px; }
 .scard h3 { font-size: clamp(36px, 5vw, 80px); letter-spacing: -0.04em; }
 .scard .lead { max-width: 520px; font-weight: 400; }
-.scard .ph { min-height: 0; height: 100%; max-height: 56vh; background-color: rgba(246,241,231,.5); }
+.scard .loop { aspect-ratio: 960 / 600; max-height: 56vh; }
+.scard .loop video { height: 100%; }
 .scard ul { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 8px; }
 .scard li { padding: 8px 14px; border-radius: 999px; border: 2px solid var(--ink); font-weight: 400; font-size: 14px; background: rgba(246,241,231,.6); }
 .stack-space { height: 20vh; }
@@ -315,11 +333,26 @@ h1 .hl .hlm, h2 .hl .hlm { mix-blend-mode: multiply; }
 .cc { position: absolute; left: var(--x); top: var(--y); display: flex; align-items: flex-start; opacity: 0; translate: var(--fx) var(--fy); }
 .cc svg { width: 22px; height: 22px; fill: var(--c); stroke: var(--ink); stroke-width: 1.6; stroke-linejoin: round; filter: drop-shadow(1px 2px 0 rgba(20,20,19,.25)); }
 .cc span { margin: 14px 0 0 -6px; padding: 3px 9px; border-radius: 999px; background: var(--c); border: 1.5px solid var(--ink); font-family: var(--body); font-size: 12px; white-space: nowrap; }
-.drop.in .cc { animation: gather 1.4s var(--d) cubic-bezier(.2,.8,.2,1) forwards, mill 6s calc(var(--d) + 1.4s) ease-in-out infinite alternate; }
+.claim.crowded .cc { animation: gather 1.1s var(--d) cubic-bezier(.2,.8,.2,1) forwards, mill 6s calc(var(--d) + 1.1s) ease-in-out infinite alternate; }
+.claim.leaving .cc { animation: scatter .7s calc(var(--d) * .5) cubic-bezier(.4,0,.8,.4) forwards; }
+@keyframes scatter { from { opacity: 1; translate: 0 0; } to { opacity: 0; translate: var(--fx) var(--fy); } }
+#company { cursor: none; }
 @keyframes gather { from { opacity: 0; translate: var(--fx) var(--fy); } to { opacity: 1; translate: 0 0; } }
 @keyframes mill { from { translate: 0 0; } to { translate: 18px -12px; } }
 @media (max-width: 960px) { .cc { display: none; } }
-@media (prefers-reduced-motion: reduce) { .drop .cc { animation: none; opacity: 1; translate: 0 0; } }
+@media (prefers-reduced-motion: reduce) { .claim.crowded .cc { animation: none; opacity: 1; translate: 0 0; } }
+
+/* Resources and About */
+.res, .about { padding: 18vh 0; }
+.res-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.res-card { display: flex; flex-direction: column; gap: 8px; padding: 22px; border: 2.5px solid var(--ink); border-radius: 20px; background: #fff; text-decoration: none; color: var(--ink); transition: transform .25s cubic-bezier(.2,.8,.2,1), box-shadow .25s; }
+.res-card:hover { transform: translate(-3px, -3px); box-shadow: 6px 6px 0 var(--ink); }
+.res-card b { font-family: var(--display); font-weight: 400; font-size: 22px; }
+.res-card span { font-size: 14px; color: var(--mute); line-height: 1.45; }
+.about-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.about-grid .card { box-shadow: 8px 8px 0 var(--ink); }
+.about-grid .card h3 { font-size: 24px; }
+@media (max-width: 960px) { .res-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .about-grid { grid-template-columns: minmax(0, 1fr); } }
 
 /* Servers: three tall tiles that expand on hover */
 .tiles { display: flex; gap: 16px; height: 70vh; min-height: 520px; }
@@ -340,15 +373,16 @@ h1 .hl .hlm, h2 .hl .hlm { mix-blend-mode: multiply; }
 .wall-pin .wrap { width: 100%; }
 .wall-box { position: relative; height: 82vh; min-height: 620px; border: 2.5px solid var(--ink); border-radius: 40px; background: var(--bubble); overflow: hidden; touch-action: pan-y; box-shadow: 12px 12px 0 var(--ink); }
 .wall h2 { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); text-align: center; z-index: 0; pointer-events: none; font-size: clamp(44px, 8vw, 130px); margin: 0; }
-.wall .st { position: absolute; left: calc(var(--x) * 1%); top: calc(var(--y) * 1%); z-index: 1; padding: 14px 22px; border-radius: 999px; border: 2.5px solid var(--ink); font-family: var(--display); font-size: clamp(15px, 1.6vw, 24px); background: var(--cream); color: var(--ink); box-shadow: 5px 5px 0 var(--ink); white-space: nowrap; cursor: grab; user-select: none; will-change: transform; transform: translate(-50%, -50%) rotate(calc(var(--r) * 1deg)); }
-.wall .st:active { cursor: grabbing; }
+.wall .st { position: absolute; left: calc(var(--x) * 1%); top: calc(var(--y) * 1%); z-index: 1; padding: 14px 22px; border-radius: 999px; border: 2.5px solid var(--ink); font-family: var(--display); font-size: clamp(15px, 1.6vw, 24px); background: var(--cream); color: var(--ink); box-shadow: 5px 5px 0 var(--ink); white-space: nowrap; cursor: none; user-select: none; will-change: transform; transform: translate(-50%, -50%) rotate(calc(var(--r) * 1deg)); }
+.wall .st:active { cursor: none; }
 .wall .st[data-c="yellow"] { background: var(--yellow); } .wall .st[data-c="pink"] { background: var(--pink); } .wall .st[data-c="lime"] { background: var(--lime); } .wall .st[data-c="orange"] { background: var(--orange); } .wall .st[data-c="lilac"] { background: var(--lilac); }
 .wall-box.live .st { left: 0; top: 0; transition: none; }
 /* Open source stats */
 .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .stat { border: 2.5px solid var(--ink); border-radius: 28px; padding: 28px 32px; background: var(--cream); box-shadow: 8px 8px 0 var(--ink); display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
 .stat b { font-family: var(--display); font-weight: 400; font-size: clamp(40px, 4.6vw, 72px); display: block; line-height: 1; letter-spacing: -0.03em; }
-.stat span { text-transform: uppercase; letter-spacing: .08em; font-size: 13px; }
+.stat em { font-style: normal; font-family: var(--display); font-size: clamp(22px, 2vw, 30px); line-height: 1; margin-top: -2px; }
+.stat span { text-transform: uppercase; letter-spacing: .08em; font-size: 13px; color: var(--mute); }
 
 /* Download: FREE */
 .free { position: relative; padding: 24vh 0 22vh; text-align: center; overflow: hidden; }
@@ -363,9 +397,9 @@ h1 .hl .hlm, h2 .hl .hlm { mix-blend-mode: multiply; }
 .foot a { display: block; text-decoration: none; margin-bottom: 10px; font-weight: 400; }
 .foot a:hover { color: var(--pink); }
 .foot .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 0; }
-.giant { font-family: var(--display); font-weight: 400; font-size: clamp(90px, 21vw, 330px); letter-spacing: -0.07em; line-height: .8; margin: 40px 0 0; user-select: none; display: flex; justify-content: space-between; }
-.giant span { display: inline-block; transition: transform .35s cubic-bezier(.2,.8,.2,1), color .3s; }
-.giant span:hover { transform: translateY(-24px) rotate(-6deg); color: var(--pink); }
+.giant { margin: 40px 0 0; user-select: none; }
+.giant svg { display: block; width: 100%; height: auto; fill: currentColor; transition: color .3s; }
+.giant:hover svg { color: var(--orange); }
 .foot-bottom { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding-top: 24px; font-size: 14px; font-weight: 400; }
 
 /* Reveal */
@@ -422,12 +456,36 @@ h1 .hl .hlm, h2 .hl .hlm { mix-blend-mode: multiply; }
   <nav class="nav" aria-label="Main">
     <a class="brand" href="#top" aria-label="Nagma home"><img src="insignia.svg" alt=""><svg class="wm" viewBox="150 21 290 96" aria-hidden="true"><path d="M152.743 96V24H164.88L204.171 89.52V24H211.886V96H199.749L160.457 31.3029V96H152.743ZM240.355 57.1714C234.183 57.1714 227.326 61.4571 228.955 70.4571L222.783 64.8C224.069 57.5143 231.098 52.1143 240.441 52.1143C251.669 52.1143 259.126 57.8571 259.126 69.8571C259.126 78.4286 256.983 90.8571 264.698 96H256.726C253.983 93.6 252.955 89.8286 252.612 85.6286C250.298 93.0857 245.155 96.8571 237.012 96.8571C227.841 96.8571 222.955 91.4571 222.955 84.7714C222.955 75.6 230.583 70.5429 240.269 70.4571L252.869 70.3714C252.869 61.3714 247.983 57.1714 240.355 57.1714ZM229.126 84.1714C229.126 88.5429 232.555 91.8 237.869 91.8C248.926 91.8 252.612 81.4286 252.612 77.3143L252.698 75.5143L240.269 75.6857C233.583 75.7714 229.126 78.2571 229.126 84.1714ZM279.838 67.2C279.838 72.8571 284.296 77.0571 291.324 77.0571C298.353 77.0571 302.81 72.8571 302.81 67.2C302.81 61.6286 298.353 57.5143 291.324 57.5143C284.638 57.5143 279.838 61.6286 279.838 67.2ZM267.324 99.4286L272.81 94.2C270.581 92.8286 269.038 90.6857 269.038 87.2571C269.038 81.2571 274.181 78.3429 279.238 78.4286C275.896 75.7714 273.924 71.8286 273.924 67.2C273.924 58.7143 280.781 52.5429 291.324 52.5429C294.496 52.5429 297.238 53.0571 299.638 54C298.867 45.9429 303.41 40.9714 309.41 40.0286L315.067 45.7714C314.467 45.6857 313.867 45.6857 313.267 45.6857C306.496 45.6857 303.238 50.2286 303.238 55.8857H303.067C306.753 58.5429 308.724 62.4857 308.724 67.2C308.724 75.7714 302.21 81.9429 291.238 81.9429C287.553 81.9429 285.581 81.2571 282.238 81.2571C278.124 81.2571 275.038 82.9714 275.038 86.3143C275.038 91.3714 281.381 90.8571 284.724 90.3429L295.953 88.7143C304.524 87.4286 315.153 88.5429 315.153 98.8286C315.153 109.114 303.41 113.914 291.153 113.914C277.01 113.914 268.01 107.743 267.324 99.4286ZM273.238 94.4571C271.696 104.314 280.696 108.771 291.153 108.771C300.238 108.771 309.238 105.686 309.238 99.3429C309.238 93.2571 302.038 93.5143 295.696 94.4571L285.324 96C281.896 96.5143 276.838 96.4286 273.238 94.4571ZM339.356 56.9143C332.671 56.9143 328.213 61.5429 327.613 70.0286V96H321.442V53.1429H327.613V60.2571C330.099 55.2 334.556 52.1143 341.413 52.1143C347.928 52.1143 352.556 55.0286 354.699 60.0857C357.442 55.0286 362.328 52.1143 369.271 52.1143C379.213 52.1143 384.528 58.0286 384.528 67.7143V96H378.271V68.8286C378.271 60.9429 373.899 56.9143 367.813 56.9143C361.128 56.9143 356.671 61.5429 356.071 70.0286V96H349.813V68.8286C349.813 60.9429 345.442 56.9143 339.356 56.9143ZM410.491 57.1714C404.32 57.1714 397.463 61.4571 399.091 70.4571L392.92 64.8C394.205 57.5143 401.234 52.1143 410.577 52.1143C421.805 52.1143 429.263 57.8571 429.263 69.8571C429.263 78.4286 427.12 90.8571 434.834 96H426.863C424.12 93.6 423.091 89.8286 422.748 85.6286C420.434 93.0857 415.291 96.8571 407.148 96.8571C397.977 96.8571 393.091 91.4571 393.091 84.7714C393.091 75.6 400.72 70.5429 410.405 70.4571L423.005 70.3714C423.005 61.3714 418.12 57.1714 410.491 57.1714ZM399.263 84.1714C399.263 88.5429 402.691 91.8 408.005 91.8C419.063 91.8 422.748 81.4286 422.748 77.3143L422.834 75.5143L410.405 75.6857C403.72 75.7714 399.263 78.2571 399.263 84.1714Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></a>
     <div class="nav-links">
-      <a href="#products">Products <svg class="ic" aria-hidden="true"><use href="#sh-sparkle"/></svg></a>
+      <div class="menu">
+        <button type="button" aria-expanded="false" aria-controls="menu-products">Products <span class="ar">↓</span></button>
+        <div class="menu-panel" id="menu-products">
+          <a href="#products" data-product="0"><b>Design</b><span>Screens, prototypes, motion</span></a>
+          <a href="#products" data-product="1"><b>Board</b><span>Workshops and whiteboards</span></a>
+          <a href="#products" data-product="2"><b>Slides</b><span>Decks and presenting</span></a>
+          <a href="#products" data-product="3"><b>Campaign</b><span>Every size at once</span></a>
+          <a href="#products" data-product="4"><b>Sites</b><span>Publish a website</span></a>
+          <a href="#products" data-product="5"><b>Make</b><span>Apps with your AI key</span></a>
+          <a href="#products" data-product="6"><b>Video</b><span>Clips, titles, MP4</span></a>
+          <a href="#products" data-product="7"><b>Document</b><span>PDFs, edit and sign</span></a>
+        </div>
+      </div>
       <a href="#how">How it works <span class="ar">↓</span></a>
       <a href="#paid">Usually paid <svg class="ic" aria-hidden="true"><use href="#sh-asterisk"/></svg></a>
       <a href="#server">Your server <svg class="ic" aria-hidden="true"><use href="#sh-bolt"/></svg></a>
       <a href="#open">Open source <svg class="ic" aria-hidden="true"><use href="#sh-star"/></svg></a>
-      <a href="https://api.nagma.app">Open in browser <span class="ar">↗</span></a>
+      <div class="menu">
+        <button type="button" aria-expanded="false" aria-controls="menu-resources">Resources <span class="ar">↓</span></button>
+        <div class="menu-panel" id="menu-resources">
+          <a href="/docs/getting-started/"><b>Getting started</b><span>Download, first run, your files</span></a>
+          <a href="/docs/connect-to-a-server/"><b>Connect to a server</b><span>Local, hosted, or your own</span></a>
+          <a href="/docs/self-hosting/"><b>Self-hosting</b><span>One command on any Linux box</span></a>
+          <a href="/docs/ai-keys/"><b>AI keys</b><span>Bring a key from any provider</span></a>
+          <a href="/releases/"><b>Releases</b><span>Every version and installer</span></a>
+          <a href="/contributing/"><b>Contributing</b><span>Run the code, send a change</span></a>
+          <a href="/security/"><b>Security</b><span>Report a vulnerability</span></a>
+          <a href="https://github.com/fish-hook-studios/nagma"><b>GitHub</b><span>The whole thing, MPL-2.0</span></a>
+        </div>
+      </div>
     </div>
     <a class="btn cta" href="#download">Download free <span class="ar">→</span></a>
   </nav>
@@ -439,11 +497,11 @@ h1 .hl .hlm, h2 .hl .hlm { mix-blend-mode: multiply; }
 <section class="hero" data-bg="#F6F1E7" data-fg="#141413">
   <div class="play" id="play" aria-hidden="true">
     <svg class="toy fun drift" style="left: -12vw; top: 6vh; width: 40vw; color: var(--yellow); --ex: -10vw; --ey: 0; --d: 0s; --dx: 2vw; --dy: 2vw; --rot: 12deg;"><use href="#sh-flower"/></svg>
-    <svg class="toy fun drift" style="right: -10vw; top: 18vh; width: 30vw; color: var(--sky); --ex: 12vw; --ey: 0; --d: .15s; --dx: -2vw; --dy: 3vw; --rot: -18deg;"><use href="#sh-asterisk"/></svg>
+    <svg class="toy fun drift" style="right: 3vw; top: 20vh; width: 24vw; color: var(--sky); --ex: 12vw; --ey: 0; --d: .15s; --dx: -2vw; --dy: 3vw; --rot: -18deg;"><use href="#sh-asterisk"/></svg>
     <svg class="toy fun drift wide" style="left: -8vw; bottom: 4vh; width: 34vw; aspect-ratio: 160 / 100; color: var(--mint); --ex: -10vw; --ey: 8vh; --d: .3s; --dx: 3vw; --dy: -2vw; --rot: 0deg;"><use href="#sh-cloud"/></svg>
     <svg class="toy fun drift" style="right: 16vw; top: 6vh; width: 7vw; color: var(--orange); --ex: 0; --ey: -12vh; --d: .5s; --dx: -1vw; --dy: 2vw; --rot: 90deg;"><use href="#sh-sparkle"/></svg>
-    <div class="toy sticker" style="left: 6vw; top: 44vh; rotate: -8deg; background: var(--mint); animation-delay: .8s;">Free forever</div>
     <div class="toy sticker" style="right: 5vw; bottom: 34vh; rotate: 6deg; background: var(--bubble); animation-delay: 1s;">No account to start</div>
+    <div class="toy sticker" style="left: 5vw; bottom: 34vh; rotate: -6deg; background: var(--mint); animation-delay: .8s;">Free forever</div>
   </div>
   <div class="wrap hero-center">
     <h1>
@@ -458,26 +516,28 @@ h1 .hl .hlm, h2 .hl .hlm { mix-blend-mode: multiply; }
     </div>
 
     <!-- The glance: a Nagma window cycling through five products. -->
+    <div class="stage-wrap">
     <div class="stage" id="stage" aria-label="Nagma in use: design, board, slides, sites and video">
       <div class="bar">
         <span class="dots"><i></i><i></i><i></i></span>
         <span class="tabs"><b data-tab="design" class="on">Design</b><b data-tab="board">Board</b><b data-tab="slides">Slides</b><b data-tab="sites">Sites</b><b data-tab="video">Video</b></span>
-        <span class="who"><i style="background: var(--orange);"></i><i style="background: var(--sky);"></i><i style="background: var(--lime);"></i></span>
+        <span class="who"></span>
       </div>
       <div class="body">
-        <div class="scene on" data-scene="design"><div class="sv"><video muted loop playsinline preload="metadata" poster="img/loop-design.jpg"><source src="img/loop-design.webm" type="video/webm"><source src="img/loop-design.mp4" type="video/mp4"></video></div></div>
-        <div class="scene" data-scene="board"><div class="sv"><video muted loop playsinline preload="metadata" poster="img/loop-board.jpg"><source src="img/loop-board.webm" type="video/webm"><source src="img/loop-board.mp4" type="video/mp4"></video></div></div>
-        <div class="scene" data-scene="slides"><div class="sv"><video muted loop playsinline preload="metadata" poster="img/loop-slides.jpg"><source src="img/loop-slides.webm" type="video/webm"><source src="img/loop-slides.mp4" type="video/mp4"></video></div></div>
-        <div class="scene" data-scene="sites"><div class="sv"><video muted loop playsinline preload="metadata" poster="img/loop-sites.jpg"><source src="img/loop-sites.webm" type="video/webm"><source src="img/loop-sites.mp4" type="video/mp4"></video></div></div>
-        <div class="scene" data-scene="video"><div class="sv"><video muted loop playsinline preload="metadata" poster="img/loop-video.jpg"><source src="img/loop-video.webm" type="video/webm"><source src="img/loop-video.mp4" type="video/mp4"></video></div></div>
+        <div class="scene on" data-scene="design"><div class="sv"><video muted playsinline preload="metadata" poster="img/loop-design.jpg?v=7db4f012"><source src="img/loop-design.mp4?v=6a0089f4" type="video/mp4"><source src="img/loop-design.webm?v=7b458443" type="video/webm"></video></div></div>
+        <div class="scene" data-scene="board"><div class="sv"><video muted playsinline preload="metadata" poster="img/loop-board.jpg?v=e614eb96"><source src="img/loop-board.mp4?v=1e73e6d8" type="video/mp4"><source src="img/loop-board.webm?v=a520f341" type="video/webm"></video></div></div>
+        <div class="scene" data-scene="slides"><div class="sv"><video muted playsinline preload="metadata" poster="img/loop-slides.jpg?v=3933f5e1"><source src="img/loop-slides.mp4?v=9dac5f3f" type="video/mp4"><source src="img/loop-slides.webm?v=d3d291b3" type="video/webm"></video></div></div>
+        <div class="scene" data-scene="sites"><div class="sv"><video muted playsinline preload="metadata" poster="img/loop-sites.jpg?v=146bd807"><source src="img/loop-sites.mp4?v=9b3f0efa" type="video/mp4"><source src="img/loop-sites.webm?v=96d3712f" type="video/webm"></video></div></div>
+        <div class="scene" data-scene="video"><div class="sv"><video muted playsinline preload="metadata" poster="img/loop-video.jpg?v=12980e74"><source src="img/loop-video.mp4?v=65a970b3" type="video/mp4"><source src="img/loop-video.webm?v=7be6c3fd" type="video/webm"></video></div></div>
       </div>
+    </div>
     </div>
   </div>
 </section>
 
 <!-- Kinetic bands -->
 <section class="bands" aria-hidden="true">
-  <img class="cat-peek" src="insignia.svg" alt="">
+  <img class="cat-peek" src="insignia-cat.svg" alt="">
   <div class="band tilt-l" style="--c: var(--orange);"><div class="t"><span>Design</span><span>Board</span><span>Slides</span><span>Campaign</span><span>Sites</span><span>Make</span><span>Video</span><span>Document</span><span>Design</span><span>Board</span><span>Slides</span><span>Campaign</span><span>Sites</span><span>Make</span><span>Video</span><span>Document</span></div></div>
   <div class="band tilt-r rev" style="--c: var(--yellow);"><div class="t"><span>Opens .fig</span><span>.sketch</span><span>.pptx</span><span>.psd</span><span>.idml</span><span>.pdf</span><span>.mp4</span><span>.svg</span><span>Opens .fig</span><span>.sketch</span><span>.pptx</span><span>.psd</span><span>.idml</span><span>.pdf</span><span>.mp4</span><span>.svg</span></div></div>
 </section>
@@ -490,14 +550,14 @@ h1 .hl .hlm, h2 .hl .hlm { mix-blend-mode: multiply; }
       <p class="lead reveal" style="max-width: 380px;">Every product opens the same files, shares the same components and brand kits, and works with the same people. Keep scrolling: the rail moves sideways.</p>
     </div>
     <div class="rail-track" id="track">
-      <a class="pcard" href="https://api.nagma.app/?new=design" style="background: var(--orange);"><span class="n">01</span><h3>Design</h3><div class="loop fill"><video muted loop playsinline preload="metadata" poster="img/loop-design.jpg"><source src="img/loop-design.webm" type="video/webm"><source src="img/loop-design.mp4" type="video/mp4"></video></div><p>Vectors, auto layout, components, prototypes, motion, inspect. Opens .fig and .sketch.</p><span class="go">Explore Design →</span></a>
-      <a class="pcard" href="https://api.nagma.app/?new=board" style="background: var(--yellow);"><span class="n">02</span><h3>Board</h3><div class="loop fill"><video muted loop playsinline preload="metadata" poster="img/loop-board.jpg"><source src="img/loop-board.webm" type="video/webm"><source src="img/loop-board.mp4" type="video/mp4"></video></div><p>Stickies, sections, connectors, templates, voting and a timer. Turn clusters into frames.</p><span class="go">Explore Board →</span></a>
-      <a class="pcard" href="https://api.nagma.app/?new=slides" style="background: var(--sky);"><span class="n">03</span><h3>Slides</h3><div class="loop fill"><video muted loop playsinline preload="metadata" poster="img/loop-slides.jpg"><source src="img/loop-slides.webm" type="video/webm"><source src="img/loop-slides.mp4" type="video/mp4"></video></div><p>Templates, a real design canvas on every slide, presenter notes, export to PDF and PowerPoint.</p><span class="go">Explore Slides →</span></a>
-      <a class="pcard" href="https://api.nagma.app/?new=campaign" style="background: var(--pink);"><span class="n">04</span><h3>Campaign</h3><div class="loop fill"><video muted loop playsinline preload="metadata" poster="img/loop-campaign.jpg"><source src="img/loop-campaign.webm" type="video/webm"><source src="img/loop-campaign.mp4" type="video/mp4"></video></div><p>Posts, stories and banners in every size from one design, with brand kits and bulk edits.</p><span class="go">Explore Campaign →</span></a>
-      <a class="pcard" href="https://api.nagma.app/?new=site" style="background: var(--lime);"><span class="n">05</span><h3>Sites</h3><div class="loop fill"><video muted loop playsinline preload="metadata" poster="img/loop-sites.jpg"><source src="img/loop-sites.webm" type="video/webm"><source src="img/loop-sites.mp4" type="video/mp4"></video></div><p>Responsive sites with breakpoints, a CMS and one-click publishing to your own server and domain.</p><span class="go">Explore Sites →</span></a>
-      <a class="pcard" href="https://api.nagma.app/?new=make" style="background: var(--lilac);"><span class="n">06</span><h3>Make</h3><div class="loop fill"><video muted loop playsinline preload="metadata" poster="img/loop-make.jpg"><source src="img/loop-make.webm" type="video/webm"><source src="img/loop-make.mp4" type="video/mp4"></video></div><p>Apps from a prompt or from your frames, with your own AI key from any provider.</p><span class="go">Explore Make →</span></a>
-      <a class="pcard" href="https://api.nagma.app/?new=video" style="background: var(--cream);"><span class="n">07</span><h3>Video</h3><div class="loop fill"><video muted loop playsinline preload="metadata" poster="img/loop-video.jpg"><source src="img/loop-video.webm" type="video/webm"><source src="img/loop-video.mp4" type="video/mp4"></video></div><p>Clips, titles and motion graphics, exported to MP4 inside the app.</p><span class="go">Explore Video →</span></a>
-      <a class="pcard" href="https://api.nagma.app/?new=document" style="background: var(--mint);"><span class="n">08</span><h3>Document</h3><div class="loop fill"><video muted loop playsinline preload="metadata" poster="img/loop-document.jpg"><source src="img/loop-document.webm" type="video/webm"><source src="img/loop-document.mp4" type="video/mp4"></video></div><p>Open any PDF, reorder pages, edit the text, fill forms and sign.</p><span class="go">Explore Document →</span></a>
+      <a class="pcard" href="https://api.nagma.app/?new=design" style="background: var(--orange);"><span class="n">01</span><h3>Design</h3><div class="loop fill"><video muted playsinline preload="metadata" poster="img/loop-design.jpg?v=7db4f012"><source src="img/loop-design.mp4?v=6a0089f4" type="video/mp4"><source src="img/loop-design.webm?v=7b458443" type="video/webm"></video></div><p>Vectors, auto layout, components, prototypes, motion, inspect. Opens .fig and .sketch.</p><span class="go">Explore Design →</span></a>
+      <a class="pcard" href="https://api.nagma.app/?new=board" style="background: var(--yellow);"><span class="n">02</span><h3>Board</h3><div class="loop fill"><video muted playsinline preload="metadata" poster="img/loop-board.jpg?v=e614eb96"><source src="img/loop-board.mp4?v=1e73e6d8" type="video/mp4"><source src="img/loop-board.webm?v=a520f341" type="video/webm"></video></div><p>Stickies, sections, connectors, templates, voting and a timer. Turn clusters into frames.</p><span class="go">Explore Board →</span></a>
+      <a class="pcard" href="https://api.nagma.app/?new=slides" style="background: var(--sky);"><span class="n">03</span><h3>Slides</h3><div class="loop fill"><video muted playsinline preload="metadata" poster="img/loop-slides.jpg?v=3933f5e1"><source src="img/loop-slides.mp4?v=9dac5f3f" type="video/mp4"><source src="img/loop-slides.webm?v=d3d291b3" type="video/webm"></video></div><p>Templates, a real design canvas on every slide, presenter notes, export to PDF and PowerPoint.</p><span class="go">Explore Slides →</span></a>
+      <a class="pcard" href="https://api.nagma.app/?new=campaign" style="background: var(--pink);"><span class="n">04</span><h3>Campaign</h3><div class="loop fill"><video muted playsinline preload="metadata" poster="img/loop-campaign.jpg?v=968610a3"><source src="img/loop-campaign.mp4?v=f7f907b0" type="video/mp4"><source src="img/loop-campaign.webm?v=d499d35e" type="video/webm"></video></div><p>Posts, stories and banners in every size from one design, with brand kits and bulk edits.</p><span class="go">Explore Campaign →</span></a>
+      <a class="pcard" href="https://api.nagma.app/?new=site" style="background: var(--lime);"><span class="n">05</span><h3>Sites</h3><div class="loop fill"><video muted playsinline preload="metadata" poster="img/loop-sites.jpg?v=146bd807"><source src="img/loop-sites.mp4?v=9b3f0efa" type="video/mp4"><source src="img/loop-sites.webm?v=96d3712f" type="video/webm"></video></div><p>Responsive sites with breakpoints, a CMS and one-click publishing to your own server and domain.</p><span class="go">Explore Sites →</span></a>
+      <a class="pcard" href="https://api.nagma.app/?new=make" style="background: var(--lilac);"><span class="n">06</span><h3>Make</h3><div class="loop fill"><video muted playsinline preload="metadata" poster="img/loop-make.jpg?v=30e7462a"><source src="img/loop-make.mp4?v=d7c97341" type="video/mp4"><source src="img/loop-make.webm?v=34eeda0a" type="video/webm"></video></div><p>Apps from a prompt or from your frames, with your own AI key from any provider.</p><span class="go">Explore Make →</span></a>
+      <a class="pcard" href="https://api.nagma.app/?new=video" style="background: var(--cream);"><span class="n">07</span><h3>Video</h3><div class="loop fill"><video muted playsinline preload="metadata" poster="img/loop-video.jpg?v=12980e74"><source src="img/loop-video.mp4?v=65a970b3" type="video/mp4"><source src="img/loop-video.webm?v=7be6c3fd" type="video/webm"></video></div><p>Clips, titles and motion graphics, exported to MP4 inside the app.</p><span class="go">Explore Video →</span></a>
+      <a class="pcard" href="https://api.nagma.app/?new=document" style="background: var(--mint);"><span class="n">08</span><h3>Document</h3><div class="loop fill"><video muted playsinline preload="metadata" poster="img/loop-document.jpg?v=0c913849"><source src="img/loop-document.mp4?v=a2eb9ed1" type="video/mp4"><source src="img/loop-document.webm?v=426d8a2c" type="video/webm"></video></div><p>Open any PDF, reorder pages, edit the text, fill forms and sign.</p><span class="go">Explore Document →</span></a>
       <div class="rail-end"></div>
     </div>
   </div>
@@ -506,20 +566,19 @@ h1 .hl .hlm, h2 .hl .hlm { mix-blend-mode: multiply; }
 <!-- Claim -->
 <section class="claim drop" data-bg="#F5C842" data-fg="#141413" style="position: relative; overflow: hidden;">
   <div class="crowd" aria-hidden="true">
-    <div class="cc" style="--x: 72%; --y: 78%; --fx: -40vw; --fy: 30vh; --d: 0s; --c: var(--pink);"><svg viewBox="0 0 24 24"><path d="M4 3l16 7.5-7.2 1.8L10 20z"/></svg><span>Priya</span></div>
-    <div class="cc" style="--x: 60%; --y: 84%; --fx: 45vw; --fy: 20vh; --d: .15s; --c: var(--sky);"><svg viewBox="0 0 24 24"><path d="M4 3l16 7.5-7.2 1.8L10 20z"/></svg><span>Tomás</span></div>
-    <div class="cc" style="--x: 80%; --y: 70%; --fx: 40vw; --fy: -40vh; --d: .3s; --c: var(--lime);"><svg viewBox="0 0 24 24"><path d="M4 3l16 7.5-7.2 1.8L10 20z"/></svg><span>Ama</span></div>
-    <div class="cc" style="--x: 54%; --y: 74%; --fx: -50vw; --fy: -30vh; --d: .45s; --c: var(--lilac);"><svg viewBox="0 0 24 24"><path d="M4 3l16 7.5-7.2 1.8L10 20z"/></svg><span>Jonas</span></div>
-    <div class="cc" style="--x: 67%; --y: 90%; --fx: 10vw; --fy: 50vh; --d: .6s; --c: var(--orange);"><svg viewBox="0 0 24 24"><path d="M4 3l16 7.5-7.2 1.8L10 20z"/></svg><span>Mei</span></div>
-    <div class="cc" style="--x: 86%; --y: 82%; --fx: 50vw; --fy: 10vh; --d: .75s; --c: var(--mint);"><svg viewBox="0 0 24 24"><path d="M4 3l16 7.5-7.2 1.8L10 20z"/></svg><span>Dev</span></div>
-    <div class="cc" style="--x: 48%; --y: 88%; --fx: -30vw; --fy: 45vh; --d: .9s; --c: var(--bubble);"><svg viewBox="0 0 24 24"><path d="M4 3l16 7.5-7.2 1.8L10 20z"/></svg><span>Sana</span></div>
-    <div class="cc" style="--x: 76%; --y: 92%; --fx: 30vw; --fy: 40vh; --d: 1.05s; --c: var(--yellow);"><svg viewBox="0 0 24 24"><path d="M4 3l16 7.5-7.2 1.8L10 20z"/></svg><span>Leo</span></div>
+    <div class="cc" style="--x: 70%; --y: 78%; --fx: -40vw; --fy: 30vh; --d: 0s; --c: var(--pink);"><svg viewBox="0 0 24 24"><path d="M4 3l16 7.5-7.2 1.8L10 20z"/></svg><span>Koduman Potti</span></div>
+    <div class="cc" style="--x: 58%; --y: 86%; --fx: 45vw; --fy: 20vh; --d: .1s; --c: var(--sky);"><svg viewBox="0 0 24 24"><path d="M4 3l16 7.5-7.2 1.8L10 20z"/></svg><span>Michael</span></div>
+    <div class="cc" style="--x: 82%; --y: 72%; --fx: 40vw; --fy: -40vh; --d: .2s; --c: var(--lime);"><svg viewBox="0 0 24 24"><path d="M4 3l16 7.5-7.2 1.8L10 20z"/></svg><span>Bilal John</span></div>
+    <div class="cc" style="--x: 50%; --y: 74%; --fx: -50vw; --fy: -30vh; --d: .3s; --c: var(--lilac);"><svg viewBox="0 0 24 24"><path d="M4 3l16 7.5-7.2 1.8L10 20z"/></svg><span>Pranchiyettan</span></div>
+    <div class="cc" style="--x: 66%; --y: 92%; --fx: 10vw; --fy: 50vh; --d: .4s; --c: var(--orange);"><svg viewBox="0 0 24 24"><path d="M4 3l16 7.5-7.2 1.8L10 20z"/></svg><span>Balram</span></div>
+    <div class="cc" style="--x: 88%; --y: 84%; --fx: 50vw; --fy: 10vh; --d: .5s; --c: var(--yellow);"><svg viewBox="0 0 24 24"><path d="M4 3l16 7.5-7.2 1.8L10 20z"/></svg><span>Achootty</span></div>
+    <div class="cc" style="--x: 44%; --y: 90%; --fx: -20vw; --fy: 45vh; --d: .6s; --c: var(--mint);"><svg viewBox="0 0 24 24"><path d="M4 3l16 7.5-7.2 1.8L10 20z"/></svg><span>Joseph Alex</span></div>
   </div>
   <svg class="fun drift" style="left: -9vw; top: 10%; width: 26vw; color: var(--pink); --ex: -10vw; --ey: 0; --d: 0s; --dx: 2vw; --dy: 2vw; --rot: 20deg;" aria-hidden="true"><use href="#sh-flower"/></svg>
   <svg class="fun drift" style="right: -6vw; bottom: 6%; width: 20vw; color: var(--sky); --ex: 8vw; --ey: 0; --d: .2s; --dx: -2vw; --dy: -2vw; --rot: -25deg;" aria-hidden="true"><use href="#sh-star"/></svg>
   <div class="wrap" style="position: relative;">
     <span class="eyebrow reveal">How it works</span>
-    <h2 class="reveal" style="margin-top: 24px;"><span class="w">Works</span> <span class="w">alone</span> <span class="w">on</span> <span class="w">your</span> <span class="w">machine.</span><br><span class="w hl pink">Connect</span> <span class="w">a</span> <span class="w">server</span> <span class="w">when</span> <span class="w">you</span> <span class="w">want</span> <span class="w">company.</span></h2>
+    <h2 class="reveal" style="margin-top: 24px;"><span class="w">Works</span> <span class="w">alone</span> <span class="w">on</span> <span class="w">your</span> <span class="w">machine.</span><br><span class="w hl pink">Connect</span> <span class="w">a</span> <span class="w">server</span> <span class="w">when</span> <span class="w">you</span> <span class="w">want</span> <span class="w" id="company">company.</span></h2>
   </div>
 </section>
 
@@ -528,19 +587,19 @@ h1 .hl .hlm, h2 .hl .hlm { mix-blend-mode: multiply; }
   <div class="wrap">
     <div class="scard">
       <div class="copy"><span class="eyebrow">01 Design</span><h3>Layouts that build themselves</h3><p class="lead">Auto layout, constraints and grids keep every frame tidy as content changes. Components and variants carry the rules into every file.</p><ul><li>Hug, fill, fixed</li><li>Variants and variables</li><li>Shared libraries</li></ul></div>
-      <div class="ph"><span class="tag motion">Loop</span><div><strong>Auto layout reflow</strong>Text is typed into a card; the card, its row and the frame grow to fit. A variant switch swaps the button style everywhere.</div></div>
+      <div class="loop"><video muted playsinline preload="metadata" poster="img/loop-autolayout.jpg?v=39056d35"><source src="img/loop-autolayout.mp4?v=736065d6" type="video/mp4"><source src="img/loop-autolayout.webm?v=048e4a3f" type="video/webm"></video></div>
     </div>
     <div class="scard">
       <div class="copy"><span class="eyebrow">02 Prototype and motion</span><h3>From static screens to a moving story</h3><p class="lead">Wire up interactions, pick transitions, then open the Motion timeline to keyframe anything. Present it, share it, export it as video.</p><ul><li>Overlays and scroll</li><li>Transitions</li><li>Keyframes and easing</li></ul></div>
-      <div class="ph"><span class="tag motion">Loop</span><div><strong>Prototype play</strong>A link is dragged from a button to a screen, a transition is picked, the preview plays it.</div></div>
+      <div class="loop"><video muted playsinline preload="metadata" poster="img/loop-prototype.jpg?v=ead1f4df"><source src="img/loop-prototype.mp4?v=afe2f243" type="video/mp4"><source src="img/loop-prototype.webm?v=1388aee3" type="video/webm"></video></div>
     </div>
     <div class="scard">
       <div class="copy"><span class="eyebrow">03 Together</span><h3>Everyone in the file at the same time</h3><p class="lead">Live cursors, comments, version history and share links on every kind of file. Invite by email, or share a link with a key only the people you choose can open.</p><ul><li>Cursors and follow</li><li>Comments and mentions</li><li>Named versions</li></ul></div>
-      <div class="ph"><span class="tag motion">Loop</span><div><strong>Collaboration montage</strong>Five named cursors edit a board, then a deck. A comment opens, someone resolves it, a version is restored.</div></div>
+      <div class="loop"><video muted playsinline preload="metadata" poster="img/loop-collab.jpg?v=26f0487f"><source src="img/loop-collab.mp4?v=d0ece360" type="video/mp4"><source src="img/loop-collab.webm?v=2f3ac0b9" type="video/webm"></video></div>
     </div>
     <div class="scard">
-      <div class="copy"><span class="eyebrow">04 AI with your own key</span><h3>Bring the model you already pay for</h3><p class="lead">Add a key from the provider you choose and every AI feature lights up: Make apps from a prompt, rewrite copy, generate images, summarise a board. You pay the provider, if at all. Nagma never meters it.</p><ul><li>[Provider A]</li><li>[Provider B]</li><li>[Provider C]</li><li>Local model</li></ul></div>
-      <div class="ph"><span class="tag motion">Loop</span><div><strong>Make from a prompt</strong>A prompt is typed, an app assembles on the canvas piece by piece, and it runs.</div></div>
+      <div class="copy"><span class="eyebrow">04 Components and libraries</span><h3>Design once, change everywhere</h3><p class="lead">Turn anything into a component with properties and variants, publish it to a library, and every instance in every file on your server follows the change.</p><ul><li>Properties and variants</li><li>Shared libraries</li><li>Instances update everywhere</li></ul></div>
+      <div class="loop"><video muted playsinline preload="metadata" poster="img/loop-components.jpg?v=eb520508"><source src="img/loop-components.mp4?v=d13c8e96" type="video/mp4"><source src="img/loop-components.webm?v=8a81c34b" type="video/webm"></video></div>
     </div>
     <div class="stack-space" style="height: 40vh;"></div>
   </div>
@@ -620,9 +679,9 @@ h1 .hl .hlm, h2 .hl .hlm { mix-blend-mode: multiply; }
   <div class="wrap">
     <h2 class="reveal" style="max-width: 1000px; margin-bottom: 64px;">MPL-2.0. <span class="hl green">Read it, fork it, run it.</span></h2>
     <div class="stats">
-      <div class="stat reveal"><b>[stars]</b><span>GitHub stars</span></div>
-      <div class="stat reveal"><b>[n]</b><span>Contributors</span></div>
-      <div class="stat reveal"><b>[n]</b><span>Servers running</span></div>
+      <div class="stat reveal"><b>1</b><em>repo</em><span>Editor, server and desktop app, together</span></div>
+      <div class="stat reveal"><b>0</b><em>trackers</em><span>No telemetry, no analytics, no sign-up wall</span></div>
+      <div class="stat reveal"><b>1</b><em>command</em><span>Self-host on any Linux box</span></div>
     </div>
     <div class="reveal" style="display: flex; justify-content: space-between; align-items: center; gap: 32px; flex-wrap: wrap; margin-top: 40px;">
       <p class="lead" style="max-width: 640px;">The editor, the server and the desktop app are one public repository. No telemetry, no accounts you did not ask for, no plan that expires.</p>
@@ -655,16 +714,16 @@ h1 .hl .hlm, h2 .hl .hlm { mix-blend-mode: multiply; }
     <div class="foot-top">
       <div>
         <a class="brand" href="#top" aria-label="Nagma home"><img src="insignia.svg" alt=""><svg class="wm" viewBox="150 21 290 96" aria-hidden="true"><path d="M152.743 96V24H164.88L204.171 89.52V24H211.886V96H199.749L160.457 31.3029V96H152.743ZM240.355 57.1714C234.183 57.1714 227.326 61.4571 228.955 70.4571L222.783 64.8C224.069 57.5143 231.098 52.1143 240.441 52.1143C251.669 52.1143 259.126 57.8571 259.126 69.8571C259.126 78.4286 256.983 90.8571 264.698 96H256.726C253.983 93.6 252.955 89.8286 252.612 85.6286C250.298 93.0857 245.155 96.8571 237.012 96.8571C227.841 96.8571 222.955 91.4571 222.955 84.7714C222.955 75.6 230.583 70.5429 240.269 70.4571L252.869 70.3714C252.869 61.3714 247.983 57.1714 240.355 57.1714ZM229.126 84.1714C229.126 88.5429 232.555 91.8 237.869 91.8C248.926 91.8 252.612 81.4286 252.612 77.3143L252.698 75.5143L240.269 75.6857C233.583 75.7714 229.126 78.2571 229.126 84.1714ZM279.838 67.2C279.838 72.8571 284.296 77.0571 291.324 77.0571C298.353 77.0571 302.81 72.8571 302.81 67.2C302.81 61.6286 298.353 57.5143 291.324 57.5143C284.638 57.5143 279.838 61.6286 279.838 67.2ZM267.324 99.4286L272.81 94.2C270.581 92.8286 269.038 90.6857 269.038 87.2571C269.038 81.2571 274.181 78.3429 279.238 78.4286C275.896 75.7714 273.924 71.8286 273.924 67.2C273.924 58.7143 280.781 52.5429 291.324 52.5429C294.496 52.5429 297.238 53.0571 299.638 54C298.867 45.9429 303.41 40.9714 309.41 40.0286L315.067 45.7714C314.467 45.6857 313.867 45.6857 313.267 45.6857C306.496 45.6857 303.238 50.2286 303.238 55.8857H303.067C306.753 58.5429 308.724 62.4857 308.724 67.2C308.724 75.7714 302.21 81.9429 291.238 81.9429C287.553 81.9429 285.581 81.2571 282.238 81.2571C278.124 81.2571 275.038 82.9714 275.038 86.3143C275.038 91.3714 281.381 90.8571 284.724 90.3429L295.953 88.7143C304.524 87.4286 315.153 88.5429 315.153 98.8286C315.153 109.114 303.41 113.914 291.153 113.914C277.01 113.914 268.01 107.743 267.324 99.4286ZM273.238 94.4571C271.696 104.314 280.696 108.771 291.153 108.771C300.238 108.771 309.238 105.686 309.238 99.3429C309.238 93.2571 302.038 93.5143 295.696 94.4571L285.324 96C281.896 96.5143 276.838 96.4286 273.238 94.4571ZM339.356 56.9143C332.671 56.9143 328.213 61.5429 327.613 70.0286V96H321.442V53.1429H327.613V60.2571C330.099 55.2 334.556 52.1143 341.413 52.1143C347.928 52.1143 352.556 55.0286 354.699 60.0857C357.442 55.0286 362.328 52.1143 369.271 52.1143C379.213 52.1143 384.528 58.0286 384.528 67.7143V96H378.271V68.8286C378.271 60.9429 373.899 56.9143 367.813 56.9143C361.128 56.9143 356.671 61.5429 356.071 70.0286V96H349.813V68.8286C349.813 60.9429 345.442 56.9143 339.356 56.9143ZM410.491 57.1714C404.32 57.1714 397.463 61.4571 399.091 70.4571L392.92 64.8C394.205 57.5143 401.234 52.1143 410.577 52.1143C421.805 52.1143 429.263 57.8571 429.263 69.8571C429.263 78.4286 427.12 90.8571 434.834 96H426.863C424.12 93.6 423.091 89.8286 422.748 85.6286C420.434 93.0857 415.291 96.8571 407.148 96.8571C397.977 96.8571 393.091 91.4571 393.091 84.7714C393.091 75.6 400.72 70.5429 410.405 70.4571L423.005 70.3714C423.005 61.3714 418.12 57.1714 410.491 57.1714ZM399.263 84.1714C399.263 88.5429 402.691 91.8 408.005 91.8C419.063 91.8 422.748 81.4286 422.748 77.3143L422.834 75.5143L410.405 75.6857C403.72 75.7714 399.263 78.2571 399.263 84.1714Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></a>
-        <p style="margin-top: 14px; max-width: 300px; font-weight: 400;">By Fishhook Studios. Free, open source, local-first. Made with a cat in the room.</p>
+        <p style="margin-top: 14px; max-width: 300px;">By Fishhook Studios. Free, open source, local-first.</p>
       </div>
-      <div><b>Products</b><a href="design.html">Design</a><a href="board.html">Board</a><a href="slides.html">Slides</a><a href="campaign.html">Campaign</a><a href="sites.html">Sites</a><a href="make.html">Make</a><a href="video.html">Video</a><a href="document.html">Document</a></div>
-      <div><b>Get started</b><a href="#download">Download</a><a href="https://api.nagma.app">Open in browser</a><a href="#server">Connect a server</a><a href="#server">Self-host</a><a href="#how">AI keys</a></div>
-      <div><b>Resources</b><a href="#open">Docs</a><a href="https://github.com/fish-hook-studios/nagma">GitHub</a><a href="https://github.com/fish-hook-studios/nagma/releases">Releases</a><a href="#open">Security</a></div>
-      <div><b>Company</b><a href="#open">About</a><a href="#open">Contact</a><a href="#open">Licence</a><a href="#open">Trademarks</a></div>
+      <div><b>Products</b><a href="#products">Design</a><a href="#products">Board</a><a href="#products">Slides</a><a href="#products">Campaign</a><a href="#products">Sites</a><a href="#products">Make</a><a href="#products">Video</a><a href="#products">Document</a></div>
+      <div><b>Get started</b><a href="#download">Download</a><a href="https://api.nagma.app">Open in browser</a><a href="#server">Connect a server</a><a href="#server">Self-host</a><a href="#paid">What's free</a></div>
+      <div><b>Resources</b><a href="/docs/getting-started/">Guides</a><a href="https://github.com/fish-hook-studios/nagma">GitHub</a><a href="/releases/">Releases</a><a href="/security/">Security</a><a href="/contributing/">Contributing</a></div>
+      <div><b>Company</b><a href="/about/">About</a><a href="/contact/">Contact</a><a href="/licence/">Licence</a><a href="/third-party/">Third-party notices</a></div>
     </div>
-    <div class="giant" aria-hidden="true"><span>N</span><span>a</span><span>g</span><span>m</span><span>a</span></div>
+    <div class="giant" aria-hidden="true"><svg viewBox="150 21 290 96" preserveAspectRatio="xMidYMid meet"><path d="M152.743 96V24H164.88L204.171 89.52V24H211.886V96H199.749L160.457 31.3029V96H152.743ZM240.355 57.1714C234.183 57.1714 227.326 61.4571 228.955 70.4571L222.783 64.8C224.069 57.5143 231.098 52.1143 240.441 52.1143C251.669 52.1143 259.126 57.8571 259.126 69.8571C259.126 78.4286 256.983 90.8571 264.698 96H256.726C253.983 93.6 252.955 89.8286 252.612 85.6286C250.298 93.0857 245.155 96.8571 237.012 96.8571C227.841 96.8571 222.955 91.4571 222.955 84.7714C222.955 75.6 230.583 70.5429 240.269 70.4571L252.869 70.3714C252.869 61.3714 247.983 57.1714 240.355 57.1714ZM229.126 84.1714C229.126 88.5429 232.555 91.8 237.869 91.8C248.926 91.8 252.612 81.4286 252.612 77.3143L252.698 75.5143L240.269 75.6857C233.583 75.7714 229.126 78.2571 229.126 84.1714ZM279.838 67.2C279.838 72.8571 284.296 77.0571 291.324 77.0571C298.353 77.0571 302.81 72.8571 302.81 67.2C302.81 61.6286 298.353 57.5143 291.324 57.5143C284.638 57.5143 279.838 61.6286 279.838 67.2ZM267.324 99.4286L272.81 94.2C270.581 92.8286 269.038 90.6857 269.038 87.2571C269.038 81.2571 274.181 78.3429 279.238 78.4286C275.896 75.7714 273.924 71.8286 273.924 67.2C273.924 58.7143 280.781 52.5429 291.324 52.5429C294.496 52.5429 297.238 53.0571 299.638 54C298.867 45.9429 303.41 40.9714 309.41 40.0286L315.067 45.7714C314.467 45.6857 313.867 45.6857 313.267 45.6857C306.496 45.6857 303.238 50.2286 303.238 55.8857H303.067C306.753 58.5429 308.724 62.4857 308.724 67.2C308.724 75.7714 302.21 81.9429 291.238 81.9429C287.553 81.9429 285.581 81.2571 282.238 81.2571C278.124 81.2571 275.038 82.9714 275.038 86.3143C275.038 91.3714 281.381 90.8571 284.724 90.3429L295.953 88.7143C304.524 87.4286 315.153 88.5429 315.153 98.8286C315.153 109.114 303.41 113.914 291.153 113.914C277.01 113.914 268.01 107.743 267.324 99.4286ZM273.238 94.4571C271.696 104.314 280.696 108.771 291.153 108.771C300.238 108.771 309.238 105.686 309.238 99.3429C309.238 93.2571 302.038 93.5143 295.696 94.4571L285.324 96C281.896 96.5143 276.838 96.4286 273.238 94.4571ZM339.356 56.9143C332.671 56.9143 328.213 61.5429 327.613 70.0286V96H321.442V53.1429H327.613V60.2571C330.099 55.2 334.556 52.1143 341.413 52.1143C347.928 52.1143 352.556 55.0286 354.699 60.0857C357.442 55.0286 362.328 52.1143 369.271 52.1143C379.213 52.1143 384.528 58.0286 384.528 67.7143V96H378.271V68.8286C378.271 60.9429 373.899 56.9143 367.813 56.9143C361.128 56.9143 356.671 61.5429 356.071 70.0286V96H349.813V68.8286C349.813 60.9429 345.442 56.9143 339.356 56.9143ZM410.491 57.1714C404.32 57.1714 397.463 61.4571 399.091 70.4571L392.92 64.8C394.205 57.5143 401.234 52.1143 410.577 52.1143C421.805 52.1143 429.263 57.8571 429.263 69.8571C429.263 78.4286 427.12 90.8571 434.834 96H426.863C424.12 93.6 423.091 89.8286 422.748 85.6286C420.434 93.0857 415.291 96.8571 407.148 96.8571C397.977 96.8571 393.091 91.4571 393.091 84.7714C393.091 75.6 400.72 70.5429 410.405 70.4571L423.005 70.3714C423.005 61.3714 418.12 57.1714 410.491 57.1714ZM399.263 84.1714C399.263 88.5429 402.691 91.8 408.005 91.8C419.063 91.8 422.748 81.4286 422.748 77.3143L422.834 75.5143L410.405 75.6857C403.72 75.7714 399.263 78.2571 399.263 84.1714Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></div>
     <div class="foot-bottom">
-      <span>Nagma is open source under MPL-2.0. [year] Fishhook Studios.</span>
+      <span>Nagma is open source under MPL-2.0. <span id="year">2026</span> Fishhook Studios.</span>
       <span>No cookies, no tracking.</span>
     </div>
   </div>
@@ -738,7 +797,18 @@ function showScene(i) {
 }
 scenes[0].querySelector("video")?.play().catch(() => {});
 let timer = null;
-function startLoop() { if (reduce) return; clearInterval(timer); timer = setInterval(() => { const v = scenes[scene].querySelector("video"); if (v && !v.paused && v.duration && v.currentTime < v.duration - 0.6) return; scene = (scene + 1) % scenes.length; showScene(scene); }, 500); }
+function startLoop() {
+  if (reduce) return; clearInterval(timer);
+  let endedAt = 0;
+  timer = setInterval(() => {
+    const v = scenes[scene].querySelector("video");
+    if (v && !v.ended) { endedAt = 0; return; }
+    if (!endedAt) { endedAt = Date.now(); return; }
+    if (Date.now() - endedAt < 2000) return;
+    endedAt = 0; scene = (scene + 1) % scenes.length; showScene(scene);
+  }, 250);
+}
+scenes.forEach((s) => { const v = s.querySelector("video"); if (v) v.dataset.hold = "1"; });
 startLoop();
 tabs.forEach((t, k) => t.addEventListener("click", () => { scene = k; showScene(k); startLoop(); }));
 
@@ -880,11 +950,47 @@ paidToggle.addEventListener("click", () => {
   if (open) document.getElementById("paid").scrollIntoView({ behavior: "smooth", block: "start" });
 });
 
+// Every loop holds its last frame for two seconds, then starts over.
+document.querySelectorAll("video").forEach((v) => {
+  const restart = () => setTimeout(() => { if (v.isConnected && !v.dataset.hold) { v.currentTime = 0; v.play().catch(() => {}); } }, 2000);
+  v.addEventListener("ended", restart);
+});
+
 // Product loops play only while on screen.
 const vio = new IntersectionObserver((entries) => {
   for (const e of entries) { const v = e.target; if (e.isIntersecting) v.play().catch(() => {}); else v.pause(); }
 }, { threshold: 0.2 });
 document.querySelectorAll(".loop video").forEach((v) => vio.observe(v));
+
+document.getElementById("year").textContent = String(new Date().getFullYear());
+
+// Hovering "company." calls the crowd in; leaving it sends them off again.
+const claim = document.querySelector(".claim"), company = document.getElementById("company");
+let leaveTimer = null;
+company.addEventListener("pointerenter", () => { clearTimeout(leaveTimer); claim.classList.remove("leaving"); claim.classList.add("crowded"); });
+company.addEventListener("pointerleave", () => { leaveTimer = setTimeout(() => { claim.classList.remove("crowded"); claim.classList.add("leaving"); }, 1200); });
+company.addEventListener("focus", () => claim.classList.add("crowded"));
+
+// Nav dropdowns: hover or click to open, Escape or a click elsewhere to close.
+document.querySelectorAll(".menu").forEach((m) => {
+  const btn = m.querySelector("button");
+  let closeTimer = null;
+  const open = () => { clearTimeout(closeTimer); document.querySelectorAll(".menu.open").forEach((o) => { if (o !== m) { o.classList.remove("open"); o.querySelector("button").setAttribute("aria-expanded", "false"); } }); m.classList.add("open"); btn.setAttribute("aria-expanded", "true"); };
+  const close = () => { m.classList.remove("open"); btn.setAttribute("aria-expanded", "false"); };
+  m.addEventListener("pointerenter", open);
+  m.addEventListener("pointerleave", () => { closeTimer = setTimeout(close, 180); });
+  btn.addEventListener("click", () => (m.classList.contains("open") ? close() : open()));
+  m.addEventListener("keydown", (e) => { if (e.key === "Escape") { close(); btn.focus(); } });
+});
+document.addEventListener("pointerdown", (e) => { if (!e.target.closest(".menu")) document.querySelectorAll(".menu.open").forEach((m) => { m.classList.remove("open"); m.querySelector("button").setAttribute("aria-expanded", "false"); }); });
+// A product in the menu scrolls the rail to that card (on the home page; elsewhere it is a plain link).
+document.querySelectorAll("[data-product]").forEach((a) => a.addEventListener("click", (e) => {
+  const railEl = document.querySelector(".rail"); if (!railEl) return;
+  e.preventDefault();
+  const i = Number(a.dataset.product), total = railEl.offsetHeight - innerHeight;
+  window.scrollTo({ top: railEl.offsetTop + (i / 7) * total, behavior: "smooth" });
+  a.closest(".menu")?.classList.remove("open");
+}));
 
 // Reveal on scroll; .drop sections let their shapes fall in.
 const io = new IntersectionObserver((entries) => {

@@ -34,8 +34,30 @@
     {
       "name": "landing",
       "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "5391", "--bind", "127.0.0.1", "--directory", "apps/landing"],
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "5391",
+        "--bind",
+        "127.0.0.1",
+        "--directory",
+        "apps/landing"
+      ],
       "port": 5391
+    },
+    {
+      "name": "site",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "5392",
+        "--bind",
+        "127.0.0.1",
+        "--directory",
+        "apps/landing/dist"
+      ],
+      "port": 5392
     }
   ]
 }

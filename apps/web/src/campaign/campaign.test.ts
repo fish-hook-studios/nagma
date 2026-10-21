@@ -9,7 +9,7 @@ import type { NagmaDocument, SceneNode } from "../engine/types";
 import { expectConsistentTree } from "../test/prod-fixtures";
 import { guessMapping, parseDelimited, parseXlsx, previewRows, runBulk } from "./bulk";
 import { fillSeries, parseTsv } from "./bulk-edit";
-import { ASSET_GAP, LOCKED, addRow, assetData, assetsOf, campaignPage, createCampaignDocument, deleteAssets, deleteRow, duplicateAssets, fieldValue, fieldValuePatch, moveAssetToRow, moveRow, pageData, reorderAsset, rowsOf } from "./model";
+import { ASSET_GAP, LOCKED, addRow, assetData, assetsOf, campaignPage, createCampaignDocument, deleteAssets, deleteRow, duplicateAssets, fieldValue, fieldValuePatch, moveAssetToRow, moveRow, pageData, reorderAsset, rowsOf, copyAsset } from "./model";
 import { resizeCommands, resizeInPlace, resizedCopy } from "./resize";
 import type { BulkSource } from "./types";
 
@@ -268,6 +268,17 @@ describe("resizedCopy / resizeCommands", () => {
         expect(photo?.radius).toBe(Math.round(40 * (90 / 1080)));
         const tiny = resizedCopy([b.template, { ...b.headline, fontSize: 12 }], 100, 10);
         expect(tiny[1]?.fontSize).toBe(6);
+    });
+
+    it("copies from copyAsset (empty children lists) still follow their constraints", () => {
+        const fresh = build();
+        load(fresh);
+        const copies = copyAsset(doc(), fresh.template.id, { x: 5000, y: 0 }, {});
+        expect(copies.every((n) => n.children.length === 0)).toBe(true);
+        const resized = resizedCopy(copies, 1080, 1920);
+        const button = resized.find((n) => n.name === fresh.button.name);
+        expect([resized[0]?.w, resized[0]?.h]).toEqual([1080, 1920]);
+        expect(button?.y).toBe(1920 - 120);
     });
 
     it("an empty list and a same-size resize are no-ops", () => {

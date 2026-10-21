@@ -28,6 +28,11 @@ export function onImageReady(listener: () => void) {
     return () => listeners.delete(listener);
 }
 
+// Tells the listeners an image is ready to draw (a media file arrived, or a picture decoded).
+export function notifyImageReady() {
+    for (const l of listeners) l();
+}
+
 async function resolve(ref: string): Promise<string | null> {
     const id = mediaId(ref);
     const known = urls.get(id);
@@ -39,7 +44,7 @@ async function resolve(ref: string): Promise<string | null> {
             blobs.set(id, blob);
             const url = URL.createObjectURL(blob);
             urls.set(id, url);
-            for (const l of listeners) l();
+            notifyImageReady();
             return url;
         });
         loading.set(id, p);

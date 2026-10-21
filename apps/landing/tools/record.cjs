@@ -24,6 +24,7 @@
 //   mark(name)              remember the current time (poster: page.poster = "name")
 //   shot(file)              save a PNG of the current frame (for exploring)
 //   opts                    { duration, fade, poster, crf } overrides for encoding
+//   extraWindow(url)        another person: an offscreen window with its own session, not recorded
 //
 // The window renders offscreen, which draws no mouse pointer, so the page gets a small pointer
 // overlay that follows the mouse (an arrow, or a crosshair where the app shows one).
@@ -404,14 +405,15 @@ function run(cmd, a) {
 }
 
 async function encode(raw, name, total, opts) {
-    // A capture a little longer than the loop is sped up slightly (up to 1.2x) rather than cut,
-    // so the start (Home, the create button) stays in; longer ones lose their start.
+    // Real time by default (maxSpeed 1): a capture longer than the loop loses its start. A scene
+    // may allow a slight speed-up with maxSpeed (at most 1.2x).
     const want = opts.duration || total;
-    const speed = opts.speed ?? (total > want && total / want <= Math.min(1.2, opts.maxSpeed ?? 1.2) ? total / want : 1);
+    const speed = opts.speed ?? (total > want && total / want <= Math.min(1.2, opts.maxSpeed ?? 1) ? total / want : 1);
     const duration = Math.min(want, total / speed);
     const start = +Math.max(0, opts.trimStart ?? total - duration * speed).toFixed(4);
-    const fade = opts.fade ?? 0.5;
-    // Crossfade the tail into the first frame so the loop restarts without a jump.
+    // The page holds the last frame before it restarts the loop, so by default there is no
+    // crossfade; fade > 0 blends the tail into the first frame instead.
+    const fade = opts.fade ?? 0;
     const loopFilter = fade > 0 ? `[0:v]trim=start=${start}:duration=${duration * speed},setpts=(PTS-STARTPTS)/${speed},fps=${FPS},split[a][b];[b]trim=end_frame=1,loop=loop=${Math.ceil(fade * FPS) + 2}:size=1,setpts=N/${FPS}/TB[first];[a]split[main][tail];[main]trim=end=${duration - fade},setpts=PTS-STARTPTS[head];[tail]trim=start=${duration - fade},setpts=PTS-STARTPTS[t2];[t2][first]blend=all_expr='A*(1-T/${fade})+B*(T/${fade})':shortest=1[x];[head][x]concat=n=2:v=1[o];[o]` : `[0:v]trim=start=${start}:duration=${duration * speed},setpts=(PTS-STARTPTS)/${speed},fps=${FPS},`;
     const scale = `scale=${CW}:${CH}:flags=lanczos,format=yuv420p`;
     const filter = fade > 0 ? `${loopFilter}${scale}[v]` : `${loopFilter}${scale}[v]`;
@@ -474,6 +476,31 @@ async function openApp() {
     return win;
 }
 
+// Another person: an offscreen window with its own session (so its own identity) on `url`, driven
+// like the main one but not recorded. For multiplayer scenes; closed when the recording ends.
+async function extraWindow(url, list) {
+    const w = new BrowserWindow({
+        show: false,
+        width: CW,
+        height: CH,
+        useContentSize: true,
+        backgroundColor: "#ffffff",
+        webPreferences: { offscreen: true, partition: `rec-extra-${process.pid}-${Date.now()}-${list.length}`, backgroundThrottling: false },
+    });
+    list.push(w);
+    w.webContents.setFrameRate(10);
+    w.webContents.setZoomFactor(DSF);
+    w.webContents.on("did-finish-load", () => w.webContents.setZoomFactor(DSF));
+    await w.loadURL(url);
+    try {
+        w.webContents.debugger.attach("1.3");
+        await w.webContents.debugger.sendCommand("Emulation.setFocusEmulationEnabled", { enabled: true });
+    } catch {}
+    const p = makePage(w, { start() {}, stop() {}, elapsed: () => 0 });
+    p.ready = () => ready(p);
+    return p;
+}
+
 // Shared first steps: wait for Home and close Get started.
 async function ready(page) {
     await page.waitFor("text=Drafts", 30000);
@@ -496,6 +523,8 @@ async function main() {
         const rec = makeRecorder(win, rawFile);
         const page = makePage(win, rec);
         page.ready = () => ready(page);
+        page.extras = [];
+        page.extraWindow = (url) => extraWindow(url, page.extras);
         http.createServer((req, res) => {
             let body = "";
             req.on("data", (d) => (body += d));
@@ -526,11 +555,14 @@ async function main() {
     const rec = makeRecorder(win, raw);
     const page = makePage(win, rec);
     page.ready = () => ready(page);
+    page.extraWindow = (url) => extraWindow(url, page.extras);
+    page.extras = [];
     await ready(page);
     try {
         await scene(page);
     } finally {
         await rec.stop();
+        for (const w of page.extras) if (!w.isDestroyed()) w.destroy();
     }
     const total = rec.frames() / FPS;
     const opts = { ...(scene.opts || {}), ...page.opts };

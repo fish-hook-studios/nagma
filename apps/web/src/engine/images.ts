@@ -1,5 +1,5 @@
 import { nanoid } from "nanoid";
-import { imageSrc, onImageReady, storeDataUrl, storeImage } from "./image-store";
+import { imageSrc, notifyImageReady, onImageReady, storeDataUrl, storeImage } from "./image-store";
 import { isLayoutFile } from "../engines/layout-engine";
 import { isPdfFile } from "../engines/pdf-engine";
 import { isVideoFile } from "../engines/video-engine";
@@ -33,6 +33,8 @@ export function getImage(doc: NagmaDocument, id: string): HTMLImageElement | nul
     const img = new Image();
     img.onload = () => {
         noteImageSize(id, img.naturalWidth, img.naturalHeight);
+        // Slide thumbnails and other pictures drawn outside the editor's canvas redraw too.
+        notifyImageReady();
         editor.set({});
     };
     img.src = src;
