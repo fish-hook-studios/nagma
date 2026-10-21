@@ -528,7 +528,7 @@ async function build() {
   writeFileSync(join(DIST, "index.html"), home);
   // The reel, for review at /reel/ (not linked from the site, not indexed).
   mkdirSync(join(DIST, "reel"), { recursive: true });
-  writeFileSync(join(DIST, "reel", "index.html"), readFileSync(join(LANDING, "reel.html"), "utf8").replace(/(href|src)="(fonts\/|insignia|wordmark|favicon)/g, '$1="/$2').replace(/url\("fonts\//g, 'url("/fonts/').replace(/\.src = "(insignia|wordmark)/g, '.src = "/$1'));
+  writeFileSync(join(DIST, "reel", "index.html"), readFileSync(join(LANDING, "reel.html"), "utf8").replace(/(href|src)="(fonts\/|insignia|wordmark|favicon)/g, '$1="/$2').replace(/url\("fonts\//g, 'url("/fonts/').replace(/\.src = "(insignia|wordmark)/g, '.src = "/$1').replace(/img\/reel\//g, "/img/reel/").replace(/mark\(s, "/g, 'mark(s, "/'));
 
   const pages = [
     ...GUIDES.map(markdownPage),
