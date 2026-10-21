@@ -1,0 +1,895 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nagma: make anything, free</title>
+<meta name="description" content="Nagma is a free, open source creative suite: design, whiteboards, slides, campaigns, sites, apps, video and documents. Runs on your computer, works with your team on any server.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&display=swap" rel="stylesheet">
+<style>
+/* Coconat by Collletttivo, SIL Open Font License 1.1 (fonts/OFL-Coconat.txt). */
+@font-face { font-family: "Coconat"; src: url("fonts/Coconat-Regular.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+/* Absans by Collletttivo, SIL Open Font License 1.1 (fonts/OFL-Absans.txt). One weight: emphasis comes from size and colour, never a synthesised bold. */
+@font-face { font-family: "Absans"; src: url("fonts/Absans-Regular.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Coconat"; src: url("fonts/Coconat-Demi.woff2") format("woff2"); font-weight: 600; font-display: swap; }
+@font-face { font-family: "Coconat"; src: url("fonts/Coconat-Bold.woff2") format("woff2"); font-weight: 700 800; font-display: swap; }
+:root {
+  --cream: #F6F1E7; --ink: #141413; --ink-2: #3D3B37; --mute: #6B675F;
+  --orange: #EF7F42; --pink: #FC829A; --bubble: #F7B3C8; --green: #4FAF78; --mint: #BFE6C8; --brown: #5B3A2B; --yellow: #F5C842; --sky: #8FC1F0; --lime: #BFE6C8; --lilac: #C9B8F2; --red: #E4572E;
+  --display: "Coconat", "Bricolage Grotesque", Georgia, serif; --body: "Absans", "Inter", system-ui, sans-serif;
+  --bg: var(--cream); --fg: var(--ink);
+}
+* { box-sizing: border-box; }
+body { font-synthesis: none; }
+html { scroll-behavior: smooth; }
+body { margin: 0; font-family: var(--body); color: var(--fg); background: var(--bg); line-height: 1.5; overflow-x: hidden; -webkit-font-smoothing: antialiased; transition: background-color .9s cubic-bezier(.2,.8,.2,1), color .9s; cursor: none; }
+@media (hover: none) { body { cursor: auto; } }
+a { color: inherit; }
+img { max-width: 100%; display: block; }
+h1, h2, h3, .display { font-family: var(--display); letter-spacing: -0.02em; line-height: .94; margin: 0; font-weight: 400; }
+h2 { font-size: clamp(48px, 7.5vw, 112px); }
+h3 { font-size: clamp(28px, 3vw, 44px); letter-spacing: -0.02em; line-height: 1; }
+p { margin: 0; }
+.lead { font-size: clamp(18px, 1.6vw, 24px); line-height: 1.4; }
+.wrap { max-width: 1360px; margin: 0 auto; padding: 0 32px; }
+/* Highlighter: a marker swipe behind the words that matter: a filled band with wobbly edges and tapered ends, wiped in left to right when the word appears. */
+.hl { position: relative; display: inline-block; white-space: nowrap; }
+.hl .hlm { position: absolute; left: -0.12em; width: calc(100% + 0.24em); top: -6%; height: 112%; z-index: -1; overflow: visible; pointer-events: none; clip-path: inset(-20% 100% -20% 0); }
+.hl .hlm path { fill: var(--hlc, var(--yellow)); opacity: .75; filter: url(#rough); }
+.hl.in .hlm { animation: wipe .6s cubic-bezier(.3,.7,.2,1) forwards; }
+@keyframes wipe { to { clip-path: inset(-20% -2% -20% 0); } }
+.hl.orange { --hlc: var(--orange); } .hl.pink { --hlc: var(--pink); } .hl.green { --hlc: var(--green); } .hl.mint { --hlc: var(--mint); } .hl.sky { --hlc: var(--sky); } .hl.lime { --hlc: var(--lime); }
+.on-dark .hl .hlm path, [data-bg="#141413"] .hl .hlm path { opacity: .9; }
+h1 .hl .hlm, h2 .hl .hlm { mix-blend-mode: multiply; }
+.on-dark h2 .hl .hlm { mix-blend-mode: normal; }
+.outline { color: transparent; -webkit-text-stroke: 3px var(--fg); }
+.eyebrow { display: inline-flex; align-items: center; gap: 10px; font-weight: 400; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 60px; padding: 0 30px; border-radius: 999px; font-family: var(--display); font-weight: 400; font-size: 19px; letter-spacing: -0.01em; text-decoration: none; border: 2.5px solid var(--ink); background: var(--cream); color: var(--ink); cursor: none; transition: transform .25s cubic-bezier(.2,.8,.2,1), box-shadow .25s, background .2s, color .2s; }
+.btn:hover { transform: translate(-3px, -3px); box-shadow: 6px 6px 0 var(--ink); }
+.btn:active { transform: translate(0,0); box-shadow: 0 0 0 var(--ink); }
+.btn.ink { background: var(--ink); color: var(--cream); }
+.btn.ink:hover { background: var(--pink); color: var(--ink); }
+.btn.orange { background: var(--orange); }
+.btn.small { min-height: 46px; padding: 0 20px; font-size: 16px; }
+
+/* Custom cursor: a collaborator's arrow with a name tag. */
+.cur { position: fixed; left: 0; top: 0; pointer-events: none; z-index: 1000; transition: transform .15s; }
+.cur svg { position: absolute; left: 0; top: 0; width: 22px; height: 22px; fill: var(--pink); stroke: var(--ink); stroke-width: 1.6; stroke-linejoin: round; filter: drop-shadow(1px 2px 0 rgba(20,20,19,.25)); }
+.cur span { position: absolute; left: 14px; top: 16px; padding: 3px 9px; border-radius: 999px; background: var(--pink); color: var(--ink); border: 1.5px solid var(--ink); font-family: var(--body); font-size: 12px; line-height: 1.3; white-space: nowrap; }
+.cur.big svg { fill: var(--green); } .cur.big span { background: var(--green); }
+@media (hover: none) { .cur { display: none; } }
+
+/* Nav: a full-width cream bar, wordmark left, uppercase links with little marks, one pastel pill. */
+/* Labs behaviour: any scroll down slides the bar away, any scroll up brings it back; its surface follows the section underneath. */
+.nav-wrap { position: fixed; top: 0; left: 0; right: 0; z-index: 60; background: var(--bg); color: var(--fg); border-bottom: 2px solid var(--fg); transition: transform .3s ease-in-out, background-color .9s cubic-bezier(.2,.8,.2,1), color .9s, border-color .9s; }
+.nav-wrap.hide { transform: translateY(-110%); }
+.nav { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 14px 32px; }
+.brand { display: flex; align-items: center; gap: 12px; color: inherit; text-decoration: none; }
+.brand .wm { height: 28px; width: auto; fill: currentColor; display: block; }
+.brand img { width: 44px; height: 44px; transition: transform .4s cubic-bezier(.2,.8,.2,1); }
+.brand:hover img { transform: rotate(-14deg) scale(1.15); }
+.nav-links { display: flex; gap: 6px; }
+.nav-links a { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; text-transform: uppercase; letter-spacing: .06em; font-size: 15px; padding: 10px 14px; border-radius: 999px; color: inherit; transition: background .2s, color .2s; }
+.nav-links a:hover { background: var(--mint); color: var(--ink); }
+.nav-links .ic { width: 16px; height: 16px; fill: var(--green); }
+.nav-links .ar, .cta .ar { font-family: var(--body); }
+.nav .cta { background: var(--pink); border-color: var(--pink); color: var(--ink); min-height: 50px; padding: 0 22px; font-family: var(--body); text-transform: uppercase; letter-spacing: .06em; font-size: 15px; }
+.nav .cta:hover { background: var(--green); border-color: var(--green); box-shadow: none; transform: none; }
+/* HERO: a playground. Shapes and stickers are draggable. */
+.hero { position: relative; min-height: 100vh; display: flex; flex-direction: column; justify-content: center; padding: 200px 0 0; overflow: hidden; }
+.play { position: absolute; inset: 0; z-index: 0; }
+.toy { position: absolute; cursor: grab; touch-action: none; user-select: none; transition: transform .15s; will-change: transform; }
+.toy:active { cursor: grabbing; }
+.toy.shape { animation: float var(--dur, 12s) ease-in-out infinite alternate; }
+/* Big shapes: flat, anchored to the edges, easing in from their own edge, then drifting very slowly. */
+.fun { position: absolute; height: auto; aspect-ratio: 1; fill: currentColor; overflow: visible; transition: scale .6s cubic-bezier(.2,.8,.2,1); will-change: transform; }
+.fun.wide { aspect-ratio: 200 / 60; }
+.fun:hover { scale: 1.06; }
+.fun.drift { animation: enter 1.6s var(--d, 0s) cubic-bezier(.2,.7,.2,1) both, drift 24s calc(var(--d, 0s) + 1.6s) ease-in-out infinite alternate; }
+@keyframes enter { from { opacity: 0; translate: var(--ex, 0) var(--ey, 0); scale: .8; } to { opacity: 1; translate: 0 0; scale: 1; } }
+@keyframes drift { from { translate: 0 0; rotate: 0deg; } to { translate: var(--dx, 2vw) 0; rotate: var(--rot, 10deg); } }
+/* Shapes in later sections fall in when the section scrolls into view. */
+.drop .fun { opacity: 0; }
+.drop.in .fun { opacity: 1; }
+.drop:not(.in) .fun { animation: none; }
+.hero .toy.fun { transition: scale .6s cubic-bezier(.2,.8,.2,1); }
+.toy.sticker { display: inline-flex; align-items: center; gap: 8px; padding: 14px 22px; border-radius: 999px; border: 2.5px solid var(--ink); font-family: var(--display); font-weight: 400; font-size: 18px; color: var(--ink); box-shadow: 4px 4px 0 var(--ink); background: var(--cream); white-space: nowrap; animation: pop .7s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes float { from { translate: 0 0; } to { translate: var(--fx, 30px) var(--fy, -40px); } }
+@keyframes pop { 0% { scale: 0; rotate: -20deg; } 70% { scale: 1.1; } 100% { scale: 1; } }
+.hero .wrap { position: relative; z-index: 1; pointer-events: none; }
+.hero .wrap a, .hero .wrap .stickers { pointer-events: auto; }
+.hero-center { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 36px; }
+.hero h1 { font-size: clamp(64px, 12vw, 200px); line-height: .86; text-transform: uppercase; }
+.hero h1 .l2 { display: block; }
+.hero h1 .l3 { display: block; }
+.hero h1 .l3 { text-transform: none; }
+.hero .lead { font-size: clamp(18px, 1.6vw, 24px); max-width: 680px; font-weight: 400; }
+.hero-ctas { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+.cat-peek { position: absolute; z-index: 1; right: 4vw; top: calc(10vh - 14.5vw); width: clamp(140px, 16vw, 260px); box-shadow: 0 30px 80px -30px rgba(20,20,19,.5); animation: peek 1.4s .4s cubic-bezier(.2,.8,.2,1) both; pointer-events: none; }
+@keyframes peek { from { transform: translateY(60%) rotate(8deg); } to { transform: translateY(0) rotate(-4deg); } }
+.hint { position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); font-size: 13px; font-weight: 400; letter-spacing: .1em; text-transform: uppercase; z-index: 2; display: flex; gap: 10px; align-items: center; }
+.hint i { width: 10px; height: 10px; border-radius: 50%; background: var(--ink); animation: bounce 1.2s infinite; display: inline-block; }
+@keyframes bounce { 50% { transform: translateY(6px); } }
+
+/* The glance: a stylised Nagma window */
+.hero { min-height: auto; padding-bottom: 8vh; }
+.hero-center { gap: 32px; }
+.stage { width: min(100%, 1180px); margin-top: 24px; background: var(--cream); border: 2.5px solid var(--ink); border-radius: 28px; box-shadow: 14px 14px 0 var(--ink); overflow: hidden; text-align: left; pointer-events: auto; font-family: var(--display); animation: stage-in 1.2s .5s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes stage-in { from { opacity: 0; transform: translateY(80px) rotate(1deg); } to { opacity: 1; transform: none; } }
+.stage .bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 16px; border-bottom: 2.5px solid var(--ink); background: #fff; }
+.stage .dots { display: flex; gap: 6px; } .stage .dots i { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--ink); background: var(--pink); }
+.stage .dots i:nth-child(2) { background: var(--yellow); } .stage .dots i:nth-child(3) { background: var(--green); }
+.stage .tabs { display: flex; gap: 4px; }
+.stage .tabs b { padding: 6px 14px; border-radius: 999px; font-weight: 400; font-size: 14px; transition: background .3s, color .3s; }
+.stage .tabs b.on { background: var(--ink); color: var(--cream); }
+.stage .who { display: flex; } .stage .who i { width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--ink); margin-left: -6px; }
+.stage .body { position: relative; aspect-ratio: 960 / 600; background: #fff; }
+.stage .panel { background: #fff; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.stage .panel.left { border-right: 2.5px solid var(--ink); } .stage .panel.right { border-left: 2.5px solid var(--ink); }
+.stage .panel i { display: block; height: 10px; width: 100%; border-radius: 999px; background: rgba(20,20,19,.15); }
+.stage .panel .sw { display: flex; gap: 6px; } .stage .panel .sw b { width: 22px; height: 22px; border-radius: 6px; border: 2px solid var(--ink); }
+.stage .canvas { position: relative; overflow: hidden; background: var(--cream); background-image: radial-gradient(rgba(20,20,19,.18) 1.2px, transparent 1.2px); background-size: 22px 22px; }
+.scene { position: absolute; inset: 0; opacity: 0; visibility: hidden; transition: opacity .5s; }
+.scene .sv, .scene .sv video { width: 100%; height: 100%; display: block; object-fit: cover; }
+.scene.on { opacity: 1; visibility: visible; }
+.scene .cur { position: absolute; display: flex; align-items: flex-start; gap: 4px; font-size: 12px; font-weight: 400; z-index: 3; }
+.scene .cur svg { width: 20px; height: 20px; fill: var(--orange); stroke: var(--ink); stroke-width: 1.5; }
+.scene .cur span { padding: 3px 9px; border-radius: 999px; border: 2px solid var(--ink); margin-top: 12px; }
+/* Design */
+.phone { position: absolute; top: 10%; width: 24%; height: 78%; border: 2.5px solid var(--ink); border-radius: 22px; background: #fff; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.on .phone.f1 { left: 12%; animation: draw .8s .2s cubic-bezier(.2,.8,.2,1) both; }
+.on .phone.f2 { right: 12%; animation: draw .8s 2.4s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes draw { from { clip-path: inset(0 100% 100% 0); } to { clip-path: inset(0 0 0 0); } }
+.phone .card { height: 18%; border-radius: 10px; border: 2px solid var(--ink); background: var(--yellow); }
+.phone .card.c2 { background: var(--sky); } .phone .card.c3 { background: var(--pink); }
+.on .phone .card { animation: slidein .5s cubic-bezier(.2,.8,.2,1) both; }
+.on .phone .c1 { animation-delay: .9s; } .on .phone .c2 { animation-delay: 1.1s; } .on .phone .c3 { animation-delay: 1.3s; }
+@keyframes slidein { from { transform: translateX(-120%); opacity: 0; } to { transform: none; opacity: 1; } }
+.phone .cta { margin-top: auto; height: 14%; border-radius: 999px; background: var(--ink); }
+.on .phone .cta { animation: pop .5s 1.7s cubic-bezier(.2,.8,.2,1) both; }
+.phone .hero-img { height: 46%; border-radius: 12px; background: var(--lilac); border: 2px solid var(--ink); }
+.phone .line { height: 10px; border-radius: 999px; background: rgba(20,20,19,.2); } .phone .w1 { width: 80%; } .phone .w2 { width: 55%; }
+.scene .link { position: absolute; left: 36%; top: 42%; width: 28%; height: auto; }
+.on .link path { animation: dash 1s 2.8s ease-out both; }
+@keyframes dash { from { stroke-dashoffset: 400; } to { stroke-dashoffset: 0; } }
+.on .link circle { animation: pop .4s 3.6s both; }
+.on .cur.a { left: 30%; top: 70%; animation: cur-a 4s .4s ease-in-out both; }
+.on .cur.b { left: 60%; top: 20%; animation: cur-b 4s 1s ease-in-out both; }
+@keyframes cur-a { 0% { transform: translate(0,0); } 40% { transform: translate(-80px, -120px); } 70% { transform: translate(40px, -60px); } 100% { transform: translate(140px, 20px); } }
+@keyframes cur-b { 0% { transform: translate(0,0); } 50% { transform: translate(60px, 140px); } 100% { transform: translate(-40px, 60px); } }
+/* Board */
+.section-box { position: absolute; left: 8%; top: 12%; width: 56%; height: 70%; border: 2.5px dashed var(--ink); border-radius: 16px; }
+.section-box em { position: absolute; left: 12px; top: -14px; font-style: normal; font-weight: 400; font-size: 13px; background: var(--cream); padding: 2px 8px; }
+.on .section-box { animation: draw .7s .1s cubic-bezier(.2,.8,.2,1) both; }
+.sticky { position: absolute; width: 15%; aspect-ratio: 1; border: 2.5px solid var(--ink); border-radius: 8px; box-shadow: 4px 4px 0 var(--ink); }
+.on .sticky { animation: drop .5s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes drop { from { transform: translateY(-80px) rotate(-10deg); opacity: 0; } to { transform: none; opacity: 1; } }
+.s1 { left: 12%; top: 22%; } .s2 { left: 30%; top: 24%; } .s3 { left: 48%; top: 20%; } .s4 { left: 14%; top: 52%; } .s5 { left: 32%; top: 55%; } .s6 { left: 74%; top: 30%; }
+.on .s1 { animation-delay: .6s; } .on .s2 { animation-delay: .8s; } .on .s3 { animation-delay: 1s; } .on .s4 { animation-delay: 1.2s; } .on .s5 { animation-delay: 1.4s; } .on .s6 { animation-delay: 1.6s; }
+.vote { position: absolute; width: 16px; height: 16px; border-radius: 50%; background: var(--orange); border: 2px solid var(--ink); }
+.on .vote { animation: pop .4s both; }
+.v1 { left: 24%; top: 20%; } .v2 { left: 27%; top: 18%; } .v3 { left: 58%; top: 18%; }
+.on .v1 { animation-delay: 2.4s; } .on .v2 { animation-delay: 2.7s; } .on .v3 { animation-delay: 3s; }
+.timer { position: absolute; right: 6%; bottom: 8%; padding: 8px 14px; border-radius: 999px; border: 2.5px solid var(--ink); background: var(--yellow); font-weight: 400; font-size: 14px; }
+.on .cur.c { left: 70%; top: 60%; animation: cur-c 4.2s .5s ease-in-out both; }
+@keyframes cur-c { 0% { transform: translate(0,0); } 45% { transform: translate(-120px, -90px); } 100% { transform: translate(-60px, 40px); } }
+/* Slides */
+.film { position: absolute; left: 4%; top: 8%; bottom: 8%; width: 14%; display: flex; flex-direction: column; gap: 8px; }
+.film i { flex: 1; border: 2px solid var(--ink); border-radius: 8px; background: #fff; }
+.film i.on { background: var(--orange); }
+.slide { position: absolute; left: 22%; top: 10%; right: 6%; bottom: 10%; border: 2.5px solid var(--ink); border-radius: 16px; background: #fff; padding: 6% 7%; display: flex; flex-direction: column; gap: 14px; }
+.on .slide { animation: pop .6s .1s cubic-bezier(.2,.8,.2,1) both; }
+.slide .title { height: 22px; width: 60%; border-radius: 999px; background: var(--ink); }
+.slide .sub { height: 12px; width: 40%; border-radius: 999px; background: rgba(20,20,19,.25); }
+.on .slide .title { animation: grow .6s .6s cubic-bezier(.2,.8,.2,1) both; } .on .slide .sub { animation: grow .6s .8s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes grow { from { transform: scaleX(0); transform-origin: left; } to { transform: scaleX(1); } }
+.chart { margin-top: auto; height: 50%; display: flex; align-items: flex-end; gap: 6%; }
+.chart b { flex: 1; height: var(--h); border: 2.5px solid var(--ink); border-radius: 8px 8px 0 0; background: var(--sky); transform-origin: bottom; }
+.chart b:nth-child(2) { background: var(--pink); } .chart b:nth-child(4) { background: var(--orange); } .chart b:nth-child(5) { background: var(--lime); }
+.on .chart b { animation: bar .7s cubic-bezier(.2,.8,.2,1) both; }
+.on .chart b:nth-child(1) { animation-delay: 1.2s; } .on .chart b:nth-child(2) { animation-delay: 1.35s; } .on .chart b:nth-child(3) { animation-delay: 1.5s; } .on .chart b:nth-child(4) { animation-delay: 1.65s; } .on .chart b:nth-child(5) { animation-delay: 1.8s; }
+@keyframes bar { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+/* Sites */
+.viewport { position: absolute; left: 6%; top: 8%; bottom: 8%; width: 88%; border: 2.5px solid var(--ink); border-radius: 16px; background: #fff; overflow: hidden; }
+.on .viewport { animation: squeeze 4.5s .6s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes squeeze { 0%, 30% { width: 88%; } 55%, 100% { width: 34%; } }
+.site { padding: 14px; display: flex; flex-direction: column; gap: 12px; container-type: inline-size; }
+.snav { display: flex; justify-content: space-between; align-items: center; } .snav > i { width: 36px; height: 14px; border-radius: 999px; background: var(--ink); display: block; }
+.snav span { display: flex; gap: 8px; } .snav span i { width: 28px; height: 8px; border-radius: 999px; background: rgba(20,20,19,.3); display: block; }
+.shero { display: flex; flex-direction: column; gap: 10px; padding: 10px 0; }
+.shero .big { height: 34px; width: 70%; border-radius: 10px; background: var(--orange); border: 2px solid var(--ink); }
+.shero .btns { display: flex; gap: 8px; } .shero .btns i { width: 60px; height: 18px; border-radius: 999px; background: var(--ink); display: block; }
+.scols { display: flex; gap: 10px; flex-wrap: wrap; } .scols i { flex: 1 1 90px; height: 60px; border-radius: 10px; border: 2px solid var(--ink); background: var(--sky); display: block; }
+.scols i:nth-child(2) { background: var(--pink); } .scols i:nth-child(3) { background: var(--lime); }
+.handle { position: absolute; right: -3px; top: 40%; width: 8px; height: 20%; border-radius: 999px; background: var(--ink); }
+.publish { position: absolute; right: 6%; bottom: 10%; padding: 10px 16px; border-radius: 999px; border: 2.5px solid var(--ink); background: var(--lime); font-weight: 400; font-size: 14px; opacity: 0; }
+.on .publish { animation: pop .5s 3.6s cubic-bezier(.2,.8,.2,1) both; opacity: 1; }
+/* Video */
+.preview { position: absolute; left: 20%; right: 20%; top: 8%; height: 48%; border: 2.5px solid var(--ink); border-radius: 14px; background: var(--ink); overflow: hidden; }
+.preview .ttl { position: absolute; left: 8%; bottom: 14%; height: 20%; width: 50%; border-radius: 999px; background: var(--orange); border: 2px solid var(--cream); }
+.on .preview .ttl { animation: slidein .6s 1.6s cubic-bezier(.2,.8,.2,1) both; }
+.timeline { position: absolute; left: 6%; right: 6%; bottom: 8%; height: 34%; display: flex; flex-direction: column; gap: 6px; }
+.track { position: relative; flex: 1; border-radius: 8px; background: rgba(20,20,19,.08); border: 2px solid rgba(20,20,19,.2); }
+.track i { position: absolute; top: 0; bottom: 0; border-radius: 6px; border: 2px solid var(--ink); }
+.on .track i { animation: slidein .5s cubic-bezier(.2,.8,.2,1) both; }
+.on .track:nth-child(1) i { animation-delay: .3s; } .on .track:nth-child(2) i { animation-delay: .7s; } .on .track:nth-child(3) i { animation-delay: 1s; }
+.playhead { position: absolute; left: 0; top: -8px; bottom: -8px; width: 3px; background: var(--orange); border-left: 1.5px solid var(--ink); border-right: 1.5px solid var(--ink); }
+.playhead::before { content: ""; position: absolute; left: -6px; top: -4px; width: 14px; height: 14px; border-radius: 50%; background: var(--orange); border: 2px solid var(--ink); }
+.on .playhead { animation: sweep 3s 1.4s linear both; }
+@keyframes sweep { from { left: 0; } to { left: 100%; } }
+@media (max-width: 960px) { .stage .body { grid-template-columns: 1fr; height: 56vw; } .stage .panel { display: none; } .stage .tabs b { padding: 6px 9px; font-size: 12px; } }
+
+/* Kinetic bands */
+.bands { padding: 10vh 0; position: relative; }
+.band { position: relative; z-index: 2; }
+.band { white-space: nowrap; overflow: hidden; padding: 14px 0; border-top: 2.5px solid var(--ink); border-bottom: 2.5px solid var(--ink); background: var(--c, var(--yellow)); color: var(--ink); }
+.band + .band { margin-top: -2.5px; }
+.band.tilt-l { transform: rotate(-2.5deg) scale(1.06); }
+.band.tilt-r { transform: rotate(2deg) scale(1.06); }
+.band .t { display: inline-flex; gap: 40px; font-family: var(--display); font-weight: 400; font-size: clamp(32px, 5vw, 76px); letter-spacing: -0.03em; text-transform: uppercase; animation: slide 30s linear infinite; }
+.band.rev .t { animation-direction: reverse; }
+.band .t span::after { content: "✦"; margin-left: 40px; color: var(--ink); }
+.band:hover .t { animation-play-state: paused; }
+@keyframes slide { to { transform: translateX(-50%); } }
+
+/* Products: horizontal rail driven by vertical scroll */
+.rail { position: relative; height: 420vh; }
+.rail-sticky { position: sticky; top: 0; height: 100vh; overflow: hidden; display: flex; flex-direction: column; justify-content: center; }
+.rail-head { padding: 0 32px; display: flex; justify-content: space-between; align-items: end; gap: 24px; margin-bottom: 72px; }
+.rail-head h2 { font-size: clamp(40px, 6vw, 96px); }
+.rail-track { display: flex; gap: 24px; padding: 0 32px; will-change: transform; }
+.pcard { flex: none; width: min(78vw, 720px); border-radius: 36px; border: 2.5px solid var(--ink); padding: 32px; display: grid; grid-template-rows: auto 1fr auto; gap: 16px; color: var(--ink); box-shadow: 10px 10px 0 var(--ink); text-decoration: none; transition: transform .3s cubic-bezier(.2,.8,.2,1); position: relative; overflow: hidden; }
+.pcard:hover { transform: translateY(-8px) rotate(-.5deg); }
+.pcard .n { font-family: var(--display); font-weight: 400; font-size: clamp(60px, 8vw, 120px); line-height: .8; letter-spacing: -0.05em; opacity: .25; position: absolute; right: 24px; top: 16px; }
+.pcard h3 { font-size: clamp(40px, 4.6vw, 72px); letter-spacing: -0.04em; }
+.pcard p { font-size: 17px; max-width: 420px; font-weight: 400; }
+.pcard .go { font-family: var(--display); font-weight: 400; font-size: 18px; display: inline-flex; gap: 8px; }
+.pcard .loop { aspect-ratio: 960 / 600; box-shadow: none; }
+.pcard .loop video { height: 100%; object-fit: contain; }
+.rail-end { flex: none; width: 24px; }
+
+/* Product loops: real screen recordings of the app, muted, looping, lazy. */
+.loop { position: relative; border-radius: 20px; border: 2.5px solid var(--ink); overflow: hidden; background: #fff; box-shadow: 8px 8px 0 var(--ink); }
+.loop video, .loop img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.loop.fill { height: 100%; }
+
+/* Placeholders: the product visuals that aren't built yet */
+.ph { position: relative; border: 2.5px dashed rgba(20,20,19,.5); border-radius: 20px; background: repeating-linear-gradient(135deg, rgba(20,20,19,.07) 0 12px, transparent 12px 24px); display: flex; align-items: center; justify-content: center; text-align: center; padding: 24px; font-size: 14px; line-height: 1.4; color: var(--ink-2); min-height: 260px; }
+.ph strong { display: block; color: var(--ink); font-size: 16px; margin-bottom: 4px; }
+.ph .tag { position: absolute; top: 12px; left: 12px; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; font-weight: 400; padding: 5px 9px; border-radius: 6px; background: var(--ink); color: var(--cream); }
+.ph .tag.motion { background: var(--orange); color: var(--ink); }
+.on-dark .ph { border-color: rgba(246,241,231,.45); color: #C9C6BF; background: repeating-linear-gradient(135deg, rgba(246,241,231,.07) 0 12px, transparent 12px 24px); }
+.on-dark .ph strong { color: var(--cream); }
+
+/* Stacking cards: each pins, the next slides over it */
+.stack-sec { padding: 18vh 0 0; }
+.stack-sec .wrap > h2 { margin-bottom: 48px; max-width: 1100px; }
+.scard { position: sticky; top: calc(96px + var(--i, 0) * 22px); height: 72vh; min-height: 520px; border-radius: 40px; border: 2.5px solid var(--ink); padding: clamp(28px, 4vw, 64px); display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; margin-bottom: 28px; box-shadow: 0 -10px 40px -20px rgba(20,20,19,.4); transform-origin: top center; transition: transform .2s linear, filter .2s linear; overflow: hidden; }
+.scard:nth-child(1) { --i: 0; } .scard:nth-child(2) { --i: 1; } .scard:nth-child(3) { --i: 2; } .scard:nth-child(4) { --i: 3; }
+.scard.behind { transform: scale(var(--s, .96)); filter: brightness(.94); }
+.scard:nth-child(1) { background: var(--yellow); }
+.scard:nth-child(2) { background: var(--sky); }
+.scard:nth-child(3) { background: var(--pink); }
+.scard:nth-child(4) { background: var(--green); }
+.scard .copy { display: flex; flex-direction: column; gap: 22px; }
+.scard h3 { font-size: clamp(36px, 5vw, 80px); letter-spacing: -0.04em; }
+.scard .lead { max-width: 520px; font-weight: 400; }
+.scard .ph { min-height: 0; height: 100%; max-height: 56vh; background-color: rgba(246,241,231,.5); }
+.scard ul { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.scard li { padding: 8px 14px; border-radius: 999px; border: 2px solid var(--ink); font-weight: 400; font-size: 14px; background: rgba(246,241,231,.6); }
+.stack-space { height: 20vh; }
+
+/* Big quote / claim */
+.claim { padding: 26vh 0; text-align: center; }
+.claim h2 { font-size: clamp(44px, 9vw, 150px); line-height: .9; }
+.claim h2 .w { display: inline-block; transition: transform .35s cubic-bezier(.2,.8,.2,1), color .3s; }
+.claim h2 .w:hover { transform: translateY(-14px) rotate(-4deg) scale(1.08); color: transparent; -webkit-text-stroke: 2.5px var(--fg); }
+
+/* Usually paid: a compact table of the gates that are open here. */
+.paid { padding: 18vh 0; }
+.paid-more { display: flex; justify-content: center; margin-top: 28px; }
+.paid-more .count { opacity: .6; }
+.paid-head { display: grid; grid-template-columns: 1.2fr .8fr; gap: 40px; align-items: end; margin-bottom: 48px; }
+.paid-head .eyebrow { margin-bottom: 18px; }
+.paid-head h2 { font-size: clamp(40px, 5.6vw, 84px); }
+.ptable { border: 2.5px solid var(--ink); border-radius: 28px; background: #fff; overflow: hidden; box-shadow: 12px 12px 0 var(--ink); }
+.prow { display: grid; grid-template-columns: 1.6fr 1fr 1fr; gap: 24px; align-items: center; padding: 14px 28px; border-top: 2px solid var(--ink); }
+.prow:first-child { border-top: 0; }
+.prow[hidden] { display: none; }
+.prow.phead { background: var(--ink); color: var(--cream); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; padding: 12px 28px; }
+.prow b { display: block; font-family: var(--display); font-weight: 400; font-size: clamp(20px, 1.8vw, 26px); line-height: 1.1; }
+.prow small { display: block; font-size: 14px; color: var(--mute); margin-top: 2px; }
+.prow .was { color: var(--ink-2); font-family: var(--display); font-size: 20px; line-height: 1.2; }
+.prow .was > i { font-style: normal; position: relative; display: inline; }
+/* A hand-made strike: two wobbly marker lines through the middle of the words. */
+.prow .was > i::after { content: ""; position: absolute; left: -4px; right: -4px; top: 46%; height: .5em; transform: translateY(-50%) rotate(-1.2deg); background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 20' preserveAspectRatio='none'><path d='M2 11 C 30 7, 60 13, 95 9 S 160 12, 198 8' fill='none' stroke='%23E4572E' stroke-width='2.2' stroke-linecap='round'/><path d='M4 13 C 40 10, 80 15, 120 11 S 170 14, 196 11' fill='none' stroke='%23E4572E' stroke-width='1.6' stroke-linecap='round' opacity='.85'/></svg>") center / 100% 100% no-repeat; pointer-events: none; }
+.prow .now { display: inline-flex; align-items: center; gap: 10px; font-family: var(--display); font-size: 20px; }
+.prow .now::before { content: ""; width: 22px; height: 22px; border-radius: 50%; background: var(--green); border: 2px solid var(--ink); flex: none; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'><path d='M5 10.5l3.2 3L15 7' fill='none' stroke='%23141413' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/></svg>"); background-size: 100%; }
+@media (max-width: 960px) { .paid-head { grid-template-columns: minmax(0, 1fr); } .prow { grid-template-columns: minmax(0, 1fr); gap: 6px; } .prow.phead { display: none; }  .prow .now { margin-top: 4px; } }
+
+/* The crowd: named cursors fly in from the edges and gather around "company." */
+.crowd { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+.cc { position: absolute; left: var(--x); top: var(--y); display: flex; align-items: flex-start; opacity: 0; translate: var(--fx) var(--fy); }
+.cc svg { width: 22px; height: 22px; fill: var(--c); stroke: var(--ink); stroke-width: 1.6; stroke-linejoin: round; filter: drop-shadow(1px 2px 0 rgba(20,20,19,.25)); }
+.cc span { margin: 14px 0 0 -6px; padding: 3px 9px; border-radius: 999px; background: var(--c); border: 1.5px solid var(--ink); font-family: var(--body); font-size: 12px; white-space: nowrap; }
+.drop.in .cc { animation: gather 1.4s var(--d) cubic-bezier(.2,.8,.2,1) forwards, mill 6s calc(var(--d) + 1.4s) ease-in-out infinite alternate; }
+@keyframes gather { from { opacity: 0; translate: var(--fx) var(--fy); } to { opacity: 1; translate: 0 0; } }
+@keyframes mill { from { translate: 0 0; } to { translate: 18px -12px; } }
+@media (max-width: 960px) { .cc { display: none; } }
+@media (prefers-reduced-motion: reduce) { .drop .cc { animation: none; opacity: 1; translate: 0 0; } }
+
+/* Servers: three tall tiles that expand on hover */
+.tiles { display: flex; gap: 16px; height: 70vh; min-height: 520px; }
+.tile { flex: 1; border-radius: 32px; border: 2.5px solid var(--cream); padding: 32px; display: flex; flex-direction: column; justify-content: flex-end; gap: 14px; transition: flex .6s cubic-bezier(.2,.8,.2,1); position: relative; overflow: hidden; color: var(--ink); }
+.tile:hover { flex: 2.2; }
+.tile .big { font-family: var(--display); font-weight: 400; font-size: clamp(32px, 4vw, 64px); line-height: .95; letter-spacing: -0.04em; }
+.tile p { font-weight: 400; font-size: 17px; max-width: 420px; opacity: 0; transform: translateY(10px); transition: opacity .4s .15s, transform .4s .15s; }
+.tile:hover p { opacity: 1; transform: none; }
+.tile .illo { position: absolute; left: 24px; right: 24px; top: 24px; height: 42%; width: calc(100% - 48px); }
+.tile.t1 { background: var(--lilac); } .tile.t2 { background: var(--pink); } .tile.t3 { background: var(--lime); }
+.code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 16px; background: var(--ink); color: var(--mint); padding: 18px 22px; border-radius: 14px; display: inline-flex; gap: 12px; }
+.code::before { content: "$"; color: #8A867E; }
+
+/* Sticker wall: a bordered box; pills float in a ring around the heading, then physics drops them into a pile on the box's floor. */
+/* The section is a 220vh runway; the box pins for the middle of it, so the pills fall while the page holds, then the page moves on. */
+.wall { height: 170vh; padding: 0; }
+.wall-pin { position: sticky; top: 0; height: 100vh; display: flex; align-items: center; }
+.wall-pin .wrap { width: 100%; }
+.wall-box { position: relative; height: 82vh; min-height: 620px; border: 2.5px solid var(--ink); border-radius: 40px; background: var(--bubble); overflow: hidden; touch-action: pan-y; box-shadow: 12px 12px 0 var(--ink); }
+.wall h2 { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); text-align: center; z-index: 0; pointer-events: none; font-size: clamp(44px, 8vw, 130px); margin: 0; }
+.wall .st { position: absolute; left: calc(var(--x) * 1%); top: calc(var(--y) * 1%); z-index: 1; padding: 14px 22px; border-radius: 999px; border: 2.5px solid var(--ink); font-family: var(--display); font-size: clamp(15px, 1.6vw, 24px); background: var(--cream); color: var(--ink); box-shadow: 5px 5px 0 var(--ink); white-space: nowrap; cursor: grab; user-select: none; will-change: transform; transform: translate(-50%, -50%) rotate(calc(var(--r) * 1deg)); }
+.wall .st:active { cursor: grabbing; }
+.wall .st[data-c="yellow"] { background: var(--yellow); } .wall .st[data-c="pink"] { background: var(--pink); } .wall .st[data-c="lime"] { background: var(--lime); } .wall .st[data-c="orange"] { background: var(--orange); } .wall .st[data-c="lilac"] { background: var(--lilac); }
+.wall-box.live .st { left: 0; top: 0; transition: none; }
+/* Open source stats */
+.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.stat { border: 2.5px solid var(--ink); border-radius: 28px; padding: 28px 32px; background: var(--cream); box-shadow: 8px 8px 0 var(--ink); display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
+.stat b { font-family: var(--display); font-weight: 400; font-size: clamp(40px, 4.6vw, 72px); display: block; line-height: 1; letter-spacing: -0.03em; }
+.stat span { text-transform: uppercase; letter-spacing: .08em; font-size: 13px; }
+
+/* Download: FREE */
+.free { position: relative; padding: 24vh 0 22vh; text-align: center; overflow: hidden; }
+.free .word { font-family: var(--display); font-weight: 400; font-size: clamp(120px, 28vw, 460px); line-height: .8; letter-spacing: -0.06em; text-transform: uppercase; color: var(--cream); -webkit-text-stroke: 3px var(--ink); position: relative; z-index: 1; }
+.free .blob { position: absolute; border-radius: 50%; z-index: 0; animation: float 14s ease-in-out infinite alternate; }
+.free .dl { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; margin-top: 32px; position: relative; z-index: 1; }
+
+/* Footer */
+.foot { padding: 16vh 0 32px; }
+.foot-top { display: grid; grid-template-columns: 1.6fr repeat(4, minmax(0, 1fr)); gap: 32px; padding-bottom: 48px; border-bottom: 2.5px solid currentColor; }
+.foot b { display: block; margin-bottom: 14px; font-size: 13px; letter-spacing: .12em; text-transform: uppercase; }
+.foot a { display: block; text-decoration: none; margin-bottom: 10px; font-weight: 400; }
+.foot a:hover { color: var(--pink); }
+.foot .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 0; }
+.giant { font-family: var(--display); font-weight: 400; font-size: clamp(90px, 21vw, 330px); letter-spacing: -0.07em; line-height: .8; margin: 40px 0 0; user-select: none; display: flex; justify-content: space-between; }
+.giant span { display: inline-block; transition: transform .35s cubic-bezier(.2,.8,.2,1), color .3s; }
+.giant span:hover { transform: translateY(-24px) rotate(-6deg); color: var(--pink); }
+.foot-bottom { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding-top: 24px; font-size: 14px; font-weight: 400; }
+
+/* Reveal */
+.reveal { opacity: 0; transform: translateY(40px) rotate(.5deg); transition: opacity .9s cubic-bezier(.2,.8,.2,1), transform .9s cubic-bezier(.2,.8,.2,1); }
+.reveal.in { opacity: 1; transform: none; }
+
+@media (max-width: 960px) {
+  .nav-links { display: none; }
+  .nav { padding: 10px 16px; } .brand .wm { height: 22px; } .nav .cta { min-height: 44px; padding: 0 16px; font-size: 13px; }
+  .scard, .foot-top { grid-template-columns: minmax(0, 1fr); }
+  .rail { height: 300vh; }
+  .pcard { width: 84vw; }
+  .tiles { flex-direction: column; height: auto; }
+  .tile { min-height: 260px; } .tile p { opacity: 1; transform: none; }
+  .scard { min-height: auto; top: 80px; }
+  .scard .ph { min-height: 300px; }
+  .wrap { padding: 0 16px; }
+  .wall { height: 70vh; }
+  .stats { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toy.shape, .toy.sticker, .band .t, .cat-peek, .free .blob, .hint i { animation: none !important; }
+  .reveal { opacity: 1; transform: none; transition: none; }
+  body { transition: none; }
+}
+</style>
+</head>
+<body>
+<div class="cur" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 3l16 7.5-7.2 1.8L10 20z"/></svg><span>kuchu puchu</span></div>
+
+<!-- Shape sprite: every "funny shape" on the page is one of these. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <filter id="rough" x="-10%" y="-20%" width="120%" height="140%"><feTurbulence type="fractalNoise" baseFrequency="0.03 0.12" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="5" xChannelSelector="R" yChannelSelector="G"/></filter>
+    <symbol id="sh-flower" viewBox="0 0 100 100"><path d="M50 4c9 0 15 7 16 14 7-3 16-1 20 6s2 16-4 21c6 5 8 14 4 21s-13 9-20 6c-1 7-7 14-16 14s-15-7-16-14c-7 3-16 1-20-6s-2-16 4-21c-6-5-8-14-4-21s13-9 20-6C35 11 41 4 50 4z"/></symbol>
+    <symbol id="sh-sparkle" viewBox="0 0 100 100"><path d="M50 0c4 28 18 42 50 50-32 8-46 22-50 50-4-28-18-42-50-50 32-8 46-22 50-50z"/></symbol>
+    <symbol id="sh-star" viewBox="0 0 100 100"><path d="M50 2l14 32 35 3-26 23 8 34-31-18-31 18 8-34L1 37l35-3z"/></symbol>
+    <symbol id="sh-squiggle" viewBox="0 0 200 60"><path d="M4 30c20-36 40-36 60 0s40 36 60 0 40-36 60 0" fill="none" stroke="currentColor" stroke-width="12" stroke-linecap="round"/></symbol>
+    <symbol id="sh-zigzag" viewBox="0 0 200 60"><path d="M4 50l32-40 32 40 32-40 32 40 32-40 32 40" fill="none" stroke="currentColor" stroke-width="12" stroke-linejoin="round" stroke-linecap="round"/></symbol>
+    <symbol id="sh-arch" viewBox="0 0 100 100"><path d="M5 100V50a45 45 0 0 1 90 0v50H70V50a20 20 0 0 0-40 0v50z"/></symbol>
+    <symbol id="sh-ring" viewBox="0 0 100 100"><path d="M50 2a48 48 0 1 0 0 96 48 48 0 0 0 0-96zm0 26a22 22 0 1 1 0 44 22 22 0 0 1 0-44z"/></symbol>
+    <symbol id="sh-bolt" viewBox="0 0 100 100"><path d="M58 0L14 58h26L36 100l50-62H58z"/></symbol>
+    <symbol id="sh-asterisk" viewBox="0 0 100 100"><path d="M43 0h14v34l30-17 7 12-30 17 30 17-7 12-30-17v34H43V66L13 83l-7-12 30-17L6 37l7-12 30 17z"/></symbol>
+    <symbol id="sh-cloud" viewBox="0 0 160 100"><path d="M40 95a28 28 0 0 1-8-55 30 30 0 0 1 56-18 26 26 0 0 1 44 20 24 24 0 0 1-6 47z"/></symbol>
+    <symbol id="sh-halfmoon" viewBox="0 0 100 100"><path d="M50 0a50 50 0 0 1 0 100z"/></symbol>
+    <symbol id="sh-triangle" viewBox="0 0 100 100"><path d="M50 4l46 88H4z" stroke-linejoin="round"/></symbol>
+    <symbol id="sh-eye" viewBox="0 0 160 100"><path d="M80 5C40 5 10 50 10 50s30 45 70 45 70-45 70-45S120 5 80 5zm0 70a25 25 0 1 1 0-50 25 25 0 0 1 0 50z"/></symbol>
+    <symbol id="sh-arrow" viewBox="0 0 200 100"><path d="M8 70c40-50 90-60 150-30" fill="none" stroke="currentColor" stroke-width="12" stroke-linecap="round"/><path d="M130 24l32 16-10 34" fill="none" stroke="currentColor" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  </defs>
+</svg>
+
+<div class="nav-wrap">
+  <nav class="nav" aria-label="Main">
+    <a class="brand" href="#top" aria-label="Nagma home"><img src="insignia.svg" alt=""><svg class="wm" viewBox="150 21 290 96" aria-hidden="true"><path d="M152.743 96V24H164.88L204.171 89.52V24H211.886V96H199.749L160.457 31.3029V96H152.743ZM240.355 57.1714C234.183 57.1714 227.326 61.4571 228.955 70.4571L222.783 64.8C224.069 57.5143 231.098 52.1143 240.441 52.1143C251.669 52.1143 259.126 57.8571 259.126 69.8571C259.126 78.4286 256.983 90.8571 264.698 96H256.726C253.983 93.6 252.955 89.8286 252.612 85.6286C250.298 93.0857 245.155 96.8571 237.012 96.8571C227.841 96.8571 222.955 91.4571 222.955 84.7714C222.955 75.6 230.583 70.5429 240.269 70.4571L252.869 70.3714C252.869 61.3714 247.983 57.1714 240.355 57.1714ZM229.126 84.1714C229.126 88.5429 232.555 91.8 237.869 91.8C248.926 91.8 252.612 81.4286 252.612 77.3143L252.698 75.5143L240.269 75.6857C233.583 75.7714 229.126 78.2571 229.126 84.1714ZM279.838 67.2C279.838 72.8571 284.296 77.0571 291.324 77.0571C298.353 77.0571 302.81 72.8571 302.81 67.2C302.81 61.6286 298.353 57.5143 291.324 57.5143C284.638 57.5143 279.838 61.6286 279.838 67.2ZM267.324 99.4286L272.81 94.2C270.581 92.8286 269.038 90.6857 269.038 87.2571C269.038 81.2571 274.181 78.3429 279.238 78.4286C275.896 75.7714 273.924 71.8286 273.924 67.2C273.924 58.7143 280.781 52.5429 291.324 52.5429C294.496 52.5429 297.238 53.0571 299.638 54C298.867 45.9429 303.41 40.9714 309.41 40.0286L315.067 45.7714C314.467 45.6857 313.867 45.6857 313.267 45.6857C306.496 45.6857 303.238 50.2286 303.238 55.8857H303.067C306.753 58.5429 308.724 62.4857 308.724 67.2C308.724 75.7714 302.21 81.9429 291.238 81.9429C287.553 81.9429 285.581 81.2571 282.238 81.2571C278.124 81.2571 275.038 82.9714 275.038 86.3143C275.038 91.3714 281.381 90.8571 284.724 90.3429L295.953 88.7143C304.524 87.4286 315.153 88.5429 315.153 98.8286C315.153 109.114 303.41 113.914 291.153 113.914C277.01 113.914 268.01 107.743 267.324 99.4286ZM273.238 94.4571C271.696 104.314 280.696 108.771 291.153 108.771C300.238 108.771 309.238 105.686 309.238 99.3429C309.238 93.2571 302.038 93.5143 295.696 94.4571L285.324 96C281.896 96.5143 276.838 96.4286 273.238 94.4571ZM339.356 56.9143C332.671 56.9143 328.213 61.5429 327.613 70.0286V96H321.442V53.1429H327.613V60.2571C330.099 55.2 334.556 52.1143 341.413 52.1143C347.928 52.1143 352.556 55.0286 354.699 60.0857C357.442 55.0286 362.328 52.1143 369.271 52.1143C379.213 52.1143 384.528 58.0286 384.528 67.7143V96H378.271V68.8286C378.271 60.9429 373.899 56.9143 367.813 56.9143C361.128 56.9143 356.671 61.5429 356.071 70.0286V96H349.813V68.8286C349.813 60.9429 345.442 56.9143 339.356 56.9143ZM410.491 57.1714C404.32 57.1714 397.463 61.4571 399.091 70.4571L392.92 64.8C394.205 57.5143 401.234 52.1143 410.577 52.1143C421.805 52.1143 429.263 57.8571 429.263 69.8571C429.263 78.4286 427.12 90.8571 434.834 96H426.863C424.12 93.6 423.091 89.8286 422.748 85.6286C420.434 93.0857 415.291 96.8571 407.148 96.8571C397.977 96.8571 393.091 91.4571 393.091 84.7714C393.091 75.6 400.72 70.5429 410.405 70.4571L423.005 70.3714C423.005 61.3714 418.12 57.1714 410.491 57.1714ZM399.263 84.1714C399.263 88.5429 402.691 91.8 408.005 91.8C419.063 91.8 422.748 81.4286 422.748 77.3143L422.834 75.5143L410.405 75.6857C403.72 75.7714 399.263 78.2571 399.263 84.1714Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></a>
+    <div class="nav-links">
+      <a href="#products">Products <svg class="ic" aria-hidden="true"><use href="#sh-sparkle"/></svg></a>
+      <a href="#how">How it works <span class="ar">↓</span></a>
+      <a href="#paid">Usually paid <svg class="ic" aria-hidden="true"><use href="#sh-asterisk"/></svg></a>
+      <a href="#server">Your server <svg class="ic" aria-hidden="true"><use href="#sh-bolt"/></svg></a>
+      <a href="#open">Open source <svg class="ic" aria-hidden="true"><use href="#sh-star"/></svg></a>
+      <a href="https://api.nagma.app">Open in browser <span class="ar">↗</span></a>
+    </div>
+    <a class="btn cta" href="#download">Download free <span class="ar">→</span></a>
+  </nav>
+</div>
+
+<main id="top">
+
+<!-- HERO: drag anything -->
+<section class="hero" data-bg="#F6F1E7" data-fg="#141413">
+  <div class="play" id="play" aria-hidden="true">
+    <svg class="toy fun drift" style="left: -12vw; top: 6vh; width: 40vw; color: var(--yellow); --ex: -10vw; --ey: 0; --d: 0s; --dx: 2vw; --dy: 2vw; --rot: 12deg;"><use href="#sh-flower"/></svg>
+    <svg class="toy fun drift" style="right: -10vw; top: 18vh; width: 30vw; color: var(--sky); --ex: 12vw; --ey: 0; --d: .15s; --dx: -2vw; --dy: 3vw; --rot: -18deg;"><use href="#sh-asterisk"/></svg>
+    <svg class="toy fun drift wide" style="left: -8vw; bottom: 4vh; width: 34vw; aspect-ratio: 160 / 100; color: var(--mint); --ex: -10vw; --ey: 8vh; --d: .3s; --dx: 3vw; --dy: -2vw; --rot: 0deg;"><use href="#sh-cloud"/></svg>
+    <svg class="toy fun drift" style="right: 16vw; top: 6vh; width: 7vw; color: var(--orange); --ex: 0; --ey: -12vh; --d: .5s; --dx: -1vw; --dy: 2vw; --rot: 90deg;"><use href="#sh-sparkle"/></svg>
+    <div class="toy sticker" style="left: 6vw; top: 44vh; rotate: -8deg; background: var(--mint); animation-delay: .8s;">Free forever</div>
+    <div class="toy sticker" style="right: 5vw; bottom: 34vh; rotate: 6deg; background: var(--bubble); animation-delay: 1s;">No account to start</div>
+  </div>
+  <div class="wrap hero-center">
+    <h1>
+      <span class="l1">Make</span>
+      <span class="l2"><span class="outline">any</span>thing.</span>
+      <span class="l3"><span class="hl pink">for free.</span></span>
+    </h1>
+    <p class="lead">Design, whiteboards, slides, campaigns, websites, apps, video and documents. One app that runs on your computer, works with your team on any server, and never sends a bill.</p>
+    <div class="hero-ctas">
+      <a class="btn ink" href="#download">Download for macOS</a>
+      <a class="btn" href="https://api.nagma.app">Open in browser</a>
+    </div>
+
+    <!-- The glance: a Nagma window cycling through five products. -->
+    <div class="stage" id="stage" aria-label="Nagma in use: design, board, slides, sites and video">
+      <div class="bar">
+        <span class="dots"><i></i><i></i><i></i></span>
+        <span class="tabs"><b data-tab="design" class="on">Design</b><b data-tab="board">Board</b><b data-tab="slides">Slides</b><b data-tab="sites">Sites</b><b data-tab="video">Video</b></span>
+        <span class="who"><i style="background: var(--orange);"></i><i style="background: var(--sky);"></i><i style="background: var(--lime);"></i></span>
+      </div>
+      <div class="body">
+        <div class="scene on" data-scene="design"><div class="sv"><video muted loop playsinline preload="metadata" poster="img/loop-design.jpg"><source src="img/loop-design.webm" type="video/webm"><source src="img/loop-design.mp4" type="video/mp4"></video></div></div>
+        <div class="scene" data-scene="board"><div class="sv"><video muted loop playsinline preload="metadata" poster="img/loop-board.jpg"><source src="img/loop-board.webm" type="video/webm"><source src="img/loop-board.mp4" type="video/mp4"></video></div></div>
+        <div class="scene" data-scene="slides"><div class="sv"><video muted loop playsinline preload="metadata" poster="img/loop-slides.jpg"><source src="img/loop-slides.webm" type="video/webm"><source src="img/loop-slides.mp4" type="video/mp4"></video></div></div>
+        <div class="scene" data-scene="sites"><div class="sv"><video muted loop playsinline preload="metadata" poster="img/loop-sites.jpg"><source src="img/loop-sites.webm" type="video/webm"><source src="img/loop-sites.mp4" type="video/mp4"></video></div></div>
+        <div class="scene" data-scene="video"><div class="sv"><video muted loop playsinline preload="metadata" poster="img/loop-video.jpg"><source src="img/loop-video.webm" type="video/webm"><source src="img/loop-video.mp4" type="video/mp4"></video></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Kinetic bands -->
+<section class="bands" aria-hidden="true">
+  <img class="cat-peek" src="insignia.svg" alt="">
+  <div class="band tilt-l" style="--c: var(--orange);"><div class="t"><span>Design</span><span>Board</span><span>Slides</span><span>Campaign</span><span>Sites</span><span>Make</span><span>Video</span><span>Document</span><span>Design</span><span>Board</span><span>Slides</span><span>Campaign</span><span>Sites</span><span>Make</span><span>Video</span><span>Document</span></div></div>
+  <div class="band tilt-r rev" style="--c: var(--yellow);"><div class="t"><span>Opens .fig</span><span>.sketch</span><span>.pptx</span><span>.psd</span><span>.idml</span><span>.pdf</span><span>.mp4</span><span>.svg</span><span>Opens .fig</span><span>.sketch</span><span>.pptx</span><span>.psd</span><span>.idml</span><span>.pdf</span><span>.mp4</span><span>.svg</span></div></div>
+</section>
+
+<!-- Products rail -->
+<section class="rail" id="products" data-bg="#141413" data-fg="#F6F1E7">
+  <div class="rail-sticky on-dark">
+    <div class="rail-head">
+      <h2 class="reveal">Eight products.<br><span class="hl green">One file browser.</span></h2>
+      <p class="lead reveal" style="max-width: 380px;">Every product opens the same files, shares the same components and brand kits, and works with the same people. Keep scrolling: the rail moves sideways.</p>
+    </div>
+    <div class="rail-track" id="track">
+      <a class="pcard" href="https://api.nagma.app/?new=design" style="background: var(--orange);"><span class="n">01</span><h3>Design</h3><div class="loop fill"><video muted loop playsinline preload="metadata" poster="img/loop-design.jpg"><source src="img/loop-design.webm" type="video/webm"><source src="img/loop-design.mp4" type="video/mp4"></video></div><p>Vectors, auto layout, components, prototypes, motion, inspect. Opens .fig and .sketch.</p><span class="go">Explore Design →</span></a>
+      <a class="pcard" href="https://api.nagma.app/?new=board" style="background: var(--yellow);"><span class="n">02</span><h3>Board</h3><div class="loop fill"><video muted loop playsinline preload="metadata" poster="img/loop-board.jpg"><source src="img/loop-board.webm" type="video/webm"><source src="img/loop-board.mp4" type="video/mp4"></video></div><p>Stickies, sections, connectors, templates, voting and a timer. Turn clusters into frames.</p><span class="go">Explore Board →</span></a>
+      <a class="pcard" href="https://api.nagma.app/?new=slides" style="background: var(--sky);"><span class="n">03</span><h3>Slides</h3><div class="loop fill"><video muted loop playsinline preload="metadata" poster="img/loop-slides.jpg"><source src="img/loop-slides.webm" type="video/webm"><source src="img/loop-slides.mp4" type="video/mp4"></video></div><p>Templates, a real design canvas on every slide, presenter notes, export to PDF and PowerPoint.</p><span class="go">Explore Slides →</span></a>
+      <a class="pcard" href="https://api.nagma.app/?new=campaign" style="background: var(--pink);"><span class="n">04</span><h3>Campaign</h3><div class="loop fill"><video muted loop playsinline preload="metadata" poster="img/loop-campaign.jpg"><source src="img/loop-campaign.webm" type="video/webm"><source src="img/loop-campaign.mp4" type="video/mp4"></video></div><p>Posts, stories and banners in every size from one design, with brand kits and bulk edits.</p><span class="go">Explore Campaign →</span></a>
+      <a class="pcard" href="https://api.nagma.app/?new=site" style="background: var(--lime);"><span class="n">05</span><h3>Sites</h3><div class="loop fill"><video muted loop playsinline preload="metadata" poster="img/loop-sites.jpg"><source src="img/loop-sites.webm" type="video/webm"><source src="img/loop-sites.mp4" type="video/mp4"></video></div><p>Responsive sites with breakpoints, a CMS and one-click publishing to your own server and domain.</p><span class="go">Explore Sites →</span></a>
+      <a class="pcard" href="https://api.nagma.app/?new=make" style="background: var(--lilac);"><span class="n">06</span><h3>Make</h3><div class="loop fill"><video muted loop playsinline preload="metadata" poster="img/loop-make.jpg"><source src="img/loop-make.webm" type="video/webm"><source src="img/loop-make.mp4" type="video/mp4"></video></div><p>Apps from a prompt or from your frames, with your own AI key from any provider.</p><span class="go">Explore Make →</span></a>
+      <a class="pcard" href="https://api.nagma.app/?new=video" style="background: var(--cream);"><span class="n">07</span><h3>Video</h3><div class="loop fill"><video muted loop playsinline preload="metadata" poster="img/loop-video.jpg"><source src="img/loop-video.webm" type="video/webm"><source src="img/loop-video.mp4" type="video/mp4"></video></div><p>Clips, titles and motion graphics, exported to MP4 inside the app.</p><span class="go">Explore Video →</span></a>
+      <a class="pcard" href="https://api.nagma.app/?new=document" style="background: var(--mint);"><span class="n">08</span><h3>Document</h3><div class="loop fill"><video muted loop playsinline preload="metadata" poster="img/loop-document.jpg"><source src="img/loop-document.webm" type="video/webm"><source src="img/loop-document.mp4" type="video/mp4"></video></div><p>Open any PDF, reorder pages, edit the text, fill forms and sign.</p><span class="go">Explore Document →</span></a>
+      <div class="rail-end"></div>
+    </div>
+  </div>
+</section>
+
+<!-- Claim -->
+<section class="claim drop" data-bg="#F5C842" data-fg="#141413" style="position: relative; overflow: hidden;">
+  <div class="crowd" aria-hidden="true">
+    <div class="cc" style="--x: 72%; --y: 78%; --fx: -40vw; --fy: 30vh; --d: 0s; --c: var(--pink);"><svg viewBox="0 0 24 24"><path d="M4 3l16 7.5-7.2 1.8L10 20z"/></svg><span>Priya</span></div>
+    <div class="cc" style="--x: 60%; --y: 84%; --fx: 45vw; --fy: 20vh; --d: .15s; --c: var(--sky);"><svg viewBox="0 0 24 24"><path d="M4 3l16 7.5-7.2 1.8L10 20z"/></svg><span>Tomás</span></div>
+    <div class="cc" style="--x: 80%; --y: 70%; --fx: 40vw; --fy: -40vh; --d: .3s; --c: var(--lime);"><svg viewBox="0 0 24 24"><path d="M4 3l16 7.5-7.2 1.8L10 20z"/></svg><span>Ama</span></div>
+    <div class="cc" style="--x: 54%; --y: 74%; --fx: -50vw; --fy: -30vh; --d: .45s; --c: var(--lilac);"><svg viewBox="0 0 24 24"><path d="M4 3l16 7.5-7.2 1.8L10 20z"/></svg><span>Jonas</span></div>
+    <div class="cc" style="--x: 67%; --y: 90%; --fx: 10vw; --fy: 50vh; --d: .6s; --c: var(--orange);"><svg viewBox="0 0 24 24"><path d="M4 3l16 7.5-7.2 1.8L10 20z"/></svg><span>Mei</span></div>
+    <div class="cc" style="--x: 86%; --y: 82%; --fx: 50vw; --fy: 10vh; --d: .75s; --c: var(--mint);"><svg viewBox="0 0 24 24"><path d="M4 3l16 7.5-7.2 1.8L10 20z"/></svg><span>Dev</span></div>
+    <div class="cc" style="--x: 48%; --y: 88%; --fx: -30vw; --fy: 45vh; --d: .9s; --c: var(--bubble);"><svg viewBox="0 0 24 24"><path d="M4 3l16 7.5-7.2 1.8L10 20z"/></svg><span>Sana</span></div>
+    <div class="cc" style="--x: 76%; --y: 92%; --fx: 30vw; --fy: 40vh; --d: 1.05s; --c: var(--yellow);"><svg viewBox="0 0 24 24"><path d="M4 3l16 7.5-7.2 1.8L10 20z"/></svg><span>Leo</span></div>
+  </div>
+  <svg class="fun drift" style="left: -9vw; top: 10%; width: 26vw; color: var(--pink); --ex: -10vw; --ey: 0; --d: 0s; --dx: 2vw; --dy: 2vw; --rot: 20deg;" aria-hidden="true"><use href="#sh-flower"/></svg>
+  <svg class="fun drift" style="right: -6vw; bottom: 6%; width: 20vw; color: var(--sky); --ex: 8vw; --ey: 0; --d: .2s; --dx: -2vw; --dy: -2vw; --rot: -25deg;" aria-hidden="true"><use href="#sh-star"/></svg>
+  <div class="wrap" style="position: relative;">
+    <span class="eyebrow reveal">How it works</span>
+    <h2 class="reveal" style="margin-top: 24px;"><span class="w">Works</span> <span class="w">alone</span> <span class="w">on</span> <span class="w">your</span> <span class="w">machine.</span><br><span class="w hl pink">Connect</span> <span class="w">a</span> <span class="w">server</span> <span class="w">when</span> <span class="w">you</span> <span class="w">want</span> <span class="w">company.</span></h2>
+  </div>
+</section>
+
+<!-- Stacking cards -->
+<section class="stack-sec" id="how" data-bg="#F6F1E7" data-fg="#141413">
+  <div class="wrap">
+    <div class="scard">
+      <div class="copy"><span class="eyebrow">01 Design</span><h3>Layouts that build themselves</h3><p class="lead">Auto layout, constraints and grids keep every frame tidy as content changes. Components and variants carry the rules into every file.</p><ul><li>Hug, fill, fixed</li><li>Variants and variables</li><li>Shared libraries</li></ul></div>
+      <div class="ph"><span class="tag motion">Loop</span><div><strong>Auto layout reflow</strong>Text is typed into a card; the card, its row and the frame grow to fit. A variant switch swaps the button style everywhere.</div></div>
+    </div>
+    <div class="scard">
+      <div class="copy"><span class="eyebrow">02 Prototype and motion</span><h3>From static screens to a moving story</h3><p class="lead">Wire up interactions, pick transitions, then open the Motion timeline to keyframe anything. Present it, share it, export it as video.</p><ul><li>Overlays and scroll</li><li>Transitions</li><li>Keyframes and easing</li></ul></div>
+      <div class="ph"><span class="tag motion">Loop</span><div><strong>Prototype play</strong>A link is dragged from a button to a screen, a transition is picked, the preview plays it.</div></div>
+    </div>
+    <div class="scard">
+      <div class="copy"><span class="eyebrow">03 Together</span><h3>Everyone in the file at the same time</h3><p class="lead">Live cursors, comments, version history and share links on every kind of file. Invite by email, or share a link with a key only the people you choose can open.</p><ul><li>Cursors and follow</li><li>Comments and mentions</li><li>Named versions</li></ul></div>
+      <div class="ph"><span class="tag motion">Loop</span><div><strong>Collaboration montage</strong>Five named cursors edit a board, then a deck. A comment opens, someone resolves it, a version is restored.</div></div>
+    </div>
+    <div class="scard">
+      <div class="copy"><span class="eyebrow">04 AI with your own key</span><h3>Bring the model you already pay for</h3><p class="lead">Add a key from the provider you choose and every AI feature lights up: Make apps from a prompt, rewrite copy, generate images, summarise a board. You pay the provider, if at all. Nagma never meters it.</p><ul><li>[Provider A]</li><li>[Provider B]</li><li>[Provider C]</li><li>Local model</li></ul></div>
+      <div class="ph"><span class="tag motion">Loop</span><div><strong>Make from a prompt</strong>A prompt is typed, an app assembles on the canvas piece by piece, and it runs.</div></div>
+    </div>
+    <div class="stack-space" style="height: 40vh;"></div>
+  </div>
+</section>
+
+<!-- Usually paid -->
+<section class="paid" id="paid" data-bg="#F6F1E7" data-fg="#141413">
+  <div class="wrap">
+    <div class="paid-head reveal">
+      <div>
+        <span class="eyebrow">The usual paywall</span>
+        <h2>The things you <span class="hl green">usually pay for.</span></h2>
+      </div>
+      <p class="lead">The features that live behind an upgrade button almost everywhere. Here they're the starting point.</p>
+    </div>
+    <div class="ptable reveal" role="table" aria-label="Features that are usually paid, free here">
+      <div class="prow phead" role="row"><span role="columnheader">Feature</span><span role="columnheader">Usually</span><span role="columnheader">Here</span></div>
+      <div class="prow" role="row"><span role="cell"><b>Files, pages and projects</b><small>Design, boards, decks, sites, all of it</small></span><span role="cell" class="was"><i>3 files, then upgrade</i></span><span role="cell" class="now">Unlimited</span></div>
+      <div class="prow" role="row"><span role="cell"><b>Version history</b><small>Every save kept, name the ones that matter</small></span><span role="cell" class="was"><i>30 days, then gone</i></span><span role="cell" class="now">Forever</span></div>
+      <div class="prow" role="row"><span role="cell"><b>Shared libraries</b><small>Publish components and styles to your team</small></span><span role="cell" class="was"><i>Paid plan</i></span><span role="cell" class="now">Free, any team size</span></div>
+      <div class="prow" role="row"><span role="cell"><b>Variable modes</b><small>Light, dark, every brand, every breakpoint</small></span><span role="cell" class="was"><i>None free, capped when paid</i></span><span role="cell" class="now">Unlimited</span></div>
+      <div class="prow" role="row"><span role="cell"><b>Handoff and code</b><small>Measurements, tokens, CSS, Swift, Kotlin</small></span><span role="cell" class="was"><i>A seat per developer</i></span><span role="cell" class="now">Every developer</span></div>
+      <div class="prow more" role="row" hidden><span role="cell"><b>Who can edit</b><small>Designers, writers, developers, clients</small></span><span role="cell" class="was"><i>Priced per seat</i></span><span role="cell" class="now">Everyone, no seats</span></div>
+      <div class="prow more" role="row" hidden><span role="cell"><b>AI features</b><small>Make apps, rewrite copy, generate images</small></span><span role="cell" class="was"><i>Credits that run out</i></span><span role="cell" class="now">Your key, no meter</span></div>
+      <div class="prow more" role="row" hidden><span role="cell"><b>Branching and merging</b><small>Try changes on a branch, review, merge</small></span><span role="cell" class="was"><i>Top tier only</i></span><span role="cell" class="now">Included</span></div>
+      <div class="prow more" role="row" hidden><span role="cell"><b>Single sign-on</b><small>SAML with the identity provider you already run</small></span><span role="cell" class="was"><i>Top tier only</i></span><span role="cell" class="now">Included</span></div>
+      <div class="prow more" role="row" hidden><span role="cell"><b>Private projects</b><small>Work nobody sees until you share it</small></span><span role="cell" class="was"><i>Paid plan</i></span><span role="cell" class="now">Free</span></div>
+      <div class="prow more" role="row" hidden><span role="cell"><b>Protected links</b><small>Passwords and expiry dates on shared links</small></span><span role="cell" class="was"><i>Paid, expiry top tier only</i></span><span role="cell" class="now">Both free</span></div>
+      <div class="prow more" role="row" hidden><span role="cell"><b>Publishing</b><small>Sites and apps live on your own domain</small></span><span role="cell" class="was"><i>Paid plan</i></span><span role="cell" class="now">Free, your server</span></div>
+      <div class="prow more" role="row" hidden><span role="cell"><b>Custom templates</b><small>Decks, boards, campaigns and sites</small></span><span role="cell" class="was"><i>Capped, then paid</i></span><span role="cell" class="now">Unlimited</span></div>
+      <div class="prow more" role="row" hidden><span role="cell"><b>Teams and projects</b><small>As many as you need, with roles</small></span><span role="cell" class="was"><i>One team free</i></span><span role="cell" class="now">Unlimited</span></div>
+      <div class="prow more" role="row" hidden><span role="cell"><b>Where your files live</b><small>Your laptop, our server, or one you run</small></span><span role="cell" class="was"><i>Their cloud, region at top tier</i></span><span role="cell" class="now">Your choice</span></div>
+    </div>
+    <div class="paid-more"><button class="btn" type="button" id="paid-toggle" aria-expanded="false" aria-controls="paid">See all <span class="count">(10 more)</span> <span class="ar">↓</span></button></div>
+  </div>
+</section>
+
+<!-- Servers -->
+<section class="section on-dark drop" id="server" data-bg="#141413" data-fg="#F6F1E7" style="padding: 20vh 0; position: relative; overflow: hidden;">
+  <svg class="fun drift" style="right: -8vw; top: 5%; width: 28vw; aspect-ratio: 160 / 100; color: var(--orange); --ex: 8vw; --ey: 0; --d: 0s; --dx: -2vw; --dy: 2vw; --rot: -8deg;" aria-hidden="true"><use href="#sh-eye"/></svg>
+  <svg class="fun drift" style="left: -5vw; bottom: 6%; width: 18vw; color: var(--green); --ex: -8vw; --ey: 0; --d: .2s; --dx: 2vw; --dy: -2vw; --rot: 30deg;" aria-hidden="true"><use href="#sh-asterisk"/></svg>
+  <div class="wrap" style="position: relative;">
+    <div style="display: flex; justify-content: space-between; align-items: end; gap: 24px; flex-wrap: wrap; margin-bottom: 64px;">
+      <h2 class="reveal" style="max-width: 900px;">Your files. <span class="hl pink">Your server.</span></h2>
+      <p class="lead reveal" style="max-width: 420px;">Nothing leaves your computer until you say so. Hover a tile. Pick one later.</p>
+    </div>
+    <div class="tiles">
+      <div class="tile t1"><svg class="illo" viewBox="0 0 200 120" aria-hidden="true"><rect x="28" y="14" width="144" height="86" rx="10" fill="#fff" stroke="#141413" stroke-width="3"/><rect x="38" y="24" width="124" height="66" rx="4" fill="#F6F1E7" stroke="#141413" stroke-width="2"/><rect x="46" y="32" width="40" height="24" rx="4" fill="#F5C842" stroke="#141413" stroke-width="2"/><rect x="92" y="32" width="62" height="10" rx="3" fill="#8FC1F0" stroke="#141413" stroke-width="2"/><rect x="92" y="46" width="44" height="10" rx="3" fill="#FC829A" stroke="#141413" stroke-width="2"/><rect x="46" y="62" width="108" height="20" rx="4" fill="#BFE6C8" stroke="#141413" stroke-width="2"/><path d="M14 102h172l-10 10H24z" fill="#141413"/><circle cx="100" cy="19" r="2" fill="#141413"/></svg><div class="big">This computer</div><p>Free, no account. Files stay on this device as drafts. The desktop app has a server built in.</p></div>
+      <div class="tile t2"><svg class="illo" viewBox="0 0 200 120" aria-hidden="true"><path d="M52 96a26 26 0 0 1-6-51 30 30 0 0 1 57-14 24 24 0 0 1 43 14 22 22 0 0 1-2 51z" fill="#fff" stroke="#141413" stroke-width="3"/><circle cx="70" cy="62" r="9" fill="#FC829A" stroke="#141413" stroke-width="2.5"/><circle cx="100" cy="52" r="9" fill="#F5C842" stroke="#141413" stroke-width="2.5"/><circle cx="130" cy="64" r="9" fill="#8FC1F0" stroke="#141413" stroke-width="2.5"/><path d="M78 59l14-5M108 55l14 6M74 70l22 10 24-12" fill="none" stroke="#141413" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="98" cy="82" r="7" fill="#BFE6C8" stroke="#141413" stroke-width="2.5"/></svg><div class="big">Nagma hosted, free</div><p>Share and collaborate with anyone. Create an account, invite people, done.</p></div>
+      <div class="tile t3"><svg class="illo" viewBox="0 0 200 120" aria-hidden="true"><rect x="40" y="18" width="120" height="26" rx="6" fill="#fff" stroke="#141413" stroke-width="3"/><rect x="40" y="48" width="120" height="26" rx="6" fill="#fff" stroke="#141413" stroke-width="3"/><rect x="40" y="78" width="120" height="26" rx="6" fill="#fff" stroke="#141413" stroke-width="3"/><circle cx="54" cy="31" r="4" fill="#4FAF78" stroke="#141413" stroke-width="2"/><circle cx="54" cy="61" r="4" fill="#4FAF78" stroke="#141413" stroke-width="2"/><circle cx="54" cy="91" r="4" fill="#F5C842" stroke="#141413" stroke-width="2"/><rect x="66" y="27" width="60" height="8" rx="3" fill="#F6F1E7" stroke="#141413" stroke-width="2"/><rect x="66" y="57" width="48" height="8" rx="3" fill="#F6F1E7" stroke="#141413" stroke-width="2"/><rect x="66" y="87" width="70" height="8" rx="3" fill="#F6F1E7" stroke="#141413" stroke-width="2"/><rect x="134" y="26" width="16" height="10" rx="2" fill="#FC829A" stroke="#141413" stroke-width="2"/><rect x="134" y="56" width="16" height="10" rx="2" fill="#8FC1F0" stroke="#141413" stroke-width="2"/><path d="M172 40c10 8 10 32 0 40" fill="none" stroke="#141413" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="4 5"/></svg><div class="big">Your own server</div><p>Your company's, or one you start yourself. Any Linux box, a home server, a free cloud VM.</p><span class="code">[one-line install command]</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- Sticker wall -->
+<section class="wall" id="wall" data-bg="#F6F1E7" data-fg="#141413">
+  <div class="wall-pin"><div class="wrap"><div class="wall-box" id="wallbox">
+  <h2>Nothing to <span class="hl">unlock.</span></h2>
+  <span class="st" style="--x: 12; --y: 12; --r: -8;" data-c="yellow">No seats</span>
+  <span class="st" style="--x: 30; --y: 9; --r: 5;">No credits</span>
+  <span class="st" style="--x: 50; --y: 9; --r: -3;" data-c="pink">No watermark</span>
+  <span class="st" style="--x: 70; --y: 9; --r: 7;" data-c="lime">No telemetry</span>
+  <span class="st" style="--x: 88; --y: 16; --r: -6;">No "pro" tier</span>
+  <span class="st" style="--x: 9; --y: 40; --r: 4;" data-c="orange">No trial</span>
+  <span class="st" style="--x: 91; --y: 44; --r: -5;" data-c="lilac">No surprise</span>
+  <span class="st" style="--x: 10; --y: 66; --r: -5;" data-c="lilac">No export fee</span>
+  <span class="st" style="--x: 91; --y: 70; --r: 8;" data-c="orange">No bill</span>
+  <span class="st" style="--x: 16; --y: 88; --r: 6;" data-c="yellow">No lock-in</span>
+  <span class="st" style="--x: 38; --y: 90; --r: -4;">No ads</span>
+  <span class="st" style="--x: 62; --y: 90; --r: 3;" data-c="pink">No plan that expires</span>
+  <span class="st" style="--x: 84; --y: 89; --r: -7;" data-c="lime">No account to start</span>
+  </div></div></div>
+</section>
+
+<!-- Open source -->
+<section id="open" data-bg="#F6F1E7" data-fg="#141413" style="padding: 22vh 0;">
+  <div class="wrap">
+    <h2 class="reveal" style="max-width: 1000px; margin-bottom: 64px;">MPL-2.0. <span class="hl green">Read it, fork it, run it.</span></h2>
+    <div class="stats">
+      <div class="stat reveal"><b>[stars]</b><span>GitHub stars</span></div>
+      <div class="stat reveal"><b>[n]</b><span>Contributors</span></div>
+      <div class="stat reveal"><b>[n]</b><span>Servers running</span></div>
+    </div>
+    <div class="reveal" style="display: flex; justify-content: space-between; align-items: center; gap: 32px; flex-wrap: wrap; margin-top: 40px;">
+      <p class="lead" style="max-width: 640px;">The editor, the server and the desktop app are one public repository. No telemetry, no accounts you did not ask for, no plan that expires.</p>
+      <div style="display: flex; gap: 12px; flex-wrap: wrap;"><a class="btn ink" href="https://github.com/fish-hook-studios/nagma">View on GitHub</a><a class="btn" href="#open">Read the docs</a></div>
+    </div>
+  </div>
+</section>
+
+<!-- Download -->
+<section class="free drop" id="download" data-bg="#EF7F42" data-fg="#141413">
+  <svg class="fun drift" style="left: -10vw; top: 6vh; width: 34vw; color: var(--yellow); --ex: -10vw; --ey: 0; --d: 0s; --dx: 2vw; --dy: 2vw; --rot: 15deg;" aria-hidden="true"><use href="#sh-flower"/></svg>
+  <svg class="fun drift wide" style="right: -8vw; bottom: 0; width: 34vw; aspect-ratio: 160 / 100; color: var(--mint); --ex: 10vw; --ey: 0; --d: .2s; --dx: -3vw; --dy: -2vw; --rot: 0deg;" aria-hidden="true"><use href="#sh-cloud"/></svg>
+  <svg class="fun drift" style="right: 12vw; top: 8vh; width: 7vw; color: var(--sky); --ex: 0; --ey: -10vh; --d: .4s; --dx: -1vw; --dy: 2vw; --rot: 90deg;" aria-hidden="true"><use href="#sh-sparkle"/></svg>
+  <div class="wrap">
+    <div class="word reveal">Free</div>
+    <p class="lead reveal" style="max-width: 560px; margin: 24px auto 0; font-weight: 400;">Today, tomorrow, forever. Download the desktop app or open it in the browser. Everything works the moment it opens.</p>
+    <div class="dl reveal">
+      <a class="btn ink" href="https://github.com/fish-hook-studios/nagma/releases/latest/download/Nagma-mac-arm64.dmg">macOS</a>
+      <a class="btn ink" href="https://github.com/fish-hook-studios/nagma/releases/latest/download/Nagma-Setup-x64.exe">Windows</a>
+      <a class="btn ink" href="https://github.com/fish-hook-studios/nagma/releases/latest/download/Nagma-x86_64.AppImage">Linux</a>
+      <a class="btn" href="https://api.nagma.app">Open in browser</a>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="foot" data-bg="#141413" data-fg="#F6F1E7">
+  <div class="wrap">
+    <div class="foot-top">
+      <div>
+        <a class="brand" href="#top" aria-label="Nagma home"><img src="insignia.svg" alt=""><svg class="wm" viewBox="150 21 290 96" aria-hidden="true"><path d="M152.743 96V24H164.88L204.171 89.52V24H211.886V96H199.749L160.457 31.3029V96H152.743ZM240.355 57.1714C234.183 57.1714 227.326 61.4571 228.955 70.4571L222.783 64.8C224.069 57.5143 231.098 52.1143 240.441 52.1143C251.669 52.1143 259.126 57.8571 259.126 69.8571C259.126 78.4286 256.983 90.8571 264.698 96H256.726C253.983 93.6 252.955 89.8286 252.612 85.6286C250.298 93.0857 245.155 96.8571 237.012 96.8571C227.841 96.8571 222.955 91.4571 222.955 84.7714C222.955 75.6 230.583 70.5429 240.269 70.4571L252.869 70.3714C252.869 61.3714 247.983 57.1714 240.355 57.1714ZM229.126 84.1714C229.126 88.5429 232.555 91.8 237.869 91.8C248.926 91.8 252.612 81.4286 252.612 77.3143L252.698 75.5143L240.269 75.6857C233.583 75.7714 229.126 78.2571 229.126 84.1714ZM279.838 67.2C279.838 72.8571 284.296 77.0571 291.324 77.0571C298.353 77.0571 302.81 72.8571 302.81 67.2C302.81 61.6286 298.353 57.5143 291.324 57.5143C284.638 57.5143 279.838 61.6286 279.838 67.2ZM267.324 99.4286L272.81 94.2C270.581 92.8286 269.038 90.6857 269.038 87.2571C269.038 81.2571 274.181 78.3429 279.238 78.4286C275.896 75.7714 273.924 71.8286 273.924 67.2C273.924 58.7143 280.781 52.5429 291.324 52.5429C294.496 52.5429 297.238 53.0571 299.638 54C298.867 45.9429 303.41 40.9714 309.41 40.0286L315.067 45.7714C314.467 45.6857 313.867 45.6857 313.267 45.6857C306.496 45.6857 303.238 50.2286 303.238 55.8857H303.067C306.753 58.5429 308.724 62.4857 308.724 67.2C308.724 75.7714 302.21 81.9429 291.238 81.9429C287.553 81.9429 285.581 81.2571 282.238 81.2571C278.124 81.2571 275.038 82.9714 275.038 86.3143C275.038 91.3714 281.381 90.8571 284.724 90.3429L295.953 88.7143C304.524 87.4286 315.153 88.5429 315.153 98.8286C315.153 109.114 303.41 113.914 291.153 113.914C277.01 113.914 268.01 107.743 267.324 99.4286ZM273.238 94.4571C271.696 104.314 280.696 108.771 291.153 108.771C300.238 108.771 309.238 105.686 309.238 99.3429C309.238 93.2571 302.038 93.5143 295.696 94.4571L285.324 96C281.896 96.5143 276.838 96.4286 273.238 94.4571ZM339.356 56.9143C332.671 56.9143 328.213 61.5429 327.613 70.0286V96H321.442V53.1429H327.613V60.2571C330.099 55.2 334.556 52.1143 341.413 52.1143C347.928 52.1143 352.556 55.0286 354.699 60.0857C357.442 55.0286 362.328 52.1143 369.271 52.1143C379.213 52.1143 384.528 58.0286 384.528 67.7143V96H378.271V68.8286C378.271 60.9429 373.899 56.9143 367.813 56.9143C361.128 56.9143 356.671 61.5429 356.071 70.0286V96H349.813V68.8286C349.813 60.9429 345.442 56.9143 339.356 56.9143ZM410.491 57.1714C404.32 57.1714 397.463 61.4571 399.091 70.4571L392.92 64.8C394.205 57.5143 401.234 52.1143 410.577 52.1143C421.805 52.1143 429.263 57.8571 429.263 69.8571C429.263 78.4286 427.12 90.8571 434.834 96H426.863C424.12 93.6 423.091 89.8286 422.748 85.6286C420.434 93.0857 415.291 96.8571 407.148 96.8571C397.977 96.8571 393.091 91.4571 393.091 84.7714C393.091 75.6 400.72 70.5429 410.405 70.4571L423.005 70.3714C423.005 61.3714 418.12 57.1714 410.491 57.1714ZM399.263 84.1714C399.263 88.5429 402.691 91.8 408.005 91.8C419.063 91.8 422.748 81.4286 422.748 77.3143L422.834 75.5143L410.405 75.6857C403.72 75.7714 399.263 78.2571 399.263 84.1714Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></a>
+        <p style="margin-top: 14px; max-width: 300px; font-weight: 400;">By Fishhook Studios. Free, open source, local-first. Made with a cat in the room.</p>
+      </div>
+      <div><b>Products</b><a href="design.html">Design</a><a href="board.html">Board</a><a href="slides.html">Slides</a><a href="campaign.html">Campaign</a><a href="sites.html">Sites</a><a href="make.html">Make</a><a href="video.html">Video</a><a href="document.html">Document</a></div>
+      <div><b>Get started</b><a href="#download">Download</a><a href="https://api.nagma.app">Open in browser</a><a href="#server">Connect a server</a><a href="#server">Self-host</a><a href="#how">AI keys</a></div>
+      <div><b>Resources</b><a href="#open">Docs</a><a href="https://github.com/fish-hook-studios/nagma">GitHub</a><a href="https://github.com/fish-hook-studios/nagma/releases">Releases</a><a href="#open">Security</a></div>
+      <div><b>Company</b><a href="#open">About</a><a href="#open">Contact</a><a href="#open">Licence</a><a href="#open">Trademarks</a></div>
+    </div>
+    <div class="giant" aria-hidden="true"><span>N</span><span>a</span><span>g</span><span>m</span><span>a</span></div>
+    <div class="foot-bottom">
+      <span>Nagma is open source under MPL-2.0. [year] Fishhook Studios.</span>
+      <span>No cookies, no tracking.</span>
+    </div>
+  </div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.20.0/matter.min.js"></script>
+<script>
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+// Custom cursor: grows over links and buttons.
+const cur = document.querySelector(".cur");
+addEventListener("pointermove", (e) => { cur.style.transform = `translate(${e.clientX - 4}px, ${e.clientY - 3}px)`; }, { passive: true });
+document.querySelectorAll("a, button, .toy, .st").forEach((el) => {
+  el.addEventListener("pointerenter", () => cur.classList.add("big"));
+  el.addEventListener("pointerleave", () => cur.classList.remove("big"));
+});
+
+// Page colour follows the section nearest the top of the window.
+const sections = [...document.querySelectorAll("[data-bg]")];
+function paint() {
+  const y = innerHeight * 0.4;
+  let cur = sections[0];
+  for (const s of sections) { if (s.getBoundingClientRect().top <= y) cur = s; }
+  document.documentElement.style.setProperty("--bg", cur.dataset.bg);
+  document.documentElement.style.setProperty("--fg", cur.dataset.fg);
+}
+addEventListener("scroll", paint, { passive: true }); paint();
+
+// Hero playground: drag any toy. A dragged toy stops floating.
+const play = document.getElementById("play");
+let drag = null;
+play.addEventListener("pointerdown", (e) => {
+  const t = e.target.closest(".toy"); if (!t) return;
+  const r = t.getBoundingClientRect(); const pr = play.getBoundingClientRect();
+  drag = { t, dx: e.clientX - r.left, dy: e.clientY - r.top, pr };
+  t.style.animation = "none"; t.style.translate = "0 0"; t.style.zIndex = 5;
+  t.style.left = (r.left - pr.left) + "px"; t.style.top = (r.top - pr.top) + "px"; t.style.right = "auto"; t.style.bottom = "auto";
+  t.setPointerCapture(e.pointerId); e.preventDefault();
+});
+play.addEventListener("pointermove", (e) => {
+  if (!drag) return;
+  drag.t.style.left = (e.clientX - drag.pr.left - drag.dx) + "px";
+  drag.t.style.top = (e.clientY - drag.pr.top - drag.dy) + "px";
+});
+play.addEventListener("pointerup", () => { if (drag) drag.t.style.zIndex = ""; drag = null; });
+play.style.pointerEvents = "auto";
+
+// Mouse parallax on the hero shapes (light touch).
+if (!reduce) addEventListener("pointermove", (e) => {
+  const x = (e.clientX / innerWidth - .5), y = (e.clientY / innerHeight - .5);
+  document.querySelectorAll(".hero .toy.fun").forEach((s, i) => { if (s !== drag?.t) s.style.marginLeft = `${x * 30 * (i % 2 ? -1 : 1)}px`, s.style.marginTop = `${y * 24 * (i % 3 ? 1 : -1)}px`; });
+}, { passive: true });
+
+// Product rail: vertical scroll moves the track sideways.
+const rail = document.querySelector(".rail"), track = document.getElementById("track");
+function moveRail() {
+  const r = rail.getBoundingClientRect();
+  const total = rail.offsetHeight - innerHeight;
+  const p = Math.min(1, Math.max(0, -r.top / total));
+  const max = track.scrollWidth - innerWidth + 32;
+  track.style.transform = `translateX(${-p * max}px)`;
+}
+addEventListener("scroll", moveRail, { passive: true }); addEventListener("resize", moveRail); moveRail();
+
+// The glance: one scene at a time, 4.8 s each; the tab follows. Re-adding .on restarts the CSS animations.
+const scenes = [...document.querySelectorAll("#stage .scene")], tabs = [...document.querySelectorAll("#stage .tabs b")];
+let scene = 0;
+function showScene(i) {
+  scenes.forEach((s, k) => { s.classList.toggle("on", k === i); const v = s.querySelector("video"); if (!v) return; if (k === i) { v.currentTime = 0; v.play().catch(() => {}); } else v.pause(); });
+  tabs.forEach((t, k) => t.classList.toggle("on", k === i));
+}
+scenes[0].querySelector("video")?.play().catch(() => {});
+let timer = null;
+function startLoop() { if (reduce) return; clearInterval(timer); timer = setInterval(() => { const v = scenes[scene].querySelector("video"); if (v && !v.paused && v.duration && v.currentTime < v.duration - 0.6) return; scene = (scene + 1) % scenes.length; showScene(scene); }, 500); }
+startLoop();
+tabs.forEach((t, k) => t.addEventListener("click", () => { scene = k; showScene(k); startLoop(); }));
+
+// Stacking cards: a card that the next one has started to cover shrinks a little, so the stack reads as a stack.
+const scards = [...document.querySelectorAll(".scard")];
+function stackCards() {
+  scards.forEach((c, i) => {
+    const next = scards[i + 1];
+    if (!next) { c.classList.remove("behind"); return; }
+    const r = c.getBoundingClientRect(), n = next.getBoundingClientRect();
+    const covered = Math.min(1, Math.max(0, (r.bottom - n.top) / r.height));
+    c.classList.toggle("behind", covered > 0);
+    c.style.setProperty("--s", String(1 - covered * 0.06));
+  });
+}
+addEventListener("scroll", stackCards, { passive: true }); addEventListener("resize", stackCards); stackCards();
+
+
+// Sticker wall physics: pills get bodies at their resting spots; scrolling past the wall lets gravity
+// take them to the floor, where they pile up and can be grabbed and thrown.
+(function () {
+  const wall = document.getElementById("wallbox"), pills = [...wall.querySelectorAll(".st")];
+  if (!window.Matter || reduce) return;
+  const { Engine, Bodies, Body, Composite, Mouse, MouseConstraint, Runner, Events } = Matter;
+  const engine = Engine.create({ gravity: { x: 0, y: 0 } });
+  const W = () => wall.clientWidth, H = () => wall.clientHeight;
+  const bodies = pills.map((el) => {
+    const r = el.getBoundingClientRect(), w = r.width, h = r.height;
+    const x = parseFloat(el.style.getPropertyValue("--x")) / 100 * W();
+    const y = parseFloat(el.style.getPropertyValue("--y")) / 100 * H();
+    const angle = parseFloat(el.style.getPropertyValue("--r")) * Math.PI / 180;
+    // Made dynamic first, then parked: a body born static has no mass to restore when it's released.
+    const b = Bodies.rectangle(x, y, w, h, { chamfer: { radius: h / 2 - 2 }, angle, restitution: 0.25, friction: 0.6, frictionAir: 0.015, density: 0.002 });
+    Body.setStatic(b, true);
+    b.el = el; b.w = w; b.h = h; b.fx = x / W(); b.fy = y / H(); return b;
+  });
+  const walls = () => [
+    Bodies.rectangle(W() / 2, H() + 40, W() + 400, 80, { isStatic: true }),
+    Bodies.rectangle(-40, H() / 2, 80, H() * 3, { isStatic: true }),
+    Bodies.rectangle(W() + 40, H() / 2, 80, H() * 3, { isStatic: true }),
+  ];
+  let bounds = walls();
+  Composite.add(engine.world, [...bodies, ...bounds]);
+  wall.classList.add("live");
+  const draw = () => { for (const b of bodies) b.el.style.transform = `translate(${b.position.x - b.w / 2}px, ${b.position.y - b.h / 2}px) rotate(${b.angle}rad)`; };
+  draw();
+  // Grab and throw with the mouse. Touch is left to scrolling.
+  if (matchMedia("(hover: hover)").matches) {
+    const mouse = Mouse.create(wall);
+    wall.removeEventListener("wheel", mouse.mousewheel); wall.removeEventListener("DOMMouseScroll", mouse.mousewheel);
+    const mc = MouseConstraint.create(engine, { mouse, constraint: { stiffness: 0.12, damping: 0.1, render: { visible: false } } });
+    Composite.add(engine.world, mc);
+  }
+  const runner = Runner.create();
+  Events.on(engine, "afterUpdate", draw);
+  let dropped = false, running = false, armed = false;
+  function drop() {
+    if (dropped) return; dropped = true;
+    engine.gravity.y = 1.1;
+    bodies.forEach((b, i) => { Body.setStatic(b, false); Body.setAngularVelocity(b, (Math.random() - 0.5) * 0.15); Body.setVelocity(b, { x: (Math.random() - 0.5) * 2, y: i * 0.3 }); });
+  }
+  // Scrolling back up above the wall floats every pill back to its place in the ring, so the drop can play again.
+  let returning = false;
+  function reset() {
+    if (!dropped || returning) return;
+    returning = true; dropped = false; armed = false;
+    engine.gravity.y = 0;
+    const ringH = H();
+    const from = bodies.map((b) => ({ x: b.position.x, y: b.position.y, a: b.angle }));
+    const to = bodies.map((b) => ({ x: b.fx * W(), y: b.fy * ringH, a: parseFloat(b.el.style.getPropertyValue("--r")) * Math.PI / 180 }));
+    bodies.forEach((b) => { Body.setStatic(b, true); Body.setVelocity(b, { x: 0, y: 0 }); });
+    const t0 = performance.now(), dur = 800;
+    (function step(now) {
+      const k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+      bodies.forEach((b, i) => {
+        Body.setPosition(b, { x: from[i].x + (to[i].x - from[i].x) * e, y: from[i].y + (to[i].y - from[i].y) * e });
+        Body.setAngle(b, from[i].a + (to[i].a - from[i].a) * e);
+      });
+      draw();
+      if (k < 1) requestAnimationFrame(step); else returning = false;
+    })(t0);
+  }
+  const section = document.getElementById("wall");
+  let lastP = null;
+  function tick() {
+    const r = wall.getBoundingClientRect();
+    const visible = r.bottom > 0 && r.top < innerHeight;
+    if (visible && !running) { Runner.run(runner, engine); running = true; }
+    if (!visible && running) { Runner.stop(runner); running = false; }
+    // Progress through the runway: 0 when the box has just pinned, 1 when the page lets it go.
+    const sr = section.getBoundingClientRect();
+    const p = -sr.top / (section.offsetHeight - innerHeight);
+    const goingDown = lastP !== null && p > lastP, goingUp = lastP !== null && p < lastP;
+    lastP = p;
+    // A little way into the pinned stretch: gravity. The rest of the runway is the fall.
+    if (goingDown && p > 0.08 && p < 1 && !armed) { armed = true; drop(); }
+    // Back up near the start of the runway: the pills float back into the ring.
+    if (goingUp && dropped && p < 0.06) reset();
+    if (p < -0.2) reset();
+  }
+  addEventListener("scroll", tick, { passive: true }); tick();
+  addEventListener("resize", () => {
+    Composite.remove(engine.world, bounds); bounds = walls(); Composite.add(engine.world, bounds);
+    // Keep every pill inside the new box: one left below the floor would fall for ever.
+    for (const b of bodies) {
+      const x = dropped ? Math.min(Math.max(b.position.x, b.w / 2), W() - b.w / 2) : b.fx * W();
+      const y = dropped ? Math.min(b.position.y, H() - b.h / 2) : b.fy * H();
+      Body.setPosition(b, { x, y }); Body.setVelocity(b, { x: 0, y: 0 });
+    }
+    draw();
+  });
+})();
+
+// Highlighter marks: two marker passes behind each .hl, drawn in when the word is on screen.
+document.querySelectorAll(".hl").forEach((el) => {
+  el.insertAdjacentHTML("beforeend", '<svg class="hlm" viewBox="0 0 200 100" preserveAspectRatio="none" aria-hidden="true"><path d="M4 16 C 40 8, 90 12, 130 9 S 186 4, 197 12 C 200 40, 198 66, 195 92 C 150 88, 100 96, 60 93 S 14 98, 5 90 C 1 64, 2 40, 4 16 Z"/></svg>');
+});
+const hio = new IntersectionObserver((entries) => { for (const e of entries) if (e.isIntersecting) { e.target.classList.add("in"); hio.unobserve(e.target); } }, { threshold: 0.6 });
+document.querySelectorAll(".hl").forEach((el) => hio.observe(el));
+
+// Nav: hides on the way down, returns on the way up, always there near the top.
+const navWrap = document.querySelector(".nav-wrap");
+let lastY = scrollY;
+addEventListener("scroll", () => {
+  const y = scrollY;
+  if (y < 12) navWrap.classList.remove("hide");
+  else if (y > lastY + 2) navWrap.classList.add("hide");
+  else if (y < lastY - 2) navWrap.classList.remove("hide");
+  lastY = y;
+}, { passive: true });
+
+// Usually-paid table: five rows first, the rest on request.
+const paidToggle = document.getElementById("paid-toggle");
+paidToggle.addEventListener("click", () => {
+  const open = paidToggle.getAttribute("aria-expanded") === "true";
+  document.querySelectorAll(".prow.more").forEach((r) => { r.hidden = open; });
+  paidToggle.setAttribute("aria-expanded", String(!open));
+  paidToggle.innerHTML = open ? 'See all <span class="count">(10 more)</span> <span class="ar">↓</span>' : 'Show fewer <span class="ar">↑</span>';
+  if (open) document.getElementById("paid").scrollIntoView({ behavior: "smooth", block: "start" });
+});
+
+// Product loops play only while on screen.
+const vio = new IntersectionObserver((entries) => {
+  for (const e of entries) { const v = e.target; if (e.isIntersecting) v.play().catch(() => {}); else v.pause(); }
+}, { threshold: 0.2 });
+document.querySelectorAll(".loop video").forEach((v) => vio.observe(v));
+
+// Reveal on scroll; .drop sections let their shapes fall in.
+const io = new IntersectionObserver((entries) => {
+  for (const e of entries) if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
+}, { rootMargin: "0px 0px -8% 0px", threshold: 0.05 });
+document.querySelectorAll(".reveal, .drop").forEach((el) => io.observe(el));
+</script>
+</body>
+</html>

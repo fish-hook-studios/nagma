@@ -177,6 +177,10 @@ export async function send() {
 
     // No model here: frames become an app as they are; anything else gets a notice.
     if (!ai.available) {
+        if (import.meta.env.VITE_MAKE_DEMO === "1" && !offlineApp) {
+            await demoAnswer(text);
+            return;
+        }
         if (offlineApp) {
             applyAnswer(`${ai.offline ? "The server can't be reached, so" : "There's no AI key to use, so"} I built the app from the design as it is, without the model. Edit the code by hand, or add your AI key in Account settings to change it with prompts.`, offlineApp, [], { offline: true });
             make.set({ view: "preview" });
@@ -262,6 +266,41 @@ export async function send() {
         if (editor.get().fileId !== fileId) return;
         if (abort.signal.aborted) addTurn({ role: "assistant", text: "Stopped.", error: true });
         else addTurn({ role: "assistant", text: error instanceof Error ? error.message : String(error), error: true });
+    } finally {
+        finish();
+    }
+}
+
+// A staged, canned answer for recording the website's Make loop (VITE_MAKE_DEMO=1 at build time;
+// never on in a normal build). It walks the same busy states a real answer does, then writes a small
+// app named after the prompt. No model is involved and no key is read.
+async function demoAnswer(prompt: string) {
+    const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    const fileId = editor.get().fileId;
+    const abort = new AbortController();
+    make.set({ busy: { status: "Thinking", files: [], startedAt: Date.now(), abort } });
+    const title = prompt.replace(/^(a|an|the)\s+/i, "").split(/[.,]/)[0].trim().replace(/^./, (c) => c.toUpperCase()).slice(0, 40) || "My app";
+    const files: Record<string, string> = {
+        "index.html": `<!doctype html>\n<html lang="en">\n<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title}</title></head>\n<body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body>\n</html>\n`,
+        "src/main.tsx": `import { createRoot } from "react-dom/client";\nimport { App } from "./App";\nimport "./styles.css";\n\ncreateRoot(document.getElementById("root")!).render(<App />);\n`,
+        "src/App.tsx": `import { useState } from "react";\n\nconst DAYS = ["M", "T", "W", "T", "F", "S", "S"];\nconst START = [\n  { name: "Morning run", done: [1, 1, 0, 1, 1, 0, 0], streak: 2 },\n  { name: "Read 20 pages", done: [1, 1, 1, 1, 1, 1, 0], streak: 6 },\n  { name: "No sugar", done: [0, 1, 1, 0, 1, 1, 0], streak: 2 },\n  { name: "Call a friend", done: [1, 0, 0, 1, 0, 0, 0], streak: 0 },\n];\n\nexport function App() {\n  const [habits, setHabits] = useState(START);\n  const toggle = (h: number, d: number) =>\n    setHabits((hs) => hs.map((x, i) => (i === h ? { ...x, done: x.done.map((v, j) => (j === d ? (v ? 0 : 1) : v)) } : x)));\n  const today = habits.filter((h) => h.done[4]).length;\n  return (\n    <main className="app">\n      <header>\n        <h1>${title}</h1>\n        <p>{today} of {habits.length} done today</p>\n      </header>\n      <section className="week">\n        <div className="row head"><span /> {DAYS.map((d, i) => <span key={i}>{d}</span>)} <span>Streak</span></div>\n        {habits.map((h, i) => (\n          <div className="row" key={h.name}>\n            <span className="name">{h.name}</span>\n            {h.done.map((v, d) => (\n              <button key={d} className={v ? "cell on" : "cell"} onClick={() => toggle(i, d)} aria-label={DAYS[d]} />\n            ))}\n            <span className="streak">{h.streak} 🔥</span>\n          </div>\n        ))}\n      </section>\n      <button className="add">+ New habit</button>\n    </main>\n  );\n}\n`,
+        "src/styles.css": `:root { font-family: Inter, system-ui, sans-serif; color: #141413; background: #f6f1e7; }\nbody { margin: 0; }\n.app { max-width: 560px; margin: 0 auto; padding: 32px 20px; }\nheader h1 { font-size: 28px; margin: 0 0 4px; }\nheader p { margin: 0 0 24px; color: #6b675f; }\n.week { background: #fff; border: 2px solid #141413; border-radius: 16px; padding: 12px; box-shadow: 6px 6px 0 #141413; }\n.row { display: grid; grid-template-columns: 1.6fr repeat(7, 32px) 70px; gap: 6px; align-items: center; padding: 6px 4px; }\n.row.head { color: #6b675f; font-size: 12px; text-align: center; }\n.name { font-weight: 600; }\n.cell { width: 28px; height: 28px; border-radius: 8px; border: 2px solid #141413; background: #fff; cursor: pointer; }\n.cell.on { background: #bfe6c8; }\n.streak { text-align: center; font-size: 13px; }\n.add { margin-top: 16px; width: 100%; padding: 12px; border-radius: 999px; border: 2px solid #141413; background: #fc829a; font-weight: 700; cursor: pointer; }\n`,
+    };
+    try {
+        await wait(1400);
+        const busy = () => make.get().busy;
+        if (!busy()) return;
+        make.set({ busy: { ...busy()!, status: "Planning the layout" } });
+        await wait(1200);
+        for (const path of Object.keys(files)) {
+            const b = busy();
+            if (!b) return;
+            make.set({ busy: { ...b, status: `Writing ${path}`, files: [...b.files, path] } });
+            await wait(path === "src/App.tsx" ? 1800 : 700);
+        }
+        if (editor.get().fileId !== fileId) return;
+        applyAnswer(`Here's ${title}: a weekly grid with a tap to mark each day, a running streak per habit, and a count of what's done today. Tell me what to change.`, files, []);
+        make.set({ view: "preview", error: null });
     } finally {
         finish();
     }

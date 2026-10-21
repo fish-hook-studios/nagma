@@ -499,6 +499,21 @@ export function Home() {
         void createIn(doc, k, name);
     };
 
+    // ?new=design|board|slides|campaign|site|make|video|document opens Home straight into a new file of
+    // that kind (the website's "Explore" buttons), once, then drops the parameter from the address.
+    useEffect(() => {
+        const params = new URLSearchParams(location.search);
+        const wanted = params.get("new");
+        if (!wanted) return;
+        const kinds: Record<string, FileKind> = { design: "design", board: "board", slides: "slides", campaign: "campaign", site: "site", sites: "site", make: "make", video: "video", document: "docs", docs: "docs" };
+        const k = kinds[wanted.toLowerCase()];
+        const url = new URL(location.href);
+        url.searchParams.delete("new");
+        window.history.replaceState(null, "", url);
+        if (k) create(k);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     // A new folder where you are (the top of Drafts from places without folders), named straight away.
     const makeFolder = async (parent: Destination, name: string): Promise<string | null> => {
         try {

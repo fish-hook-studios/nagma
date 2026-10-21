@@ -8,6 +8,8 @@ third-party work, each under its own licence. Licence texts are in the packages 
 
 - Source Sans 3 and Source Serif 4: Copyright 2010-2024 Adobe, with Reserved Font Name "Source".
   `apps/web/public/fonts/`, licence in `OFL-SourceSans3.txt` and `OFL-SourceSerif4.txt`.
+- Coconat and Absans: Copyright 2023 Collletttivo. `apps/landing/fonts/`, licences in `OFL-Coconat.txt`
+  and `OFL-Absans.txt`.
 
 ## Web app (`apps/web`)
 
