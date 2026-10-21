@@ -69,8 +69,14 @@ export function openWelcome() {
 }
 
 // Home calls this when it shows: opens the cards the first time on this device, and only then.
+// Arriving through a product link (?new=…) goes straight to the file; the cards wait for a later visit.
+let deferred = false;
+export function deferWelcome() {
+    deferred = true;
+}
+
 export function showWelcomeOnce(): boolean {
-    if (hasSeen("welcome")) return false;
+    if (deferred || hasSeen("welcome")) return false;
     markSeen("welcome");
     setWelcome(true);
     return true;

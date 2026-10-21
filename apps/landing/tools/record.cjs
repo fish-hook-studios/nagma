@@ -17,6 +17,9 @@
 //   drag(x1, y1, x2, y2, ms)
 //   type(text, msPerChar) / key(name, modifiers)
 //   wait(ms)
+//   zoom(x, y, scale, ms)   ease the whole page (a CSS transform on <html>) to `scale`, bringing the
+//                           point (x, y) toward the middle; unzoom(ms) eases back to 1. Pass
+//                           { wait: false } as the last argument to move the mouse meanwhile.
 //   start() / stop()        begin and end the recorded span (only that span is encoded)
 //   mark(name)              remember the current time (poster: page.poster = "name")
 //   shot(file)              save a PNG of the current frame (for exploring)
@@ -24,6 +27,10 @@
 //
 // The window renders offscreen, which draws no mouse pointer, so the page gets a small pointer
 // overlay that follows the mouse (an arrow, or a crosshair where the app shows one).
+//
+// Coordinates in scenes are always the page's own (unzoomed) CSS pixels in a 1280x800 viewport:
+// rect() returns them and move()/click()/drag() take them, mapping through the current zoom. The
+// window is 1440x900 with the page zoomed 1.125x, so frames are 1440x900 with the same layout.
 //
 // --serve opens the app and listens on 127.0.0.1:<port> (default 5319): POST a scene body (the
 // inside of an async function with `page` in scope) and get back its result as JSON. For exploring.
@@ -38,9 +45,14 @@ const URL = process.env.NAGMA_URL || "http://localhost:5310/";
 const FFMPEG = process.env.FFMPEG || (fs.existsSync("/opt/homebrew/bin/ffmpeg") ? "/opt/homebrew/bin/ffmpeg" : "ffmpeg");
 const W = 1280;
 const H = 800;
+// Rendered (and encoded) size: a 1440x900 window with the page zoomed 1.125x, so the layout is
+// still 1280x800 CSS pixels. Input events take window pixels (CSS pixels x 1.125).
+const DSF = 1.125;
+const CW = Math.round(W * DSF);
+const CH = Math.round(H * DSF);
 const FPS = 24;
 const OUT_DIR = path.resolve(__dirname, "../img");
-const MAX_MP4 = 2.5 * 1024 * 1024;
+const MAX_MP4 = 600 * 1024;
 
 app.commandLine.appendSwitch("force-device-scale-factor", "1");
 app.commandLine.appendSwitch("disable-renderer-backgrounding");
@@ -52,9 +64,29 @@ const args = process.argv.slice(process.argv.findIndex((a) => a.endsWith("record
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
+// cubic-bezier(.2,.7,.2,1), the zoom's CSS timing function, to know the scale mid-transition.
+const ZOOM_CURVE = "cubic-bezier(.2,.7,.2,1)";
+function bezier(x1, y1, x2, y2) {
+    const cx = 3 * x1, bx = 3 * (x2 - x1) - cx, ax = 1 - cx - bx;
+    const cy = 3 * y1, by = 3 * (y2 - y1) - cy, ay = 1 - cy - by;
+    const fx = (t) => ((ax * t + bx) * t + cx) * t;
+    const fy = (t) => ((ay * t + by) * t + cy) * t;
+    return (x) => {
+        let lo = 0, hi = 1, t = x;
+        for (let i = 0; i < 30; i++) {
+            t = (lo + hi) / 2;
+            if (fx(t) < x) lo = t;
+            else hi = t;
+        }
+        return fy(t);
+    };
+}
+const zoomEase = bezier(0.2, 0.7, 0.2, 1);
+
 // The pointer overlay, injected into the page. It follows real mouse events, so it is exactly
 // where the app thinks the mouse is.
 const CURSOR_JS = `(() => {
+  window.__recMatrix = () => { const cs = getComputedStyle(document.documentElement); const o = cs.transformOrigin.split(" ").map(parseFloat); return new DOMMatrix().translate(o[0], o[1]).multiply(new DOMMatrix(cs.transform)).translate(-o[0], -o[1]); };
   if (window.__recCursor) return;
   const el = document.createElement("div");
   el.style.cssText = "position:fixed;left:0;top:0;width:0;height:0;z-index:2147483647;pointer-events:none;transition:none;display:none";
@@ -65,9 +97,23 @@ const CURSOR_JS = `(() => {
   let shape = "";
   const set = (s) => { if (s !== shape) { shape = s; el.innerHTML = s === "crosshair" ? cross : s === "pointer" ? hand : s === "text" ? text : arrow; } };
   set("default");
-  const place = (e) => {
+  // The overlay lives inside <html>, which the zoom scales, so it is placed in the page's own
+  // coordinates (the pointer's position mapped back through the live transform) and scales too.
+  // Placed by the recorder instead (see page.anchor): page coordinates and the window point.
+  window.__recCursorAt = (x, y, sx, sy) => {
     el.style.display = "block";
-    el.style.transform = "translate(" + e.clientX + "px," + e.clientY + "px)";
+    el.style.transform = "translate(" + x + "px," + y + "px)";
+    const t = document.elementFromPoint(sx, sy);
+    let c = "default";
+    try { c = t ? getComputedStyle(t).cursor : "default"; } catch {}
+    set(/crosshair|cell/.test(c) ? "crosshair" : /pointer/.test(c) ? "pointer" : /^text|vertical-text/.test(c) ? "text" : "default");
+  };
+  const place = (e) => {
+    if (window.__recCursorManual) return;
+    el.style.display = "block";
+    const m = window.__recMatrix();
+    const p = m.inverse().transformPoint(new DOMPoint(e.clientX, e.clientY));
+    el.style.transform = "translate(" + p.x + "px," + p.y + "px)";
     const t = document.elementFromPoint(e.clientX, e.clientY);
     let c = "default";
     try { c = t ? getComputedStyle(t).cursor : "default"; } catch {}
@@ -86,9 +132,19 @@ const CURSOR_JS = `(() => {
 // Finds an element in the page: CSS selector, "text=…" (exact visible text, then prefix), or
 // "label=…" (aria-label / title). Only visible elements count; the last match wins for text so
 // menus that open on top are preferred.
+// The page's live transform (the zoom), origin included.
+const MATRIX_JS = `window.__recMatrix = () => { const cs = getComputedStyle(document.documentElement); const o = cs.transformOrigin.split(" ").map(parseFloat); return new DOMMatrix().translate(o[0], o[1]).multiply(new DOMMatrix(cs.transform)).translate(-o[0], -o[1]); };`;
+const RECT_JS = `${MATRIX_JS} window.__recRect = (e) => {
+  const r = e.getBoundingClientRect();
+  const m = window.__recMatrix().inverse();
+  const a = m.transformPoint(new DOMPoint(r.left, r.top));
+  const b = m.transformPoint(new DOMPoint(r.right, r.bottom));
+  return { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y, cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2 };
+};`;
 const FIND_JS = (q, all) => `(() => {
+  ${RECT_JS}
   const q = ${JSON.stringify(q)};
-  const vis = (e) => { const r = e.getBoundingClientRect(); if (r.width < 1 || r.height < 1) return false; const s = getComputedStyle(e); return s.visibility !== "hidden" && s.display !== "none" && +s.opacity > 0.01 && r.bottom > 0 && r.right > 0 && r.top < innerHeight && r.left < innerWidth; };
+  const vis = (e) => { const r = window.__recRect(e); r.bottom = r.y + r.h; r.right = r.x + r.w; r.top = r.y; r.left = r.x; r.width = r.w; r.height = r.h; if (r.width < 1 || r.height < 1) return false; const s = getComputedStyle(e); return s.visibility !== "hidden" && s.display !== "none" && +s.opacity > 0.01 && r.bottom > 0 && r.right > 0 && r.top < innerHeight && r.left < innerWidth; };
   let els = [];
   if (q.startsWith("text=")) {
     const t = q.slice(5).trim().toLowerCase();
@@ -104,7 +160,7 @@ const FIND_JS = (q, all) => `(() => {
   } else {
     els = [...document.querySelectorAll(q)].filter(vis);
   }
-  const out = els.map((e) => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height, cx: r.x + r.width / 2, cy: r.y + r.height / 2, tag: e.tagName.toLowerCase(), text: (e.innerText || "").trim().slice(0, 60), label: e.getAttribute("aria-label") || e.getAttribute("title") || "" }; });
+  const out = els.map((e) => { const r = window.__recRect(e); return { ...r, tag: e.tagName.toLowerCase(), text: (e.innerText || "").trim().slice(0, 60), label: e.getAttribute("aria-label") || e.getAttribute("title") || "" }; });
   return ${all ? "out" : "out[out.length - 1] || null"};
 })()`;
 
@@ -112,13 +168,79 @@ function makePage(win, rec) {
     const wc = win.webContents;
     const mouse = { x: W / 2, y: H / 2, down: false };
     const mods = (m) => (m ? (Array.isArray(m) ? m : [m]) : []);
-    const send = (ev) => wc.sendInputEvent(ev);
+    // The zoom: scale z.s0 → z.s1 about (z.ox, z.oy) over z.ms from z.t0.
+    const z = { s0: 1, s1: 1, ox: 0, oy: 0, t0: 0, ms: 0 };
+    const scaleNow = () => (z.ms && Date.now() - z.t0 < z.ms ? z.s0 + (z.s1 - z.s0) * zoomEase((Date.now() - z.t0) / z.ms) : z.s1);
+    // Page coordinates to window coordinates, and back.
+    const toScreen = (x, y) => {
+        const k = scaleNow();
+        return { x: z.ox + (x - z.ox) * k, y: z.oy + (y - z.oy) * k };
+    };
+    // Anchored (page.anchor): the window point keeps the page point's offset from the anchor's
+    // top-left unscaled, which is what code computing `clientX - rect.left` expects (canvases,
+    // sliders, drag handles), and the pointer overlay is placed by hand where the page point is.
+    let anchor = null;
+    const send = (ev) => {
+        if (ev.x !== undefined) {
+            const lx = ev.x;
+            const ly = ev.y;
+            let p = toScreen(lx, ly);
+            if (anchor) {
+                const a = toScreen(anchor.x, anchor.y);
+                p = { x: a.x + (lx - anchor.x), y: a.y + (ly - anchor.y) };
+                const t = toScreen(lx, ly);
+                wc.executeJavaScript(`window.__recCursorAt && window.__recCursorAt(${lx}, ${ly}, ${t.x}, ${t.y})`, true).catch(() => {});
+            }
+            ev = { ...ev, x: Math.round(p.x * DSF), y: Math.round(p.y * DSF) };
+        }
+        wc.sendInputEvent(ev);
+    };
     const page = {
         win,
         wc,
         opts: {},
         marks: {},
         js: (code) => wc.executeJavaScript(code, true),
+        // Page-coordinate rect of the first element matching a CSS selector (or null).
+        layoutRect: (sel) => wc.executeJavaScript(`(() => { ${RECT_JS} const e = document.querySelector(${JSON.stringify(sel)}); return e ? window.__recRect(e) : null; })()`, true),
+        // Anchor the pointer to an element (a CSS selector, or a page-coordinate point {x, y});
+        // null goes back to plain mapping. See `send` above.
+        async anchor(target) {
+            if (!target) {
+                anchor = null;
+                await wc.executeJavaScript("window.__recCursorManual = false", true);
+                return;
+            }
+            anchor = typeof target === "string" ? await page.layoutRect(target) : target;
+            if (!anchor) throw new Error(`anchor: nothing matches ${target}`);
+            await wc.executeJavaScript("window.__recCursorManual = true", true);
+        },
+        async zoom(x, y, scale, ms = 750, { wait = true } = {}) {
+            // The origin that puts (x, y) as near the middle as the page's edges allow (the page
+            // always covers the window): o + (p - o) * s = c  →  o = (p * s - c) / (s - 1).
+            const origin = (p, c, max) => Math.max(0, Math.min(max, (p * scale - c) / (scale - 1)));
+            z.s0 = 1;
+            z.s1 = scale;
+            z.ox = origin(x, W / 2, W);
+            z.oy = origin(y, H / 2, H);
+            z.t0 = Date.now();
+            z.ms = ms;
+            await wc.executeJavaScript(`(() => { const h = document.documentElement; h.style.transition = "none"; h.style.transformOrigin = "${z.ox}px ${z.oy}px"; h.style.overflow = "hidden"; void h.offsetWidth; h.style.transition = "transform ${ms}ms ${ZOOM_CURVE}"; h.style.transform = "scale(${scale})"; })()`, true);
+            z.t0 = Date.now();
+            if (wait) await sleep(ms + 30);
+        },
+        async unzoom(ms = 750, { wait = true } = {}) {
+            z.s0 = scaleNow();
+            z.s1 = 1;
+            z.t0 = Date.now();
+            z.ms = ms;
+            await wc.executeJavaScript(`(() => { const h = document.documentElement; h.style.transition = "transform ${ms}ms ${ZOOM_CURVE}"; h.style.transform = "scale(1)"; })()`, true);
+            z.t0 = Date.now();
+            if (wait) {
+                await sleep(ms + 30);
+                await wc.executeJavaScript(`(() => { const h = document.documentElement; h.style.transition = ""; h.style.transform = ""; h.style.transformOrigin = ""; h.style.overflow = ""; })()`, true);
+            }
+        },
         wait: sleep,
         async rect(q) {
             return wc.executeJavaScript(FIND_JS(q, false), true);
@@ -245,7 +367,7 @@ function makeRecorder(win, file) {
         if (due <= written) return;
         let img = latest;
         const s = img.getSize();
-        if (s.width !== W || s.height !== H) img = img.resize({ width: W, height: H });
+        if (s.width !== CW || s.height !== CH) img = img.resize({ width: CW, height: CH });
         const buf = img.toBitmap();
         while (written < due) {
             ff.stdin.write(buf);
@@ -255,7 +377,7 @@ function makeRecorder(win, file) {
     return {
         start() {
             if (ff) return;
-            ff = spawn(FFMPEG, ["-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "bgra", "-s", `${W}x${H}`, "-r", String(FPS), "-i", "-", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "6", "-pix_fmt", "yuv444p", file], { stdio: ["pipe", "inherit", "inherit"] });
+            ff = spawn(FFMPEG, ["-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "bgra", "-s", `${CW}x${CH}`, "-r", String(FPS), "-i", "-", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "8", "-pix_fmt", "yuv444p", file], { stdio: ["pipe", "inherit", "inherit"] });
             t0 = Date.now();
             written = 0;
             timer = setInterval(tick, 1000 / FPS / 2);
@@ -282,43 +404,51 @@ function run(cmd, a) {
 }
 
 async function encode(raw, name, total, opts) {
-    // A capture a little longer than the loop is sped up slightly (up to 1.3x) rather than cut,
+    // A capture a little longer than the loop is sped up slightly (up to 1.2x) rather than cut,
     // so the start (Home, the create button) stays in; longer ones lose their start.
     const want = opts.duration || total;
-    const speed = opts.speed ?? (total > want && total / want <= (opts.maxSpeed ?? 1.3) ? total / want : 1);
+    const speed = opts.speed ?? (total > want && total / want <= Math.min(1.2, opts.maxSpeed ?? 1.2) ? total / want : 1);
     const duration = Math.min(want, total / speed);
     const start = +Math.max(0, opts.trimStart ?? total - duration * speed).toFixed(4);
     const fade = opts.fade ?? 0.5;
     // Crossfade the tail into the first frame so the loop restarts without a jump.
     const loopFilter = fade > 0 ? `[0:v]trim=start=${start}:duration=${duration * speed},setpts=(PTS-STARTPTS)/${speed},fps=${FPS},split[a][b];[b]trim=end_frame=1,loop=loop=${Math.ceil(fade * FPS) + 2}:size=1,setpts=N/${FPS}/TB[first];[a]split[main][tail];[main]trim=end=${duration - fade},setpts=PTS-STARTPTS[head];[tail]trim=start=${duration - fade},setpts=PTS-STARTPTS[t2];[t2][first]blend=all_expr='A*(1-T/${fade})+B*(T/${fade})':shortest=1[x];[head][x]concat=n=2:v=1[o];[o]` : `[0:v]trim=start=${start}:duration=${duration * speed},setpts=(PTS-STARTPTS)/${speed},fps=${FPS},`;
-    const scale = `scale=960:600:flags=lanczos,format=yuv420p`;
+    const scale = `scale=${CW}:${CH}:flags=lanczos,format=yuv420p`;
     const filter = fade > 0 ? `${loopFilter}${scale}[v]` : `${loopFilter}${scale}[v]`;
     const mp4 = path.join(OUT_DIR, `${name}.mp4`);
     const webm = path.join(OUT_DIR, `${name}.webm`);
     const jpg = path.join(OUT_DIR, `${name}.jpg`);
-    let crf = opts.crf ?? 24;
+    let crf = opts.crf ?? 27;
     for (;;) {
         await run(FFMPEG, ["-y", "-loglevel", "error", "-i", raw, "-filter_complex", filter, "-map", "[v]", "-r", String(FPS), "-c:v", "libx264", "-preset", "slow", "-crf", String(crf), "-profile:v", "high", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-an", mp4]);
-        if (fs.statSync(mp4).size <= MAX_MP4 || crf >= 36) break;
-        crf += 2;
+        if (fs.statSync(mp4).size <= MAX_MP4 || crf >= 33) break;
+        crf += 1;
     }
-    await run(FFMPEG, ["-y", "-loglevel", "error", "-i", raw, "-filter_complex", filter, "-map", "[v]", "-r", String(FPS), "-c:v", "libvpx-vp9", "-b:v", "0", "-crf", String(opts.webmCrf ?? 38), "-row-mt", "1", "-deadline", "good", "-cpu-used", "2", "-pix_fmt", "yuv420p", "-an", webm]);
+    let webmCrf = opts.webmCrf ?? 40;
+    for (;;) {
+        await run(FFMPEG, ["-y", "-loglevel", "error", "-i", raw, "-filter_complex", filter, "-map", "[v]", "-r", String(FPS), "-c:v", "libvpx-vp9", "-b:v", "0", "-crf", String(webmCrf), "-row-mt", "1", "-deadline", "good", "-cpu-used", "2", "-pix_fmt", "yuv420p", "-an", webm]);
+        if (fs.statSync(webm).size <= MAX_MP4 * 1.1 || webmCrf >= 50) break;
+        webmCrf += 3;
+    }
     const posterAt = Math.max(0, Math.min(duration - fade - 0.1, opts.posterMark !== undefined ? (opts.posterMark - start) / speed + (opts.posterDelay ?? 0.8) : (opts.posterAt ?? duration * 0.7)));
-    await run(FFMPEG, ["-y", "-loglevel", "error", "-ss", String(posterAt), "-i", mp4, "-frames:v", "1", "-q:v", "3", jpg]);
-    return { mp4, webm, jpg, crf, duration, start, speed };
+    // The poster comes from the near-lossless capture, at the same moment.
+    await run(FFMPEG, ["-y", "-loglevel", "error", "-ss", String((start + posterAt * speed).toFixed(3)), "-i", raw, "-frames:v", "1", "-vf", "format=yuvj444p", "-q:v", "5", jpg]);
+    return { mp4, webm, jpg, crf, webmCrf, duration, start, speed };
 }
 
 async function openApp() {
     const win = new BrowserWindow({
         show: false,
-        width: W,
-        height: H,
+        width: CW,
+        height: CH,
         useContentSize: true,
         backgroundColor: "#ffffff",
         // An in-memory session: a fresh device every run (Get started shows, no old drafts).
         webPreferences: { offscreen: true, partition: `rec-${process.pid}-${Date.now()}`, backgroundThrottling: false },
     });
     win.webContents.setFrameRate(30);
+    win.webContents.setZoomFactor(DSF);
+    win.webContents.on("did-finish-load", () => win.webContents.setZoomFactor(DSF));
     win.webContents.on("console-message", (e) => {
         const level = e.level ?? e.params?.level;
         if (level === "error" || level === 3) console.log("[page]", e.message ?? e.params?.message);
@@ -408,7 +538,7 @@ async function main() {
     console.log(`captured ${total.toFixed(2)} s`);
     const out = await encode(raw, name, total, opts);
     for (const f of [out.mp4, out.webm, out.jpg]) console.log(`${path.relative(process.cwd(), f)}  ${(fs.statSync(f).size / 1024).toFixed(0)} KB`);
-    console.log(`duration ${out.duration.toFixed(2)} s (from ${out.start.toFixed(2)} s, speed ${out.speed.toFixed(2)}x), mp4 crf ${out.crf}`);
+    console.log(`duration ${out.duration.toFixed(2)} s (from ${out.start.toFixed(2)} s, speed ${out.speed.toFixed(2)}x), mp4 crf ${out.crf}, webm crf ${out.webmCrf}`);
     if (!args.includes("--keep")) fs.rmSync(tmp, { recursive: true, force: true });
     else console.log(`raw: ${raw}`);
     app.quit();

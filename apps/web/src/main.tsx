@@ -62,6 +62,11 @@ if (sitePreview) {
             history.replaceState(null, "", url);
         } else void openLastFile(rejoinShared);
     });
+} else if (startParams.get("new")) {
+    // ?new=<kind> (the website's product buttons): Home opens and makes the file (components/home.tsx),
+    // whatever was open last time, and the welcome cards stay out of the way.
+    void import("./engine/onboarding").then(({ deferWelcome }) => deferWelcome());
+    editor.set({ homeOpen: true });
 } else if (!startParams.get("file")) {
     // Back from Share through Nagma (or another server): the file that was going there opens on it,
     // moved, with Share open (engine/share-hosted.ts). Otherwise the last file.
