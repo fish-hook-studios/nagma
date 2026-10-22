@@ -162,7 +162,7 @@ p { margin: 0; }
 /* About: a small photo, not a hero. The cut-out sits on the logo orange inside the picture itself, head centred. */
 .about-photo { margin: 0 0 28px; display: flex; align-items: center; gap: 16px; }
 .about-photo .pic { position: relative; display: block; flex: none; width: 120px; height: 120px; border-radius: 50%; overflow: hidden; border: 2.5px solid var(--ink); box-shadow: 6px 6px 0 var(--ink); background: #EF7F42; }
-.about-photo .pic img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.about-photo .pic img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border: 0; border-radius: 0; }
 .about-photo figcaption { font-size: 14px; color: var(--mute); }
 
 /* A call-out box with one big action (About: buy me a coffee). */
