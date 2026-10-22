@@ -1,0 +1,34 @@
+[
+  {
+    "id": "granary",
+    "label": "Granary",
+    "leftPercent": 5.26,
+    "topPercent": 4.08,
+    "widthPercent": 30.26,
+    "heightPercent": 22.45
+  },
+  {
+    "id": "inner-court",
+    "label": "Inner Court",
+    "leftPercent": 59.21,
+    "topPercent": 8.16,
+    "widthPercent": 34.21,
+    "heightPercent": 22.45
+  },
+  {
+    "id": "prayer-room",
+    "label": "Prayer Room",
+    "leftPercent": 5.26,
+    "topPercent": 57.14,
+    "widthPercent": 31.58,
+    "heightPercent": 22.45
+  },
+  {
+    "id": "locked-chamber",
+    "label": "Locked Chamber",
+    "leftPercent": 59.21,
+    "topPercent": 59.18,
+    "widthPercent": 34.21,
+    "heightPercent": 22.45
+  }
+]
