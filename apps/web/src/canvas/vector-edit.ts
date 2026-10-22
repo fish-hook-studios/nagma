@@ -252,37 +252,55 @@ export function sharpen(node: SceneNode, ref: VertexRef): NodePatch {
     return withPath(subs);
 }
 
-// Removes the selected points: each path skips them, so a point's two neighbours become joined by
-// one segment (their handles kept) and a closed path stays closed. A point of the network that
-// several paths pass through goes from all of them. With `heal`, the neighbours' handles are
-// re-aimed so the curve stays smooth across the gap. Null when nothing is left.
+// Removes the selected points. Plain delete takes a point out together with the two segments that
+// met at it, so a closed path opens there and an open path splits in two (an end point just gets
+// shorter); the neighbours keep their handles. With `heal` (⇧ ⌫) the neighbours are joined by one
+// new segment instead, a closed path stays closed, and their handles are re-aimed so the curve runs
+// smoothly across the gap. A point of the network that several paths pass through goes from all of
+// them. Null when nothing is left.
 export function deleteVertices(node: SceneNode, refs: VertexRef[], heal: boolean): NodePatch | null {
     const subs = placedSubpaths(node);
     const bySub = new Map<number, number[]>();
     for (const r of welded(subs, refs)) if (r.part === "anchor") bySub.set(r.sub, [...(bySub.get(r.sub) ?? []), r.index]);
-    for (const [s, indices] of bySub) {
-        const sub = subs[s];
-        if (!sub) continue;
+    const out: Subpath[] = [];
+    subs.forEach((sub, s) => {
+        const indices = bySub.get(s);
+        if (!indices?.length) return out.push(sub);
         const removed = new Set(indices);
-        const touched = new Set<number>();
         if (heal) {
+            const n = sub.points.length;
+            const touched = new Set<number>();
             for (const i of indices) {
-                const n = sub.points.length;
                 touched.add((i - 1 + n) % n);
                 touched.add((i + 1) % n);
             }
+            const kept: PathPoint[] = [];
+            const keptTouched: number[] = [];
+            sub.points.forEach((p, i) => {
+                if (removed.has(i)) return;
+                if (touched.has(i)) keptTouched.push(kept.length);
+                kept.push(p);
+            });
+            sub.points = kept;
+            for (const i of keptTouched) if (sub.points[i]) sub.points[i] = smoothed(sub, i);
+            return out.push(sub);
         }
-        const kept: PathPoint[] = [];
-        const keptTouched: number[] = [];
-        sub.points.forEach((p, i) => {
-            if (removed.has(i)) return;
-            if (touched.has(i)) keptTouched.push(kept.length);
-            kept.push(p);
-        });
-        sub.points = kept;
-        if (heal) for (const i of keptTouched) if (sub.points[i]) sub.points[i] = smoothed(sub, i);
-    }
-    const left = subs.filter((s) => s.points.length >= 2);
+        // Without healing, the points between removed ones stay joined as they were: a closed path
+        // is read from just after one removed point all the way round, so it opens there.
+        const n = sub.points.length;
+        const first = sub.closed ? (Math.min(...indices) + 1) % n : 0;
+        const runs: PathPoint[][] = [[]];
+        for (let k = 0; k < n; k++) {
+            const i = (first + k) % n;
+            if (removed.has(i)) {
+                if (runs[runs.length - 1]!.length) runs.push([]);
+                continue;
+            }
+            runs[runs.length - 1]!.push(sub.points[i] as PathPoint);
+        }
+        for (const run of runs) out.push({ closed: false, points: run });
+    });
+    const left = out.filter((s) => s.points.length >= 2);
     if (!left.length) return null;
     return withPath(left);
 }

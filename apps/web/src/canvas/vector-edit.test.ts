@@ -119,44 +119,57 @@ describe("inserting a point on a segment", () => {
 });
 
 describe("deleting points", () => {
-    it("joins the neighbours of a deleted point and keeps the path closed", () => {
+    it("takes the point and both its segments away, so a closed path opens there", () => {
         const node = vector(emptyDoc(), [square()]);
         const patch = deleteVertices(node, [{ sub: 0, index: 1, part: "anchor" }], false);
         expect(patch).not.toBeNull();
-        const sub = placedSubpaths(applied(node, patch!))[0]!;
-        expect(sub.closed).toBe(true);
-        expect(sub.points.map((p) => [p.x, p.y])).toEqual([
-            [0, 0],
+        const subs = placedSubpaths(applied(node, patch!));
+        expect(subs).toHaveLength(1);
+        expect(subs[0]!.closed).toBe(false);
+        // Read from just after the removed corner, round to just before it.
+        expect(subs[0]!.points.map((p) => [p.x, p.y])).toEqual([
             [100, 100],
             [0, 100],
+            [0, 0],
         ]);
-        expect(placedSubpaths(applied(node, patch!))).toHaveLength(1);
     });
 
-    it("keeps the neighbours' handles so the curve runs on across the gap", () => {
+    it("keeps the neighbours' handles as they were", () => {
         const node = vector(emptyDoc(), [circle()]);
         const patch = deleteVertices(node, [{ sub: 0, index: 1, part: "anchor" }], false);
         const sub = placedSubpaths(applied(node, patch!))[0]!;
-        expect(sub.closed).toBe(true);
+        expect(sub.closed).toBe(false);
         expect(sub.points).toHaveLength(3);
-        expect(sub.points[0]!.out).toEqual({ x: 50 + K, y: 0 });
-        expect(sub.points[1]!.in).toEqual({ x: 50 + K, y: 100 });
+        // Was point 2 (its in-handle unchanged), then 3, then 0 (its out-handle unchanged).
+        expect(sub.points[0]!.in).toEqual({ x: 50 + K, y: 100 });
+        expect(sub.points[2]!.out).toEqual({ x: 50 + K, y: 0 });
     });
 
-    it("removes several points at once, by their original indices", () => {
-        const node = vector(emptyDoc(), [square()]);
+    it("splits an open path in two at an inner point, and shortens it at an end", () => {
+        const open = { closed: false, points: [P(0, 0), P(50, 0), P(100, 0), P(150, 0), P(200, 0)] };
+        const inner = placedSubpaths(applied(vector(emptyDoc(), [open]), deleteVertices(vector(emptyDoc(), [open]), [{ sub: 0, index: 2, part: "anchor" }], false)!));
+        expect(inner.map((s) => s.points.map((p) => p.x))).toEqual([
+            [0, 50],
+            [150, 200],
+        ]);
+        const node = vector(emptyDoc(), [{ closed: false, points: [P(0, 0), P(50, 0), P(100, 0), P(150, 0), P(200, 0)] }]);
+        const end = placedSubpaths(applied(node, deleteVertices(node, [{ sub: 0, index: 4, part: "anchor" }], false)!));
+        expect(end.map((s) => s.points.map((p) => p.x))).toEqual([[0, 50, 100, 150]]);
+    });
+
+    it("removes several points at once, by their original indices, leaving the runs between them", () => {
+        const node = vector(emptyDoc(), [{ closed: false, points: [P(0, 0), P(10, 0), P(20, 0), P(30, 0), P(40, 0), P(50, 0)] }]);
         const patch = deleteVertices(
             node,
             [
-                { sub: 0, index: 0, part: "anchor" },
                 { sub: 0, index: 2, part: "anchor" },
+                { sub: 0, index: 3, part: "anchor" },
             ],
             false,
         );
-        const sub = placedSubpaths(applied(node, patch!))[0]!;
-        expect(sub.points.map((p) => [p.x, p.y])).toEqual([
-            [100, 0],
-            [0, 100],
+        expect(placedSubpaths(applied(node, patch!)).map((s) => s.points.map((p) => p.x))).toEqual([
+            [0, 10],
+            [40, 50],
         ]);
     });
 
@@ -167,7 +180,7 @@ describe("deleting points", () => {
         const subs = placedSubpaths(applied(node, patch!));
         expect(subs).toHaveLength(2);
         expect(subs[0]!.points).toHaveLength(3);
-        expect(subs[0]!.closed).toBe(true);
+        expect(subs[0]!.closed).toBe(false);
         expect(subs[1]!.points.map((p) => [p.x, p.y])).toEqual([
             [150, 50],
             [200, 0],
@@ -177,6 +190,25 @@ describe("deleting points", () => {
     it("drops a path left with a single point, and reports nothing left", () => {
         const node = vector(emptyDoc(), [{ closed: false, points: [P(0, 0), P(50, 50)] }]);
         expect(deleteVertices(node, [{ sub: 0, index: 0, part: "anchor" }], false)).toBeNull();
+        const corner = vector(emptyDoc(), [{ closed: true, points: [P(0, 0), P(50, 0), P(50, 50)] }]);
+        expect(deleteVertices(corner, [{ sub: 0, index: 0, part: "anchor" }, { sub: 0, index: 1, part: "anchor" }], false)).toBeNull();
+    });
+
+    it("with heal (⇧ ⌫) joins the neighbours by one segment, keeps a closed path closed and smooths the seam", () => {
+        const node = vector(emptyDoc(), [square()]);
+        const sub = placedSubpaths(applied(node, deleteVertices(node, [{ sub: 0, index: 1, part: "anchor" }], true)!))[0]!;
+        expect(sub.closed).toBe(true);
+        expect(sub.points.map((p) => [p.x, p.y])).toEqual([
+            [0, 0],
+            [100, 100],
+            [0, 100],
+        ]);
+        const round = vector(emptyDoc(), [circle()]);
+        const healed = placedSubpaths(applied(round, deleteVertices(round, [{ sub: 0, index: 1, part: "anchor" }], true)!))[0]!;
+        expect(healed.closed).toBe(true);
+        expect(healed.points).toHaveLength(3);
+        expect(healed.points[0]!.out).not.toBeNull();
+        expect(healed.points[1]!.in).not.toBeNull();
     });
 });
 

@@ -77,7 +77,7 @@ const SECTIONS: Section[] = [
         label: "Shape",
         groups: [
             { title: "Drawing", rows: [["Keep proportions", "Hold ⇧"], ["Draw from the center", "Hold ⌥"], ["Snap lines to 45°", "Hold ⇧"]] },
-            { title: "Vector", rows: [["Edit points", "↵"], ["Leave point editing", "Esc or ↵"], ["Bend", "Hold ⌘ in point editing"], ["Paint bucket", "⇧ B in point editing"], ["Lasso", "L in point editing"], ["Join points", "⌘ J"], ["Smooth join", "⇧ ⌘ J"], ["Delete and heal", "⇧ ⌫"]] },
+            { title: "Vector", rows: [["Edit points", "↵"], ["Leave point editing", "Esc or ↵"], ["Bend", "Hold ⌘ in point editing"], ["Paint bucket", "⇧ B in point editing"], ["Lasso", "L in point editing"], ["Join points", "⌘ J"], ["Smooth join", "⇧ ⌘ J"], ["Delete point and its segments", "⌫"], ["Delete and heal", "⇧ ⌫"]] },
             { title: "Paths", rows: [["Flatten", "⌘ E"], ["Outline stroke", "⌥ ⌘ O"], ["Union", "⌥ ⇧ U"], ["Subtract", "⌥ ⇧ S"], ["Intersect", "⌥ ⇧ I"], ["Exclude", "⌥ ⇧ E"], ["Remove fill", "⌥ /"], ["Remove stroke", "⇧ /"], ["Swap fill and stroke", "⇧ X"]] },
         ],
     },
