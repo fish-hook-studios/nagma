@@ -76,6 +76,8 @@ function embedLabel(node: SceneNode): string | null {
 
 registerCanvasPlugin({
     name: "site",
+    // Breakpoint frames get the overlay's header (name, width, range, Primary), not a second plain name.
+    ownsLabel: (node) => isSiteDoc() && Boolean(bpData(node)),
     down(p) {
         if (!isSiteDoc() || p.button !== 0 || editor.get().tool !== "move") return false;
         const s = editor.get();

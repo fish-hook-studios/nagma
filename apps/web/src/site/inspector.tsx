@@ -1,4 +1,5 @@
 import { AlertTriangle, Play, RefreshCcw01, Settings01 } from "@untitledui/icons";
+import { LiveSections } from "../components/live-section";
 import { useState, type ReactNode } from "react";
 import { SelectionColors, SelectionPanel } from "../components/design-panel";
 import { ExportSection } from "../components/export-section";
@@ -406,6 +407,8 @@ function WebSection({ nodes }: { nodes: SceneNode[] }) {
     if (where?.frame.id === node.id || primary.type === "page") return null;
     return (
         <>
+            {/* A Live frame: its props and code (breakpoint copies follow the primary). */}
+            {primary.type === "live" && nodes.length === 1 && <LiveSections node={primary} />}
             {/* The element (Tag), alt text and link are in the Interaction tab, as the reference. */}
             {(isFrame || (bindCollection && bindable.length > 0 && (primary.type === "text" || primary.type === "rect"))) && (
             <Section title="Web">

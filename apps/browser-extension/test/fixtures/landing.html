@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Lumen, notes that think with you</title>
+<link rel="stylesheet" href="fonts.css">
+<style>
+body { margin: 0; font-family: "Source Sans 3", sans-serif; color: #1c1b22; background: #fbfaf7; }
+.nav { display: flex; align-items: center; justify-content: space-between; padding: 18px 48px; border-bottom: 1px solid #ebe7df; background: #fff; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 20px; }
+.brand .mark { width: 28px; height: 28px; border-radius: 8px; background: linear-gradient(135deg, #6d4aff, #ff7a59); }
+.links { display: flex; gap: 28px; font-size: 15px; }
+.links a { color: #4a4855; text-decoration: none; }
+.cta { display: flex; gap: 12px; }
+.btn { display: inline-flex; align-items: center; padding: 10px 18px; border-radius: 10px; font-weight: 600; font-size: 15px; text-decoration: none; }
+.btn.primary { background: #1c1b22; color: #fff; }
+.btn.ghost { border: 1px solid #d8d3c8; color: #1c1b22; }
+.hero { display: flex; gap: 48px; align-items: center; padding: 72px 48px; }
+.hero .copy { flex: 1; }
+.eyebrow { display: inline-block; padding: 4px 12px; border-radius: 999px; background: #efeaff; color: #5a3ee0; font-weight: 600; font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; }
+h1 { font-size: 56px; line-height: 1.05; margin: 18px 0; letter-spacing: -0.02em; }
+.lede { font-size: 20px; line-height: 1.5; color: #55525f; max-width: 520px; }
+.hero img { width: 520px; height: 360px; object-fit: cover; border-radius: 20px; box-shadow: 0 20px 40px rgba(28, 27, 34, 0.18); }
+.logos { display: flex; justify-content: center; gap: 40px; padding: 24px; color: #9a96a3; font-weight: 700; font-size: 18px; letter-spacing: 0.08em; }
+.features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; padding: 48px; }
+.card { background: #fff; border: 1px solid #ebe7df; border-radius: 16px; padding: 24px; }
+.card .icon { width: 40px; height: 40px; border-radius: 10px; background: #fff1ea; display: flex; align-items: center; justify-content: center; color: #e2602c; font-weight: 700; }
+.card h3 { margin: 16px 0 8px; font-size: 20px; }
+.card p { margin: 0; color: #66636f; line-height: 1.5; }
+</style></head>
+<body>
+<nav class="nav">
+  <div class="brand"><span class="mark"></span>Lumen</div>
+  <div class="links"><a href="#">Product</a><a href="#">Pricing</a><a href="#">Customers</a><a href="#">Docs</a></div>
+  <div class="cta"><a class="btn ghost" href="#">Sign in</a><a class="btn primary" href="#">Start free</a></div>
+</nav>
+<section class="hero">
+  <div class="copy">
+    <span class="eyebrow">New in 3.0</span>
+    <h1>Notes that think with you.</h1>
+    <p class="lede">Lumen links what you write, finds what you forgot and turns <strong>scattered notes</strong> into plans your whole team can follow.</p>
+    <div class="cta"><a class="btn primary" href="#">Start writing</a><a class="btn ghost" href="#">Watch the tour</a></div>
+  </div>
+  <img src="img/hero.jpg" alt="A team planning">
+</section>
+<div class="logos"><span>NORTHWIND</span><span>ACME</span><span>GLOBEX</span><span>INITECH</span><span>UMBRELLA</span></div>
+<section class="features">
+  <div class="card"><div class="icon">1</div><h3>Linked thinking</h3><p>Every note knows its neighbours, so ideas surface when you need them.</p></div>
+  <div class="card"><div class="icon">2</div><h3>Plans from notes</h3><p>Turn a page of thoughts into tasks with owners and dates in one step.</p></div>
+  <div class="card"><div class="icon">3</div><h3>Search that reads</h3><p>Ask a question and get the paragraph that answers it, not a list of files.</p></div>
+</section>
+</body></html>

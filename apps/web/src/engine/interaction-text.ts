@@ -23,6 +23,7 @@ export const TRIGGERS: [Trigger, string][] = [
     ["delay", "After delay"],
     ["video-time", "When video hits"],
     ["video-end", "When video ends"],
+    ["live-event", "On event"],
 ];
 
 // The action menu. Video actions share one action type with an operation.
@@ -46,7 +47,8 @@ export const ACTION_MENU: [string, string][] = [
 ];
 
 // The trigger menu in the reference's groups (video triggers only for layers with a video fill).
-export const TRIGGER_GROUPS: Trigger[][] = [["none"], ["click", "drag", "hover", "press", "key"], ["mouse-enter", "mouse-leave", "mouse-down", "mouse-up"], ["delay"], ["video-end", "video-time"]];
+// Live frames add the events their code sends.
+export const TRIGGER_GROUPS: Trigger[][] = [["none"], ["click", "drag", "hover", "press", "key"], ["mouse-enter", "mouse-leave", "mouse-down", "mouse-up"], ["delay"], ["video-end", "video-time"], ["live-event"]];
 
 // The action menu in the reference's groups; "none" stands for no action.
 export const ACTION_GROUPS: string[][] = [["none"], ["navigate", "change-to", "back", "scroll-to", "url"], ["set-variable", "set-mode", "conditional"], ["overlay", "swap", "close"], ["video:play", "video:mute", "video:time", "animation", "set-playhead"]];
@@ -70,7 +72,7 @@ export function keyLabel(key: string | undefined): string {
 }
 
 // The short trigger name on an interaction row ("Click", "Key (→)", "After delay").
-export function shortTriggerLabel(it: Pick<Interaction, "trigger" | "key" | "device" | "button">): string {
+export function shortTriggerLabel(it: Pick<Interaction, "trigger" | "key" | "device" | "button" | "event">): string {
     switch (it.trigger) {
         case "none":
             return "None";
@@ -91,6 +93,8 @@ export function shortTriggerLabel(it: Pick<Interaction, "trigger" | "key" | "dev
             return "Video ends";
         case "video-time":
             return "Video hits";
+        case "live-event":
+            return it.event ? `On event: ${it.event}` : "On event";
         default:
             return triggerLabel(it.trigger);
     }

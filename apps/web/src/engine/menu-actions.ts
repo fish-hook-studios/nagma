@@ -1,6 +1,7 @@
 // One table of the editor's commands, shared by the main menu, the canvas context menu and the
 // Actions palette (⌘K), so a command reads, behaves and shows its shortcut the same everywhere.
 import { zoomBy, zoomTo, zoomToFit, zoomToSelection } from "./camera";
+import { insertLiveFrame } from "./live-actions";
 import { collab, openSaveVersion } from "./collab";
 import { copyLink } from "./links";
 import { copyAsCss } from "./dev-css";
@@ -224,6 +225,9 @@ export const MENU_ACTIONS: MenuAction[] = [
     { id: "group", label: "Group selection", group: "Object", shortcut: "⌘ G", needs: ["selection"], run: groupSelection },
     { id: "ungroup", label: "Ungroup selection", group: "Object", shortcut: "⇧ ⌘ G", needs: ["selection", "ungroupable"], run: ungroupSelection },
     { id: "frame", label: "Frame selection", group: "Object", shortcut: "⌥ ⌘ G", needs: ["selection"], run: frameSelection },
+    { id: "liveCounter", label: "Live frame: Counter button", group: "Object", keywords: "insert live frame code widget button counter interactive", run: () => insertLiveFrame("counter") },
+    { id: "liveChart", label: "Live frame: Chart", group: "Object", keywords: "insert live frame code chart graph bars data", run: () => insertLiveFrame("chart") },
+    { id: "liveForm", label: "Live frame: Form", group: "Object", keywords: "insert live frame code form fields input validation", run: () => insertLiveFrame("form") },
     { id: "section", label: "Wrap in new section", group: "Object", shortcut: "⌘ S", needs: ["selection"], run: sectionSelection },
     { id: "toSection", label: "Convert to section", group: "Object", needs: ["selection", "frameOrSection"], run: toggleSection },
     { id: "toFrame", label: "Convert to frame", group: "Object", needs: ["selection", "section"], run: convertToFrame },
@@ -582,6 +586,7 @@ export const MAIN_MENU: MenuNode[] = [
             "frame",
             "group",
             "ungroup",
+            { sub: "live", label: "Live frame", items: ["liveCounter", "liveChart", "liveForm"] },
             "section",
             "toSection",
             "toFrame",

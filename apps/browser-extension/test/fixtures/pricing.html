@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Pricing · Lumen</title>
+<link rel="stylesheet" href="fonts.css">
+<style>
+body { margin: 0; font-family: "Source Sans 3", sans-serif; background: #0f0e17; color: #fffffe; }
+header { text-align: center; padding: 64px 24px 32px; }
+h1 { font-size: 44px; margin: 0 0 12px; }
+.sub { color: #a7a9be; font-size: 18px; margin: 0; }
+.toggle { display: inline-flex; margin-top: 24px; padding: 4px; border-radius: 999px; background: #232136; }
+.toggle span { padding: 8px 18px; border-radius: 999px; font-size: 14px; color: #a7a9be; }
+.toggle span.on { background: #fffffe; color: #0f0e17; font-weight: 600; }
+.plans { display: flex; justify-content: center; align-items: flex-start; gap: 24px; padding: 24px 48px 80px; }
+.plan { position: relative; width: 300px; padding: 28px; border-radius: 18px; background: #1b1a2b; border: 1px solid #2e2c45; }
+.plan.featured { background: linear-gradient(180deg, #2b2063 0%, #1b1a2b 70%); border-color: #7f5af0; box-shadow: 0 0 0 1px #7f5af0, 0 24px 60px rgba(127, 90, 240, 0.35); }
+.badge { position: absolute; top: -12px; right: 24px; padding: 4px 10px; border-radius: 999px; background: #7f5af0; font-size: 12px; font-weight: 700; }
+.plan h2 { margin: 0; font-size: 20px; }
+.price { font-size: 44px; font-weight: 700; margin: 14px 0 4px; }
+.price small { font-size: 16px; color: #a7a9be; font-weight: 400; }
+.plan p { color: #a7a9be; margin: 0 0 20px; }
+.plan ul { list-style: none; padding: 0; margin: 0 0 24px; }
+.plan li { position: relative; padding-left: 26px; margin: 10px 0; color: #e4e4ef; }
+.plan li::before { content: "✓"; position: absolute; left: 0; top: 0; color: #2cb67d; font-weight: 700; }
+.plan a { display: block; text-align: center; padding: 12px; border-radius: 10px; background: #2e2c45; color: #fffffe; text-decoration: none; font-weight: 600; }
+.plan.featured a { background: #7f5af0; }
+</style></head>
+<body>
+<header><h1>Simple pricing</h1><p class="sub">Start free. Upgrade when your team grows.</p>
+<div class="toggle"><span class="on">Monthly</span><span>Yearly −20%</span></div></header>
+<section class="plans">
+  <div class="plan"><h2>Starter</h2><div class="price">$0 <small>/ month</small></div><p>For one person and a few notebooks.</p>
+    <ul><li>3 notebooks</li><li>Linked notes</li><li>Web and desktop</li></ul><a href="#">Get started</a></div>
+  <div class="plan featured"><span class="badge">Most popular</span><h2>Team</h2><div class="price">$12 <small>/ month</small></div><p>For teams that plan together.</p>
+    <ul><li>Unlimited notebooks</li><li>Shared spaces</li><li>Version history</li></ul><a href="#">Start a trial</a></div>
+  <div class="plan"><h2>Company</h2><div class="price">$29 <small>/ month</small></div><p>For organisations with many teams.</p>
+    <ul><li>Single sign-on</li><li>Audit log</li><li>Priority support</li></ul><a href="#">Talk to us</a></div>
+</section>
+</body></html>

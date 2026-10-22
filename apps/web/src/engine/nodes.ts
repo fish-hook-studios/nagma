@@ -18,6 +18,7 @@ const TYPE_LABELS: Record<NodeType, string> = {
     rect: "Rectangle",
     ellipse: "Ellipse",
     text: "Text",
+    live: "Live frame",
 };
 
 // "Rectangle 3": numbers count the siblings in the same container (a frame numbers its own
@@ -51,7 +52,7 @@ export function nextLabelName(doc: NagmaDocument, label: string, parentId: strin
 }
 
 function defaultFills(type: NodeType): Paint[] {
-    if (type === "frame" || type === "component") return [solid("#FFFFFF")];
+    if (type === "frame" || type === "component" || type === "live") return [solid("#FFFFFF")];
     if (type === "text") return [solid("#000000")];
     if (type === "rect" || type === "ellipse" || type === "boolean") return [solid("#D9D9D9")];
     return [];
@@ -64,7 +65,7 @@ export function makeNode(
     parentId: string | null,
     overrides: Partial<SceneNode> = {},
 ): SceneNode {
-    const grid = type === "frame" || type === "component" || type === "componentSet" ? Math.round : snapPx;
+    const grid = type === "frame" || type === "component" || type === "componentSet" || type === "live" ? Math.round : snapPx;
     const base: SceneNode = {
         id: nanoid(10),
         type,

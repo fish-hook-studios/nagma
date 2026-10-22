@@ -86,7 +86,7 @@ export function labelled(doc: NagmaDocument): string[] {
     const visit = (ids: string[]) => {
         for (const id of ids) {
             const node = doc.nodes[id];
-            if (!node || !isFrameLike(node)) continue;
+            if (!node || !(isFrameLike(node) || node.type === "live")) continue;
             out.push(id);
             if (node.isSection) visit(node.children);
         }
@@ -119,7 +119,7 @@ export function hitFrameLabel(doc: NagmaDocument, camera: Camera, sx: number, sy
     const roots = labelled(doc);
     for (let i = roots.length - 1; i >= 0; i--) {
         const node = doc.nodes[roots[i] ?? ""];
-        if (!node || !isFrameLike(node) || !node.visible || node.locked) continue;
+        if (!node || !(isFrameLike(node) || node.type === "live") || !node.visible || node.locked) continue;
         const r = frameLabelRect(doc, node, camera);
         if (sx >= r.x && sx <= r.x + Math.max(r.w, 24) && sy >= r.y && sy <= r.y + r.h) return node;
     }

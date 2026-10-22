@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Settings · Orbit</title>
+<link rel="stylesheet" href="fonts.css">
+<style>
+body { margin: 0; font-family: "Source Sans 3", sans-serif; background: #fafafa; color: #18181b; }
+.wrap { max-width: 760px; margin: 0 auto; padding: 40px 24px; }
+h1 { font-size: 30px; margin: 0 0 20px; }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid #e4e4e7; margin-bottom: 24px; }
+.tabs span { padding: 10px 14px; font-size: 15px; color: #71717a; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tabs span.on { color: #18181b; border-bottom-color: #18181b; font-weight: 600; }
+.group { background: #fff; border: 1px solid #e4e4e7; border-radius: 12px; margin-bottom: 20px; }
+.group h2 { font-size: 16px; margin: 0; padding: 16px 20px; border-bottom: 1px solid #f4f4f5; }
+.row { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid #f4f4f5; }
+.row:last-child { border-bottom: 0; }
+.row .t { font-weight: 600; font-size: 15px; }
+.row .d { color: #71717a; font-size: 14px; margin-top: 2px; }
+.switch { position: relative; width: 40px; height: 24px; border-radius: 999px; background: #d4d4d8; flex: none; }
+.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+.switch.on { background: #16a34a; }
+.switch.on::after { left: 19px; }
+.danger { border-color: #fecaca; }
+.danger h2 { color: #b91c1c; }
+.btn { padding: 8px 14px; border-radius: 8px; border: 1px solid #fca5a5; color: #b91c1c; font-weight: 600; font-size: 14px; background: #fff; }
+</style></head>
+<body><div class="wrap">
+<h1>Settings <plan-badge plan="Pro"></plan-badge></h1>
+<div class="tabs"><span class="on">General</span><span>Notifications</span><span>Members</span><span>Billing</span></div>
+<div class="group"><h2>Notifications</h2>
+<div class="row"><div><div class="t">Weekly summary</div><div class="d">A digest of what changed every Monday.</div></div><div class="switch on"></div></div>
+<div class="row"><div><div class="t">Mentions</div><div class="d">When someone mentions you in a note.</div></div><div class="switch on"></div></div>
+<div class="row"><div><div class="t">Product news</div><div class="d">New features, at most once a month.</div></div><div class="switch"></div></div>
+</div>
+<div class="group danger"><h2>Danger zone</h2>
+<div class="row"><div><div class="t">Delete workspace</div><div class="d">Removes every notebook for every member.</div></div><span class="btn">Delete</span></div>
+</div>
+</div>
+<script>
+// A web component: its look lives in a shadow tree.
+customElements.define("plan-badge", class extends HTMLElement {
+  connectedCallback() {
+    const root = this.attachShadow({ mode: "open" });
+    root.innerHTML = '<style>span{display:inline-block;vertical-align:middle;padding:2px 10px;border-radius:999px;background:#ede9fe;color:#6d28d9;font:600 13px "Source Sans 3",sans-serif}</style><span>' + this.getAttribute("plan") + ' plan</span>';
+  }
+});
+</script></body></html>

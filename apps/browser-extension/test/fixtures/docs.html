@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Getting started · Lumen docs</title>
+<link rel="stylesheet" href="fonts.css">
+<style>
+body { margin: 0; font-family: "Source Sans 3", sans-serif; color: #24292f; background: #fff; }
+.layout { display: flex; min-height: 100vh; }
+aside { width: 260px; border-right: 1px solid #e5e7eb; padding: 24px 16px; background: #f8fafc; }
+aside h4 { margin: 18px 8px 6px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: #6b7280; }
+aside ul { list-style: none; margin: 0; padding: 0; }
+aside li a { display: block; padding: 6px 8px; border-radius: 6px; color: #374151; text-decoration: none; font-size: 15px; }
+aside li a.active { background: #e0e7ff; color: #3730a3; font-weight: 600; }
+main { flex: 1; padding: 40px 56px; max-width: 860px; }
+h1 { font-size: 40px; margin: 0 0 12px; }
+h2 { font-size: 26px; margin: 36px 0 12px; padding-bottom: 6px; border-bottom: 1px solid #e5e7eb; }
+p { font-size: 17px; line-height: 1.65; margin: 0 0 16px; }
+code { font-family: Menlo, monospace; font-size: 14px; background: #f1f5f9; padding: 2px 6px; border-radius: 4px; color: #be185d; }
+pre { background: #0f172a; color: #e2e8f0; padding: 18px 20px; border-radius: 10px; font-family: Menlo, monospace; font-size: 14px; line-height: 1.6; overflow: auto; }
+pre code { background: none; color: inherit; padding: 0; }
+ul.steps, ol { font-size: 17px; line-height: 1.65; }
+.callout { display: flex; gap: 12px; padding: 14px 16px; border-left: 4px solid #f59e0b; background: #fffbeb; border-radius: 6px; margin: 20px 0; }
+.callout strong { color: #92400e; }
+a { color: #2563eb; }
+</style></head>
+<body><div class="layout">
+<aside>
+  <h4>Introduction</h4>
+  <ul><li><a class="active" href="#">Getting started</a></li><li><a href="#">Installation</a></li><li><a href="#">Your first note</a></li></ul>
+  <h4>Guides</h4>
+  <ul><li><a href="#">Linking notes</a></li><li><a href="#">Sharing</a></li><li><a href="#">Keyboard shortcuts</a></li><li><a href="#">Importing</a></li></ul>
+</aside>
+<main>
+  <h1>Getting started</h1>
+  <p>Lumen runs in your browser and on your desktop. This guide installs the command line tool, creates a notebook and links your first two notes. See <a href="#">installation</a> for other systems.</p>
+  <h2>Install the tool</h2>
+  <p>Install with your package manager, then run <code>lumen init</code> in an empty folder:</p>
+  <pre><code>npm install -g lumen-cli
+lumen init my-notes
+cd my-notes &amp;&amp; lumen open</code></pre>
+  <div class="callout"><strong>Note</strong><span>The first run downloads about 40 MB of language data. Later runs start at once.</span></div>
+  <h2>Link two notes</h2>
+  <ol><li>Open any note and type two square brackets.</li><li>Pick the note to link from the list.</li><li>Press <code>Enter</code> to insert the link.</li></ol>
+  <p>Links work both ways: the other note lists this one under <em>Mentioned in</em>.</p>
+  <ul class="steps"><li>Backlinks update as you type.</li><li>Renaming a note keeps its links.</li><li>Deleted notes leave a marker.</li></ul>
+</main></div></body></html>

@@ -1,0 +1,62 @@
+:root {
+    color-scheme: light dark;
+    --bg: #ffffff;
+    --fg: #17171a;
+    --muted: #6b6b73;
+    --line: #e4e4e8;
+    --accent: #ef7f42;
+    --accent-fg: #ffffff;
+    --soft: #f4f4f6;
+}
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #1b1b1f;
+        --fg: #f2f2f4;
+        --muted: #a0a0a8;
+        --line: #33333a;
+        --soft: #26262c;
+    }
+}
+* { box-sizing: border-box; }
+body {
+    margin: 0;
+    width: 300px;
+    padding: 14px;
+    font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+}
+header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+h1 { font-size: 14px; font-weight: 600; margin: 0; }
+button {
+    width: 100%;
+    border: 0;
+    border-radius: 8px;
+    padding: 9px 12px;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+button:disabled { opacity: 0.6; cursor: default; }
+.primary { background: var(--accent); color: var(--accent-fg); }
+.secondary { background: var(--soft); color: var(--fg); margin-top: 8px; }
+.hint, .privacy { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
+kbd { font: inherit; font-size: 11px; padding: 0 4px; border: 1px solid var(--line); border-radius: 4px; }
+#status { min-height: 18px; margin: 10px 0 0; }
+#status.error { color: #d9443b; }
+details { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; }
+summary { cursor: pointer; font-weight: 600; }
+label { display: block; margin: 10px 0 4px; color: var(--muted); }
+select, input[type="url"] {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--fg);
+    font: inherit;
+}
+input[type="url"] { margin-top: 6px; }
+.check { display: flex; align-items: center; gap: 6px; color: var(--fg); }
+.check.disabled { color: var(--muted); }
+.soon { font-size: 11px; padding: 1px 6px; border-radius: 999px; background: var(--soft); white-space: nowrap; margin-left: auto; }

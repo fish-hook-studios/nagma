@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Create your account</title>
+<link rel="stylesheet" href="fonts.css">
+<style>
+body { margin: 0; font-family: "Source Sans 3", sans-serif; background: #eef2f7; color: #1e293b; display: flex; justify-content: center; padding: 48px 16px; }
+.card { width: 480px; background: #fff; border-radius: 16px; padding: 32px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08); }
+h1 { margin: 0 0 6px; font-size: 26px; }
+.muted { color: #64748b; margin: 0 0 24px; }
+.row { display: flex; gap: 12px; }
+.field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; flex: 1; }
+label { font-size: 14px; font-weight: 600; }
+input[type=text], input[type=email], input[type=password], select, textarea { font: inherit; font-size: 15px; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: #0f172a; }
+textarea { height: 80px; resize: none; }
+.check { display: flex; align-items: center; gap: 8px; font-size: 14px; margin-bottom: 10px; }
+.radios { display: flex; gap: 18px; margin-bottom: 16px; font-size: 14px; }
+.radios label { font-weight: 400; display: flex; align-items: center; gap: 6px; }
+button { width: 100%; padding: 12px; border: 0; border-radius: 10px; background: #2563eb; color: #fff; font: inherit; font-weight: 700; font-size: 16px; }
+.foot { text-align: center; font-size: 14px; color: #64748b; margin-top: 16px; }
+.foot a { color: #2563eb; }
+</style></head>
+<body><form class="card" onsubmit="return false">
+<h1>Create your account</h1><p class="muted">It takes a minute. No card needed.</p>
+<div class="row"><div class="field"><label for="f">First name</label><input id="f" type="text" value="Asha"></div><div class="field"><label for="l">Last name</label><input id="l" type="text" placeholder="Your last name"></div></div>
+<div class="field"><label for="e">Work email</label><input id="e" type="email" placeholder="you@company.com"></div>
+<div class="field"><label for="p">Password</label><input id="p" type="password" value="hunter2hunter"></div>
+<div class="field"><label for="r">Role</label><select id="r"><option>Designer</option><option selected>Product manager</option></select></div>
+<div class="radios"><label><input type="radio" name="size" checked> Just me</label><label><input type="radio" name="size"> 2 to 10</label><label><input type="radio" name="size"> More</label></div>
+<div class="field"><label for="n">What will you use it for?</label><textarea id="n" placeholder="Plans, research, meeting notes…"></textarea></div>
+<label class="check"><input type="checkbox" checked> Send me product news</label>
+<label class="check"><input type="checkbox"> I agree to the terms</label>
+<button type="submit">Create account</button>
+<p class="foot">Already have one? <a href="#">Sign in</a></p>
+</form></body></html>

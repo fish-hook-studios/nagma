@@ -356,8 +356,15 @@ function Rule() {
 
 function TriggerRows({ it, owner, onChange, compact }: { it: Interaction; owner: SceneNode; onChange: (patch: Partial<Interaction>) => void; compact?: boolean }) {
     const hasVideo = videosOf(owner).length > 0;
-    const groups: PickOption[][] = TRIGGER_GROUPS.map((g) => g.filter((t) => hasVideo || (t !== "video-end" && t !== "video-time") || t === it.trigger).map((t) => ({ id: t, label: triggerLabel(t), icon: <TriggerIcon trigger={t} className="size-3.5" /> })));
-    const trigger = <Pick label="Trigger" value={it.trigger} groups={groups} onChange={(t) => onChange({ trigger: t as Trigger })} icon={<TriggerIcon trigger={it.trigger} className="size-3.5" />} />;
+    const isLiveFrame = owner.type === "live";
+    const groups: PickOption[][] = TRIGGER_GROUPS.map((g) =>
+        g
+            .filter((t) => hasVideo || (t !== "video-end" && t !== "video-time") || t === it.trigger)
+            .filter((t) => isLiveFrame || t !== "live-event" || t === it.trigger)
+            .map((t) => ({ id: t, label: triggerLabel(t), icon: <TriggerIcon trigger={t} className="size-3.5" /> })),
+    ).filter((g) => g.length > 0);
+    const events = owner.live?.events ?? [];
+    const trigger = <Pick label="Trigger" value={it.trigger} groups={groups} onChange={(t) => onChange(t === "live-event" && !it.event && events[0] ? { trigger: t, event: events[0] } : { trigger: t as Trigger })} icon={<TriggerIcon trigger={it.trigger} className="size-3.5" />} />;
     return (
         <>
             {compact ? trigger : <Row label="Trigger">{trigger}</Row>}
@@ -401,6 +408,21 @@ function TriggerRows({ it, owner, onChange, compact }: { it: Interaction; owner:
             {it.trigger === "delay" && (
                 <Row label="Delay">
                     <NumberField label="" icon={<Clock className="size-3" />} title="Delay (ms)" unit="ms" min={0} step={50} value={it.delay} onCommit={(delay) => onChange({ delay })} />
+                </Row>
+            )}
+            {it.trigger === "live-event" && (
+                <Row label="Event">
+                    {events.length > 0 ? (
+                        <Select aria-label="Event" value={it.event ?? ""} onChange={(e) => onChange({ event: e.target.value })} className={`${input} px-1`}>
+                            {[...(it.event && !events.includes(it.event) ? [it.event] : []), ...events].map((name) => (
+                                <option key={name} value={name}>
+                                    {name}
+                                </option>
+                            ))}
+                        </Select>
+                    ) : (
+                        <input aria-label="Event" placeholder="submit" value={it.event ?? ""} onChange={(e) => onChange({ event: e.target.value.trim() })} onKeyDown={(e) => e.stopPropagation()} className={input} />
+                    )}
                 </Row>
             )}
             {it.trigger === "video-time" && (

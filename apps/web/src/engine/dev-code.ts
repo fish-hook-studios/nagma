@@ -1,4 +1,5 @@
 import { cssFor, round } from "./dev-css";
+import { liveCodeBlocks } from "./live";
 import { refuseExport } from "./share-settings";
 import { pluginLanguages, pluginStore } from "./plugins";
 import { pluginAllowedInInspect, teamDefaultLanguage } from "./inspect-settings";
@@ -570,6 +571,8 @@ function xmlBlocks(node: SceneNode, doc: NagmaDocument, s: CodeSettings): CodeBl
 // ---- Entry --------------------------------------------------------------------------------------
 
 export function codeBlocks(node: SceneNode, doc: NagmaDocument, settings: CodeSettings): CodeBlock[] {
+    // A Live frame's code is shown as it is, whatever the language.
+    if (node.type === "live") return liveCodeBlocks(doc, node);
     const s = normalizeSettings(settings);
     // Plugin languages are generated asynchronously (generateCode in engine/plugins.ts).
     if (s.lang.startsWith("plugin:")) return [];

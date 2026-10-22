@@ -187,10 +187,11 @@ export function pickImportFiles() {
     input.click();
 }
 
-// Everything Import opens: Nagma local copies (.nagma.json, File › Save local copy), design,
+// Everything Import opens: Nagma local copies (.nagma.json, File › Save local copy), page captures
+// (.nagma-capture.json, from Nagma Capture), design,
 // slides and campaign files, presentations, PDFs, page layouts, pictures and video. Each becomes a
 // file of its own kind.
-export const IMPORT_ACCEPT = ".nagma,.nagma.json,application/json,.fig,.deck,.buzz,.sketch,.pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation,.pdf,application/pdf,.idml,.designcraft,image/*,.svg,video/*,.mov,.mkv,.webm,.mxf,.psd,.psb";
+export const IMPORT_ACCEPT = ".nagma,.nagma.json,.nagma-capture.json,application/json,.fig,.deck,.buzz,.sketch,.pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation,.pdf,application/pdf,.idml,.designcraft,image/*,.svg,video/*,.mov,.mkv,.webm,.mxf,.psd,.psb";
 const FIG_FAMILY = /\.(fig|deck|buzz)$/i;
 const PPTX = /\.pptx$/i;
 const SKETCH = /\.sketch$/i;
@@ -200,6 +201,8 @@ export async function importAsNewFiles(files: File[]) {
     const { zoomToFit } = await import("./camera");
     const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
     const { importLocalCopy, isLocalCopyFile } = await import("./local-copy");
+    const { importCaptureFile, isCaptureFile } = await import("./capture-open");
+    for (const file of files.filter((f) => isCaptureFile(f))) await importCaptureFile(file);
     for (const file of files.filter((f) => isLocalCopyFile(f))) {
         try {
             const opened = await importLocalCopy(file);
@@ -247,7 +250,7 @@ export async function importAsNewFiles(files: File[]) {
         zoomToFit();
         keepIfFilled(meta.id);
     }
-    const rest = files.filter((f) => !isLocalCopyFile(f) && !FIG_FAMILY.test(f.name) && !SKETCH.test(f.name) && !PPTX.test(f.name) && !isPdfFile(f) && !isLayoutFile(f));
+    const rest = files.filter((f) => !isCaptureFile(f) && !isLocalCopyFile(f) && !FIG_FAMILY.test(f.name) && !SKETCH.test(f.name) && !PPTX.test(f.name) && !isPdfFile(f) && !isLayoutFile(f));
     if (rest.length) {
         const name = rest.length === 1 ? rest[0]?.name.replace(/\.[^.]+$/, "") || "Untitled" : "Untitled";
         const meta = createFile("design", createEmptyDocument(name), name);

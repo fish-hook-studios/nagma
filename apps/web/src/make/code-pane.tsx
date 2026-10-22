@@ -4,7 +4,7 @@ import { askText } from "../components/ask-text";
 import { editor, useEditor } from "../engine/store";
 import { deleteFile, makeData, renameFile, writeFile } from "./model";
 import { send } from "./generate";
-import { highlight } from "./highlight";
+import { CodeEditor } from "./code-editor";
 import { make, useMake } from "./state";
 
 const GUIDELINES = `# Guidelines
@@ -18,8 +18,6 @@ The model reads this file before every answer. Write the rules your app should f
 ## Content and behaviour
 - Tone of voice, naming, what the app must always or never do.
 `;
-
-const COLOURS = ".hl-keyword{color:#A855F7}.hl-string{color:#16A34A}.hl-number{color:#EA580C}.hl-comment{color:#8A8F98;font-style:italic}.hl-tag{color:#2563EB}.hl-attr{color:#0891B2}.hl-type{color:#CA8A04}";
 
 // guidelines.md: write it from a starting point, upload one, or have the model write it.
 function GuidelinesBox() {
@@ -133,8 +131,6 @@ export function CodePane() {
     const paths = useMemo(() => Object.keys(files).sort((a, b) => (a.includes("/") === b.includes("/") ? a.localeCompare(b) : a.includes("/") ? 1 : -1)), [files]);
     const [draft, setDraft] = useState<{ path: string; text: string } | null>(null);
     const timer = useRef(0);
-    const gutter = useRef<HTMLPreElement>(null);
-    const coloured = useRef<HTMLPreElement>(null);
     const saved = open ? (files[open] ?? "") : "";
     const text = draft && draft.path === open ? draft.text : saved;
 
@@ -151,7 +147,6 @@ export function CodePane() {
         window.clearTimeout(timer.current);
         timer.current = window.setTimeout(() => flush(d), 500);
     };
-    const lines = text.split("\n").length;
 
     return (
         <div className="flex min-h-0 flex-1 bg-canvas">
@@ -189,50 +184,7 @@ export function CodePane() {
                         {draft && draft.text !== saved && <span className="text-ink-subtle">Saving…</span>}
                         {readOnly && <span className="ml-auto">View only</span>}
                     </div>
-                    <style>{COLOURS}</style>
-                    <div className="flex min-h-0 flex-1 font-mono text-[12px] leading-[18px]">
-                        <pre ref={gutter} aria-hidden="true" className="w-11 shrink-0 overflow-hidden border-r border-panel-border py-2 pr-2 text-right text-ink-subtle select-none">
-                            {Array.from({ length: lines }, (_, i) => i + 1).join("\n")}
-                        </pre>
-                        <div className="relative min-w-0 flex-1">
-                        {/* The coloured copy under the (transparent) text being edited. */}
-                        <pre ref={coloured} aria-hidden="true" className="pointer-events-none absolute inset-0 m-0 overflow-hidden px-3 py-2 whitespace-pre text-ink" dangerouslySetInnerHTML={{ __html: `${highlight(open, text)}\n` }} />
-                        <textarea
-                            aria-label={`Contents of ${open}`}
-                            value={text}
-                            readOnly={readOnly}
-                            spellCheck={false}
-                            autoCapitalize="off"
-                            autoCorrect="off"
-                            onChange={(e) => change(e.target.value)}
-                            onBlur={() => flush()}
-                            onScroll={(e) => {
-                                if (gutter.current) gutter.current.scrollTop = e.currentTarget.scrollTop;
-                                if (coloured.current) {
-                                    coloured.current.scrollTop = e.currentTarget.scrollTop;
-                                    coloured.current.scrollLeft = e.currentTarget.scrollLeft;
-                                }
-                            }}
-                            onKeyDown={(e) => {
-                                e.stopPropagation();
-                                if (e.key === "Tab" && !e.shiftKey && !readOnly) {
-                                    e.preventDefault();
-                                    const el = e.currentTarget;
-                                    const { selectionStart: a, selectionEnd: b } = el;
-                                    const next = `${text.slice(0, a)}    ${text.slice(b)}`;
-                                    change(next);
-                                    requestAnimationFrame(() => el.setSelectionRange(a + 4, a + 4));
-                                }
-                                if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
-                                    e.preventDefault();
-                                    flush();
-                                }
-                            }}
-                            wrap="off"
-                            className="absolute inset-0 h-full w-full resize-none bg-transparent px-3 py-2 text-transparent caret-ink outline-none selection:bg-brand-500/30"
-                        />
-                        </div>
-                    </div>
+                    <CodeEditor path={open} value={text} readOnly={readOnly} onChange={change} onCommit={() => flush()} label={`Contents of ${open}`} />
                 </div>
             ) : (
                 <div className="flex flex-1 items-center justify-center text-[12px] text-ink-muted">No file open.</div>

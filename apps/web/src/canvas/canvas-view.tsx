@@ -80,6 +80,8 @@ import { type Guide, type Measure, dragMeasures, guidesForBox, measureBetween, s
 import { PALETTES, RULER_SIZE, renderScene } from "./render";
 import { protoHover, protoPointerDown, protoPointerMove, protoPointerUp } from "./prototype-connections";
 import { TextEditor } from "./text-editor";
+import { LiveFrames } from "./live-frames";
+import { enterLive, liveUi, setCanvasPass } from "./live-snapshots";
 import { drawPluginOverlays, pluginDoubleClick, pluginDown, pluginMove, pluginUp } from "./canvas-plugins";
 import { focusResizePlugin } from "./plugins/focus-resize";
 import "./vector-plugins";
@@ -222,6 +224,8 @@ export function CanvasView() {
             else if (s.mode !== "motion" && !s.presentingId) stopPlayback();
             // A drawing error must never take the editor down: report it and keep the UI alive.
             try {
+                // Live frames running over the canvas leave their picture out underneath.
+                setCanvasPass(true);
                 renderScene(
                     ctx,
                     size.width,
@@ -267,6 +271,8 @@ export function CanvasView() {
                 if (!s.presentingId && !s.uiHidden) drawPluginOverlays(ctx, s.camera);
             } catch (error) {
                 console.error("Canvas draw failed", error);
+            } finally {
+                setCanvasPass(false);
             }
         };
         const schedule = () => {
@@ -353,7 +359,11 @@ export function CanvasView() {
     const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
         const s = editor.get();
         if (s.editingTextId || s.presentingId) return;
+        // Pointer events that reach a Live frame belong to its code, not to the canvas.
+        if (event.target instanceof Element && event.target.closest("[data-live-layer]")) return;
         containerRef.current?.focus();
+        // A click outside the Live frame in use leaves it.
+        if (liveUi.get().entered) enterLive(null);
         const screen = local(event);
         const world = screenToWorld(s.camera, screen.x, screen.y);
         // Dragging out of a ruler makes a guide; grabbing a guide moves it (back onto the ruler removes it).
@@ -1301,6 +1311,13 @@ export function CanvasView() {
             ui.set({ labelRename: label.id });
             return;
         }
+        // Double-clicking a Live frame enters it: the pointer and keyboard go to its code.
+        const liveHit = hitTest(s.doc, world.x, world.y, true);
+        if (liveHit?.type === "live" && !liveHit.locked) {
+            editor.set({ selection: [liveHit.id] });
+            enterLive(liveHit.id);
+            return;
+        }
         const selectedNode = s.selection.length === 1 ? s.doc.nodes[s.selection[0] ?? ""] : undefined;
         // Images open in the photo editor rather than turning into a vector.
         if (selectedNode && firstImagePaint(selectedNode) >= 0 && nodeContains(s.doc, selectedNode, world.x, world.y)) {
@@ -1404,6 +1421,7 @@ export function CanvasView() {
                 style={{ width: size.width, height: size.height }}
                 className="block"
             />
+            <LiveFrames />
             {editingTextId && <TextEditor nodeId={editingTextId} />}
             <CanvasOverlays />
             <ModeBanner />

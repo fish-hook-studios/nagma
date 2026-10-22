@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Overview · Orbit analytics</title>
+<link rel="stylesheet" href="fonts.css">
+<style>
+body { margin: 0; font-family: "Source Sans 3", sans-serif; background: #f3f4f6; color: #111827; }
+.app { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
+.side { background: #111827; color: #d1d5db; padding: 20px 14px; }
+.side .logo { color: #fff; font-weight: 700; font-size: 18px; padding: 4px 10px 20px; }
+.side a { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px; color: #d1d5db; text-decoration: none; font-size: 15px; }
+.side a.on { background: #1f2937; color: #fff; }
+.side .dot { width: 8px; height: 8px; border-radius: 50%; background: #6b7280; }
+.side a.on .dot { background: #34d399; }
+.main { padding: 24px 32px; }
+.top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+.top h1 { font-size: 26px; margin: 0; }
+.search { width: 280px; padding: 9px 12px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; color: #6b7280; font-size: 14px; }
+.stats { display: flex; gap: 16px; margin-bottom: 24px; }
+.stat { flex: 1; background: #fff; border-radius: 12px; padding: 18px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.stat .label { font-size: 13px; color: #6b7280; }
+.stat .value { font-size: 30px; font-weight: 700; margin-top: 6px; }
+.stat .delta { font-size: 13px; color: #059669; margin-top: 4px; }
+.panel { background: #fff; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.panel h2 { font-size: 17px; margin: 0 0 14px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { text-align: left; color: #6b7280; font-weight: 600; padding: 8px 10px; border-bottom: 1px solid #e5e7eb; }
+td { padding: 10px; border-bottom: 1px solid #f3f4f6; }
+.bar { height: 8px; border-radius: 4px; background: #e5e7eb; overflow: hidden; width: 140px; }
+.bar span { display: block; height: 100%; background: #6366f1; }
+.pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+.ok { background: #d1fae5; color: #065f46; } .warn { background: #fef3c7; color: #92400e; }
+</style></head>
+<body><div class="app">
+<nav class="side"><div class="logo">Orbit</div>
+<a class="on" href="#"><span class="dot"></span>Overview</a><a href="#"><span class="dot"></span>Audience</a><a href="#"><span class="dot"></span>Campaigns</a><a href="#"><span class="dot"></span>Revenue</a><a href="#"><span class="dot"></span>Settings</a></nav>
+<div class="main">
+  <div class="top"><h1>Overview</h1><div class="search">Search reports…</div></div>
+  <div class="stats">
+    <div class="stat"><div class="label">Visitors</div><div class="value">48,210</div><div class="delta">+12.4% this week</div></div>
+    <div class="stat"><div class="label">Sign-ups</div><div class="value">1,932</div><div class="delta">+4.1% this week</div></div>
+    <div class="stat"><div class="label">Revenue</div><div class="value">$86.4k</div><div class="delta">+8.9% this week</div></div>
+    <div class="stat"><div class="label">Churn</div><div class="value">2.3%</div><div class="delta">−0.4% this week</div></div>
+  </div>
+  <div class="panel"><h2>Top campaigns</h2>
+  <table><thead><tr><th>Campaign</th><th>Status</th><th>Reach</th><th>Progress</th></tr></thead>
+  <tbody>
+  <tr><td>Spring launch</td><td><span class="pill ok">Live</span></td><td>21,400</td><td><div class="bar"><span style="width:82%"></span></div></td></tr>
+  <tr><td>Referral boost</td><td><span class="pill ok">Live</span></td><td>9,870</td><td><div class="bar"><span style="width:56%"></span></div></td></tr>
+  <tr><td>Webinar series</td><td><span class="pill warn">Paused</span></td><td>4,120</td><td><div class="bar"><span style="width:31%"></span></div></td></tr>
+  </tbody></table></div>
+</div></div></body></html>

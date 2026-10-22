@@ -2,6 +2,7 @@ import { activePage } from "../engine/page";
 import { setPaintSpace } from "../engine/paint";
 import type { NagmaDocument, Rect } from "../engine/types";
 import { type RasterOptions, drawRoots, rasterContext } from "./render";
+import { ensureLiveSnapshots } from "./live-snapshots";
 
 // Renders everything on a page within a world rectangle: what a slice exports, and exports that
 // aren't "contents only". Slices themselves draw nothing, so only what lies under them shows.
@@ -13,6 +14,8 @@ export async function renderRegion(doc: NagmaDocument, pageId: string, rect: Rec
     canvas.height = height;
     const ctx = rasterContext(canvas, options);
     if (!ctx) return null;
+    // Live frames on the page are drawn from their pictures: bring them up to date first.
+    await ensureLiveSnapshots(doc, doc.nodes[pageId]?.children ?? [], Math.max(1, Math.min(4, scale)));
     setPaintSpace(doc.colorProfile === "p3" ? "p3" : "srgb");
     if (format === "jpeg") {
         ctx.fillStyle = "#FFFFFF";

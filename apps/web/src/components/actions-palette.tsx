@@ -5,6 +5,7 @@ import { reusableAssets } from "../engine/components";
 import { exportLayers } from "../engine/export";
 import { pickImages } from "../engine/images";
 import { MENU_ACTIONS, actionEnabled, actionLabel, menuPaths } from "../engine/menu-actions";
+import { actionsQuery } from "../engine/modes";
 import { layerRoots } from "../engine/page";
 import { openPdfEditor } from "../engine/pdf";
 import { openPhotoEditor } from "../engine/photo";
@@ -138,7 +139,11 @@ export function ActionsPalette() {
 }
 
 function Palette() {
-    const [query, setQuery] = useState("");
+    const [query, setQuery] = useState(() => {
+        const q = actionsQuery.next;
+        actionsQuery.next = "";
+        return q;
+    });
     const [tab, setTab] = useState<"all" | "assets" | "plugins">("all");
     const [index, setIndex] = useState(0);
     const inputRef = useRef<HTMLInputElement>(null);

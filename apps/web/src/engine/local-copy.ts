@@ -69,7 +69,7 @@ export async function saveLocalCopy(doc: NagmaDocument = editor.get().doc): Prom
 
 // ---- Opening ----
 
-function blobFromDataUrl(data: string, fallbackType: string): Blob | null {
+export function blobFromDataUrl(data: string, fallbackType: string): Blob | null {
     const m = /^data:([^;,]*)((?:;[^;,]*)*),(.*)$/s.exec(data);
     if (!m) return null;
     const type = m[1] || fallbackType;

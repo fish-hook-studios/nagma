@@ -1,3 +1,4 @@
+import { pluginOwnsLabel } from "./canvas-plugins";
 import { worldToScreen } from "../engine/camera";
 import { isFrameLike } from "../engine/components";
 import { getImage } from "../engine/images";
@@ -31,6 +32,7 @@ import type { Guide, Measure } from "./snapping";
 import { type VertexRef, isSelected, screenVertices } from "./vector-edit";
 import { drawUiOverlay } from "./ui-overlay";
 import { drawShaderEffect, drawShaderPaint } from "./shader-paint";
+import { ensureLiveSnapshots, liveSnapshot, skipSnapshot } from "./live-snapshots";
 import { beginKnockout, drawGlassBackdrop, drawGlassRim, drawNoise, drawRamped, drawTextured, endKnockout, layerSpace, progressiveBackdrop, progressiveOf, rampPoints } from "./effects-render";
 
 export const RULER_SIZE = 20;
@@ -995,6 +997,32 @@ function clearShadow(ctx: CanvasRenderingContext2D) {
     ctx.shadowOffsetY = 0;
 }
 
+// A Live frame's content: the last picture its code sent back, clipped to the frame's shape. Until
+// there is one, a placeholder with the frame's name and the lightning mark.
+function drawLiveContent(ctx: CanvasRenderingContext2D, node: SceneNode, path: Path2D, pixelScale: number) {
+    if (skipSnapshot(node.id)) return;
+    ctx.save();
+    ctx.clip(path);
+    const img = liveSnapshot(node.id);
+    if (img) {
+        ctx.imageSmoothingQuality = "high";
+        ctx.drawImage(img, node.x, node.y, node.w, node.h);
+        ctx.restore();
+        return;
+    }
+    ctx.fillStyle = "rgba(112, 72, 232, 0.06)";
+    ctx.fillRect(node.x, node.y, node.w, node.h);
+    const size = Math.min(14, Math.max(6, node.h / 6));
+    if (size * pixelScale >= 4) {
+        ctx.fillStyle = "rgba(90, 60, 190, 0.75)";
+        ctx.font = fontString(size, 500);
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(`ϟ ${node.name}`, node.x + node.w / 2, node.y + node.h / 2, Math.max(1, node.w - 8));
+    }
+    ctx.restore();
+}
+
 // Draws a layer and its children in the current space (the layer's parent space).
 export function drawNode(ctx: CanvasRenderingContext2D, doc: NagmaDocument, node: SceneNode, options: DrawOptions): void {
     if (!node.visible) return;
@@ -1053,6 +1081,7 @@ export function drawNode(ctx: CanvasRenderingContext2D, doc: NagmaDocument, node
         } else {
             drawEffectsBelow(ctx, node, path, options.pixelScale);
             drawFills(ctx, doc, node, fillPath2D(node) ?? path, options.pixelScale);
+            if (node.type === "live") drawLiveContent(ctx, node, path, options.pixelScale);
             drawEffectsAbove(ctx, node, path, options.pixelScale);
             drawStrokes(ctx, node, path);
             drawEndCaps(ctx, node);
@@ -2038,7 +2067,7 @@ export function renderScene(
     ctx.textBaseline = "top";
     for (const id of sceneFocus.id ? [] : labelled(doc)) {
         const node = doc.nodes[id];
-        if (!node || !isFrameLike(node) || !node.visible) continue;
+        if (!node || !(isFrameLike(node) || node.type === "live") || !node.visible || pluginOwnsLabel(node)) continue;
         const r = frameLabelRect(doc, node, camera);
         if (node.isSection && doc.board && boardPainter.sectionLabel?.(ctx, doc, node, r, selected.has(id) || overlay.hoverId === id)) continue;
         ctx.save();
@@ -2130,6 +2159,7 @@ export async function renderSelectionToPng(doc: NagmaDocument, ids: string[], sc
     if (nodes.length === 1 && nodes[0]) return renderNodesToPng(doc, nodes[0], scale, format);
     const box = selectionBounds(doc, nodes.map((n) => n.id));
     if (!nodes.length || !box) return null;
+    await ensureLiveSnapshots(doc, ids, Math.max(1, Math.min(4, scale)));
     const pad = Math.max(0, ...nodes.map((n) => (n.shadow ? Math.abs(n.shadow.x) + Math.abs(n.shadow.y) + n.shadow.blur * 2 : 0) + n.blur * 2));
     const bounds = { x: box.x - pad, y: box.y - pad, w: box.w + pad * 2, h: box.h + pad * 2 };
     const width = Math.max(1, Math.min(8192, Math.ceil(bounds.w * scale)));
@@ -2200,6 +2230,8 @@ function unclipped(doc: NagmaDocument, node: SceneNode): NagmaDocument {
 
 // Renders layers to a PNG at the given scale, in their world placement.
 export async function renderNodesToPng(input: NagmaDocument, node: SceneNode, scale: number, format: "png" | "jpeg" = "png", options: RasterOptions = {}): Promise<Blob | null> {
+    // Live frames are drawn from their pictures: bring them up to date first.
+    await ensureLiveSnapshots(input, [node.id], Math.max(1, Math.min(4, scale)));
     const doc = options.absoluteBounds ? unclipped(input, node) : input;
     // The layer with what its effects reach (shadows, blur) and any contents it doesn't clip. The
     // padding was read only from the old single-shadow fields, so shadows and blurs from the

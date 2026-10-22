@@ -5,6 +5,9 @@ import { nodeContains } from "../canvas/hit-test";
 import { type Box, bezelPad, drawBezel, drawBezelOverlay, screenRadius } from "../canvas/device-frame";
 import { type Viewport, OPPOSITE, drawLayers, drawScreen, drawTransition } from "../canvas/screen";
 import { drawNode } from "../canvas/render";
+import { PlayerLiveFrame } from "../canvas/live-frames";
+import { setCanvasPass } from "../canvas/live-snapshots";
+import { liveProps, liveVariables } from "../engine/live";
 import { stopPresenting } from "../engine/camera";
 import { collab, sendPresence, useCollab } from "../engine/collab";
 import { follow, setSpotlight, stopFollowing } from "../engine/follow";
@@ -399,6 +402,9 @@ export function PrototypePlayer({
     const dragged = useRef(false);
     // GIF fills in browsers without ImageDecoder: <img> elements laid over the fills.
     const [gifOverlays, setGifOverlays] = useState<{ key: string; src: string; box: Box; radius: number }[]>([]);
+    // Live frames on the screen: their code runs over the canvas, and their events fire "On event".
+    const [liveOverlays, setLiveOverlays] = useState<{ node: SceneNode; box: Box; radius: number; input: string }[]>([]);
+    const liveSeen = useRef("");
     const videoSeen = useRef(new Map<string, { token: number; last: number; ended: boolean }>());
     // Screens gone back from, newest last, for the preview's forward button.
     const ahead = useRef<string[]>([]);
@@ -824,6 +830,34 @@ export function PrototypePlayer({
     // Without ImageDecoder, animated GIF fills on the top frame get an <img> over them (the browser
     // animates those); the still underneath keeps the layout.
     const gifSeen = useRef("");
+    const placeLiveOverlays = () => {
+        const st = stateRef.current;
+        const d = docRef.current;
+        const id = topOf(st);
+        const frame = d.nodes[id];
+        const out: { node: SceneNode; box: Box; radius: number; input: string }[] = [];
+        if (frame && !nav.current && !drag.current) {
+            const p = placeOf(id);
+            const sy = scrollOf(id).y;
+            const overrides = { values: st.values, modes: st.modes };
+            for (const node of subtreeOf(d, id)) {
+                if (node.type !== "live" || !isEffectivelyVisible(d, node) || node.rotation) continue;
+                const input = JSON.stringify({ props: liveProps(d, node, overrides), variables: liveVariables(d, node, overrides) });
+                out.push({ node, box: { x: p.x + (node.x - frame.x) * p.scale, y: p.y + (node.y - frame.y - sy) * p.scale, w: node.w * p.scale, h: node.h * p.scale }, radius: node.radius * p.scale, input });
+            }
+        }
+        const sig = out.map((o) => `${o.node.id}:${Math.round(o.box.x)},${Math.round(o.box.y)},${Math.round(o.box.w)},${Math.round(o.box.h)}:${o.input}:${JSON.stringify(o.node.live?.source ?? null)}`).join("|");
+        if (sig !== liveSeen.current) {
+            liveSeen.current = sig;
+            setLiveOverlays(out);
+        }
+    };
+    // An event from a Live frame's code runs that layer's "On event" interactions for it.
+    const liveEvent = (id: string, name: string) => {
+        const node = docRef.current.nodes[id];
+        for (const it of node?.interactions ?? []) if (it.trigger === "live-event" && (it.event ?? "") === name) queueMicrotask(() => run(it, id));
+    };
+
     const placeGifOverlays = () => {
         if (canDecodeGifs()) return;
         const st = stateRef.current;
@@ -865,6 +899,8 @@ export function PrototypePlayer({
         let frameId = 0;
         const draw = (now: number) => {
             const dpr = window.devicePixelRatio || 1;
+            // Live frames running over the player leave their picture out underneath.
+            setCanvasPass(true);
             fireDelays(now);
             fireGamepad();
             gifPlayback.on = true;
@@ -1043,7 +1079,9 @@ export function PrototypePlayer({
                 drawBezelOverlay(ctx, sg.device.device.bezel, sg.device.screen, sg.device.s, sg.device.landscape);
             }
             gifPlayback.on = false;
+            setCanvasPass(false);
             placeGifOverlays();
+            placeLiveOverlays();
             frameId = requestAnimationFrame(draw);
         };
         frameId = requestAnimationFrame(draw);
@@ -1436,6 +1474,9 @@ export function PrototypePlayer({
                     if (pressHeld.current) release(pressHeld);
                 }}
             />
+            {liveOverlays.map((l) => (
+                <PlayerLiveFrame key={l.node.id} node={l.node} input={l.input} box={l.box} radius={l.radius} onEmit={(name) => liveEvent(l.node.id, name)} />
+            ))}
             {gifOverlays.map((g) => (
                 <img key={g.key} src={g.src} alt="" aria-hidden="true" className="pointer-events-none absolute object-cover" style={{ left: g.box.x, top: g.box.y, width: g.box.w, height: g.box.h, borderRadius: g.radius }} />
             ))}

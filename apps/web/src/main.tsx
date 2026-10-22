@@ -103,6 +103,9 @@ if (sitePreview) {
     }
 }
 
+// Nagma Capture (the browser extension) hands page captures to this window; each opens as a new file.
+void import("./engine/capture-open").then(({ listenForCaptures }) => listenForCaptures());
+
 // Preferences › Open links in desktop app: hand a file link to the desktop app.
 openLinkInDesktopApp();
 

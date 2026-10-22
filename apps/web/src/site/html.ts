@@ -1,4 +1,5 @@
 import { exportSvg } from "../engine/export-svg";
+import { liveSiteHtml } from "../engine/live";
 import { BUNDLED } from "../engine/fonts";
 import { blobToDataUrl, imageBlob } from "../engine/image-store";
 import { loadMedia } from "../engine/media";
@@ -761,6 +762,8 @@ function renderNode(ctx: Ctx, env: RenderEnv, node: SceneNode, parent: SceneNode
 
     let inner = "";
     if (web.embed) inner = embedHtml(ctx, node);
+    // A Live frame ships its code: the same sandboxed frame, with its props as they are now.
+    else if (node.type === "live") inner = liveSiteHtml(doc, node);
     else if (node.type === "text") inner = textPerBreakpoint(ctx, env, node, className);
     else if (node.type === "vector" || node.type === "boolean") {
         const svg = exportSvg(doc, node.id);

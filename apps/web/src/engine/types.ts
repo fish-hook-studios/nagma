@@ -11,7 +11,8 @@ import type { MakeData } from "../make/types";
 // Components are frames that can be reused; instances are live copies of a component.
 // A component set holds variants: components named like "Size=Large, State=Hover".
 // Vectors are pen paths; booleans combine their children's shapes live (union, subtract…).
-export type NodeType = "page" | "frame" | "component" | "componentSet" | "instance" | "group" | "boolean" | "rect" | "ellipse" | "vector" | "text";
+// Live frames are frames whose content is code, run in a sandbox on the canvas (engine/live.ts).
+export type NodeType = "page" | "frame" | "component" | "componentSet" | "instance" | "group" | "boolean" | "rect" | "ellipse" | "vector" | "text" | "live";
 
 export interface SceneNode {
     id: string;
@@ -299,6 +300,45 @@ export interface SceneNode {
     site?: SiteData;
     // Make files: the project, its chat and versions, on the page (make/types.ts).
     make?: MakeData;
+    // Live frames: the code, its props and what it may reach (engine/live.ts).
+    live?: LiveData;
+}
+
+// A Live frame's content: code run in a sandboxed frame on the canvas, with props the code
+// declares and the Inspector edits. "html" carries its own source; "app" points at a Make file.
+export interface LiveData {
+    kind: "html" | "app";
+    source?: LiveSource;
+    // A Make app's file id (kind "app").
+    app?: string;
+    props: Record<string, unknown>;
+    // What the code declared with nagma.declare: its props, and the events it may emit.
+    schema?: LivePropSchema[];
+    events?: string[];
+    // Prop name to variable id: the prop follows the variable (in the layer's mode).
+    bindings?: Record<string, string>;
+    // Network origins the person approved for this frame ("https://api.example.com"). None: no network.
+    allow?: string[];
+}
+
+export interface LiveSource {
+    html: string;
+    css: string;
+    js: string;
+}
+
+export type LivePropType = "text" | "number" | "boolean" | "color" | "select" | "image" | "numbers";
+
+export interface LivePropSchema {
+    name: string;
+    type: LivePropType;
+    label?: string;
+    default?: unknown;
+    // Select: the choices. Number: the range and step.
+    options?: string[];
+    min?: number;
+    max?: number;
+    step?: number;
 }
 
 export type Sizing = "fixed" | "hug" | "fill";
@@ -398,7 +438,9 @@ export type Trigger =
     | "key"
     // Layers with a video fill: when it plays to its end, or reaches `videoTime`.
     | "video-end"
-    | "video-time";
+    | "video-time"
+    // Live frames: an event the code sends with nagma.emit (its name in `event`).
+    | "live-event";
 
 export interface OverlaySettings {
     position: "center" | "top-left" | "top-center" | "top-right" | "bottom-left" | "bottom-center" | "bottom-right" | "manual";
@@ -488,6 +530,8 @@ export interface Interaction {
     triggerDelay?: number;
     // For "video-time": seconds into the video.
     videoTime?: number;
+    // For "live-event": the event's name ("submit").
+    event?: string;
     // What happens, in order. Older files keep one action on the interaction itself (the fields
     // below); actionsOf in engine/prototype.ts reads either.
     actions?: PrototypeAction[];

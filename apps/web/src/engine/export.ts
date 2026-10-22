@@ -2,6 +2,7 @@ import { type RasterOptions, renderNodesToPng } from "../canvas/render";
 import { exportRegionSvg, exportSvg } from "./export-svg";
 import { exportBounds } from "./effect-bounds";
 import { renderRegion } from "../canvas/export-render";
+import { ensureLiveSnapshots } from "../canvas/live-snapshots";
 import { worldBounds } from "./transform";
 import { exportMotion, type MotionFormat } from "./motion";
 import { inlineImages } from "./image-store";
@@ -36,6 +37,8 @@ export function safeName(name: string): string {
 // Builds one PDF with a page per layer, each page the layer's size, drawn as vectors. The quality
 // sets how the PDF's streams are compressed (high leaves them as they are).
 export async function buildPdf(input: NagmaDocument, ids: string[], quality: ExportSetting["pdfQuality"] = "medium"): Promise<Blob | null> {
+    // Live frames are written as their pictures: bring them up to date first.
+    await ensureLiveSnapshots(input, ids);
     const doc = await inlineImages(input);
     // Loaded only when exporting, so the PDF libraries don't slow down opening the editor.
     const [{ jsPDF }, { svg2pdf }] = await Promise.all([import("jspdf"), import("svg2pdf.js")]);
@@ -83,6 +86,7 @@ export async function exportLayers(input: NagmaDocument, ids: string[], format: 
         if (blob) download(blob, `${safeName(named.length === 1 ? (named[0]?.name ?? doc.name) : doc.name)}.pdf`);
         return;
     }
+    if (format === "svg") await ensureLiveSnapshots(doc, ids);
     for (const node of named) {
         if (format === "svg") {
             const svg = exportSvg(doc, node.id);
@@ -159,6 +163,7 @@ export async function renderExport(input: NagmaDocument, id: string, setting: Ex
     const page = pageOfNode(doc, id);
     const region = node.isSlice || setting.contentsOnly === false;
     if (setting.format === "svg") {
+        await ensureLiveSnapshots(doc, region && page ? (doc.nodes[page]?.children ?? []) : [id]);
         const options = { includeId: setting.svgIncludeId, simplifyStroke: setting.svgSimplifyStroke ?? true, outlineText: setting.svgOutlineText };
         const svg = region && page && !node.isSlice ? exportRegionSvg(doc, page, worldBounds(doc, node), options) : exportSvg(doc, id, options);
         return svg ? { name: `${base}.svg`, blob: new Blob([svg], { type: "image/svg+xml" }) } : null;

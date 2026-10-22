@@ -1,4 +1,4 @@
-import { ArrowUpRight, Circle, Columns01, File04, Grid01, Hash02, Image01, Minus, PenTool01, Pencil01, Rows01, Square, Star01, Triangle, Type01, VideoRecorder } from "@untitledui/icons";
+import { ArrowUpRight, Circle, Columns01, File04, Grid01, Hash02, Image01, Minus, PenTool01, Pencil01, Rows01, Square, Star01, Triangle, Type01, VideoRecorder, Zap } from "@untitledui/icons";
 import type { SVGProps } from "react";
 import type { NodeType, SceneNode } from "../engine/types";
 import { BooleanIcon } from "./boolean-icons";
@@ -21,6 +21,7 @@ const BY_TYPE: Record<NodeType, LayerIcon> = {
     rect: Square,
     ellipse: Circle,
     text: Type01,
+    live: Zap,
 };
 
 // The icon a layer wears in the Layers panel, menus and search results: its kind, refined by what

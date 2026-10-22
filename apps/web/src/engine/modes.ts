@@ -21,3 +21,10 @@ export function setMode(mode: EditorMode) {
 export function openActions() {
     editor.set({ actionsOpen: true });
 }
+
+// Opens the Actions palette with a search typed in (Insert › Live frame lists its starters).
+export const actionsQuery = { next: "" };
+export function openActionsWith(query: string) {
+    actionsQuery.next = query;
+    editor.set({ actionsOpen: true });
+}

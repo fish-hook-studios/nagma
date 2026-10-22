@@ -231,6 +231,8 @@ export function TriggerIcon({ trigger, className = "size-4" }: { trigger: string
                     <circle cx="8" cy="8.5" r="5" />
                     <path d="M8 6v2.5l1.8 1.2M6.5 2h3" />
                 </>
+            ) : trigger === "live-event" ? (
+                <path d="M9 1.5 3.5 9H8l-1 5.5L12.5 7H8z" />
             ) : trigger.startsWith("video") ? (
                 <>
                     <rect x="2.5" y="3.5" width="11" height="9" rx="1.5" />

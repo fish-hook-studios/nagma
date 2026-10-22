@@ -1,4 +1,4 @@
-import type { Camera } from "../engine/types";
+import type { Camera, SceneNode } from "../engine/types";
 
 // Extra canvas interactions (crop mode, polygon and star handles, width points, the eraser, the
 // points bounding box, placing images...) plug in here, so the main canvas view only forwards
@@ -26,6 +26,8 @@ export interface CanvasPlugin {
     dblclick?(p: PluginPointer): boolean;
     // Drawn over the scene in screen space (CSS pixels).
     overlay?(ctx: CanvasRenderingContext2D, camera: Camera): void;
+    // A frame whose name label this plugin draws itself (in its overlay), so the canvas skips its own.
+    ownsLabel?(node: SceneNode): boolean;
 }
 
 const plugins: CanvasPlugin[] = [];
@@ -37,6 +39,11 @@ export function registerCanvasPlugin(plugin: CanvasPlugin, first = false) {
     if (at >= 0) plugins[at] = plugin;
     else if (first) plugins.unshift(plugin);
     else plugins.push(plugin);
+}
+
+// Whether a plugin draws this frame's label, so the canvas leaves it out.
+export function pluginOwnsLabel(node: SceneNode): boolean {
+    return plugins.some((p) => p.ownsLabel?.(node));
 }
 
 export function pluginDown(p: PluginPointer): boolean {

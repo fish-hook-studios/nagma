@@ -1014,8 +1014,10 @@ function walk(el: Element, parentStyle: Style, parentMatrix: M, ctx: Ctx, parent
     }
 }
 
-// Imports SVG markup as layers, centred on a world point (or with its top-left there). Returns the frame's id.
-export function importSvg(markup: string, point: { x: number; y: number }, name = "SVG", centred = true): string | null {
+// The layers for SVG markup as commands, without touching the editor: a frame at `at` (in the
+// parent's space) holding the SVG's contents, sized by its width and height attributes (or its
+// viewBox). Null when the markup isn't SVG.
+export function svgLayerCommands(markup: string, doc: NagmaDocument, at: { x: number; y: number }, parentId: string, name = "SVG"): { frameId: string; commands: Command[] } | null {
     const parsed = new DOMParser().parseFromString(markup, "image/svg+xml");
     const root = parsed.documentElement;
     if (!root || root.tagName.toLowerCase() !== "svg" || parsed.querySelector("parsererror")) return null;
@@ -1030,20 +1032,34 @@ export function importSvg(markup: string, point: { x: number; y: number }, name 
         const k = Math.min(width / vw, height / vh);
         m = m.translate((width - vw * k) / 2, (height - vh * k) / 2).scale(k, k).translate(-vx, -vy);
     }
-    const at = centred ? { x: Math.round(point.x - width / 2), y: Math.round(point.y - height / 2) } : point;
-    const s = editor.get();
-    const doc = s.doc;
-    const parentId = frameAt(doc, at.x, at.y);
-    const local = applyMatrix(spaceMatrix(doc, parentId).inverse(), at.x, at.y);
+    const local = at;
     const frame = makeNode(doc, "frame", { x: local.x, y: local.y, w: width, h: height }, parentId, { name: root.getAttribute("id") || name, fills: [], clip: false });
     const defs = new Map<string, Element>();
     for (const el of Array.from(root.querySelectorAll("[id]"))) defs.set(el.getAttribute("id") ?? "", el);
     const ctx: Ctx = { css: readCss(root), defs, doc, commands: [{ type: "node.create", node: { ...frame, x: local.x, y: local.y, w: width, h: height } }], parentId: frame.id, origin: { x: local.x, y: local.y }, viewport: { w: hasViewBox ? (vb[2] as number) : width, h: hasViewBox ? (vb[3] as number) : height }, images: new Map() };
     const style = styleOf(root, DEFAULT_STYLE, ctx);
     for (const child of Array.from(root.children)) walk(child, { ...style, opacity: 1 }, m, ctx, frame.id);
-    editor.execute({ type: "batch", commands: ctx.commands });
-    editor.set({ selection: [frame.id] });
-    return frame.id;
+    return { frameId: frame.id, commands: ctx.commands };
+}
+
+// Imports SVG markup as layers, centred on a world point (or with its top-left there). Returns the frame's id.
+export function importSvg(markup: string, point: { x: number; y: number }, name = "SVG", centred = true): string | null {
+    const parsed = new DOMParser().parseFromString(markup, "image/svg+xml");
+    const root = parsed.documentElement;
+    if (!root || root.tagName.toLowerCase() !== "svg" || parsed.querySelector("parsererror")) return null;
+    const vb = (root.getAttribute("viewBox") ?? "").split(/[\s,]+/).map(Number);
+    const hasViewBox = vb.length === 4 && vb.every((n) => Number.isFinite(n)) && (vb[2] ?? 0) > 0 && (vb[3] ?? 0) > 0;
+    const width = len(root.getAttribute("width"), hasViewBox ? (vb[2] as number) : 300, hasViewBox ? (vb[2] as number) : 300) || (hasViewBox ? (vb[2] as number) : 300);
+    const height = len(root.getAttribute("height"), hasViewBox ? (vb[3] as number) : 150, hasViewBox ? (vb[3] as number) : 150) || (hasViewBox ? (vb[3] as number) : 150);
+    const at = centred ? { x: Math.round(point.x - width / 2), y: Math.round(point.y - height / 2) } : point;
+    const doc = editor.get().doc;
+    const parentId = frameAt(doc, at.x, at.y);
+    const local = applyMatrix(spaceMatrix(doc, parentId).inverse(), at.x, at.y);
+    const made = svgLayerCommands(markup, doc, local, parentId, name);
+    if (!made) return null;
+    editor.execute({ type: "batch", commands: made.commands });
+    editor.set({ selection: [made.frameId] });
+    return made.frameId;
 }
 
 export function looksLikeSvg(text: string): boolean {

@@ -66,6 +66,7 @@ import { Bindable, ModeTag, VarButton, VariableModeButton } from "./variable-pic
 import { detachEffectStyle, stylesOf } from "../engine/styles";
 import { Select } from "./select";
 import { RelaunchButtons } from "./relaunch-buttons";
+import { LiveSections } from "./live-section";
 import { type BuiltinLang, copyAsCode } from "../engine/dev-code";
 import { devStatusOf, devStatusTargets, setDevStatus } from "../engine/dev-status";
 
@@ -81,6 +82,7 @@ const TYPE_LABELS: Record<SceneNode["type"], string> = {
     rect: "Rectangle",
     ellipse: "Ellipse",
     text: "Text",
+    live: "Live frame",
 };
 
 // A line is an open two-point path; an arrow is a line with an end point shape. Polygons and stars
@@ -459,6 +461,7 @@ export function SelectionPanel({ nodes }: { nodes: SceneNode[] }) {
                 />
             )}
             <RelaunchButtons nodes={nodes} />
+            {!motion && nodes.length === 1 && nodes[0]?.type === "live" && <LiveSections node={nodes[0]} />}
             {!instanceHeader && <ComponentSection nodes={nodes} />}
             {motion && <AnimationsSection nodes={nodes} />}
             {motion && nodes.every((n) => n.type === "text") && <TextStaggerSection nodes={nodes} />}

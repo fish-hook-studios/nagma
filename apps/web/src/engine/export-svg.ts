@@ -17,6 +17,7 @@ import { isFrameLike } from "./components";
 import { placedSubpaths, shapeSubpaths } from "./vector";
 import { regionFillSubpaths } from "./vector-network";
 import { shaderDataUrl } from "../canvas/shader-paint";
+import { liveSnapshotData } from "../canvas/live-snapshots";
 
 // Builds a standalone SVG of a layer, matching what the canvas draws: paints (solid, gradients,
 // images), strokes, text, vectors, booleans (as their combined paths), shadows, blur, opacity and blend modes.
@@ -370,6 +371,13 @@ class SvgWriter {
                 const regions = node.type === "vector" ? regionFillSubpaths(node, placedSubpaths(node)) : null;
                 if (regions) parts.push(`<path d="${pathData(regions)}" fill="${this.paint(paint, node)}"${this.paintAttrs(paint, node)}/>`);
                 else parts.push(this.shape(node, ` fill="${this.paint(paint, node)}"${this.paintAttrs(paint, node)}`));
+            }
+            // A Live frame: the picture of what its code shows, clipped to the frame.
+            const picture = node.type === "live" ? liveSnapshotData(node.id) : null;
+            if (picture) {
+                const clip = this.id("live");
+                this.defs.push(`<clipPath id="${clip}">${this.shape(node, "")}</clipPath>`);
+                parts.push(`<g clip-path="url(#${clip})"><image href="${esc(picture)}" x="${num(node.x)}" y="${num(node.y)}" width="${num(node.w)}" height="${num(node.h)}" preserveAspectRatio="none"/></g>`);
             }
             const weights = !dashOf(node) ? sideWeights(node, isFrameLike(node)) : null;
             if (node.strokeWidth > 0 && (hasStyledStroke(node) || hasVariableWidth(node))) {

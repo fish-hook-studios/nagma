@@ -1,9 +1,9 @@
-import { ArrowUpRight, ChevronDown, Circle, Code01, Cursor01, Hand, ImagePlus, Minus, PenTool01, Pencil01, Ruler, Square, Star01, Triangle, Type01, X } from "@untitledui/icons";
+import { ArrowUpRight, ChevronDown, Circle, Code01, Cursor01, Hand, ImagePlus, Minus, PenTool01, Pencil01, Ruler, Square, Star01, Triangle, Type01, X, Zap } from "@untitledui/icons";
 import { createContext, useContext, useReducer, useState, type ReactNode } from "react";
 import { Button as AriaButton, Menu as AriaMenu, MenuItem as AriaMenuItem, MenuTrigger as AriaMenuTrigger, Popover as AriaPopover, Tooltip as AriaTooltip, TooltipTrigger as AriaTooltipTrigger } from "react-aria-components";
 import { viewCenter } from "../engine/actions";
 import { pickImages } from "../engine/images";
-import { openActions, setMode } from "../engine/modes";
+import { openActions, openActionsWith, setMode } from "../engine/modes";
 import { type DrawStyle, editor, useEditor } from "../engine/store";
 import type { EditorMode, Tool } from "../engine/types";
 import { ColorSwatch } from "./color-picker";
@@ -26,14 +26,22 @@ export interface ToolDef {
     shortcut?: string;
     icon: Icon;
 }
-type GroupItem = ToolDef | { action: "place"; label: string; shortcut: string; icon: Icon };
+type GroupItem = ToolDef | { action: "place" | "live"; label: string; shortcut?: string; icon: Icon };
 export interface Group {
     id: string;
     items: GroupItem[];
 }
 
 export const MOVE: Group = { id: "move", items: [{ tool: "move", label: "Move", shortcut: "V", icon: Cursor01 }, { tool: "hand", label: "Hand tool", shortcut: "H", icon: Hand }, { tool: "scale", label: "Scale", shortcut: "K", icon: ScaleIcon }] };
-export const FRAME: Group = { id: "frame", items: [{ tool: "frame", label: "Frame", shortcut: "F", icon: FrameIcon }, { tool: "section", label: "Section", shortcut: "⇧S", icon: SectionIcon }, { tool: "slice", label: "Slice", shortcut: "S", icon: SliceIcon }] };
+export const FRAME: Group = {
+    id: "frame",
+    items: [
+        { tool: "frame", label: "Frame", shortcut: "F", icon: FrameIcon },
+        { tool: "section", label: "Section", shortcut: "⇧S", icon: SectionIcon },
+        { tool: "slice", label: "Slice", shortcut: "S", icon: SliceIcon },
+        { action: "live", label: "Live frame…", icon: Zap },
+    ],
+};
 export const SHAPES: Group = {
     id: "shape",
     items: [
@@ -240,6 +248,7 @@ export function ToolGroup({ group, active, onPick, disabled }: { group: Group; a
         const item = group.items.find((it) => ("tool" in it ? it.tool : it.action) === key);
         if (!item) return;
         if ("tool" in item) onPick(group, item);
+        else if (item.action === "live") openActionsWith("Live frame");
         else pickImages(viewCenter);
     };
     return (

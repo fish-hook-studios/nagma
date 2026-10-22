@@ -70,6 +70,12 @@ export const SCOPES_BY_TYPE: Record<VariableType, VariableScope[]> = {
 
 // The type a binding key needs, and the scope it falls under (for the picker's filtering).
 export function fieldInfo(key: string, node?: SceneNode): { type: VariableType; scope: VariableScope } {
+    // Live frames: a prop the code declared, by its type (live:<prop name>).
+    if (key.startsWith("live:")) {
+        const prop = node?.live?.schema?.find((p) => p.name === key.slice(5));
+        const type: VariableType = prop?.type === "number" ? "number" : prop?.type === "boolean" ? "boolean" : prop?.type === "color" ? "color" : "string";
+        return { type, scope: "all" };
+    }
     if (/^(fill|stroke):\d+:stop:\d+$/.test(key)) return { type: "color", scope: key.startsWith("stroke") ? "stroke" : node?.type === "text" ? "text-fill" : "shape-fill" };
     // Checked before the plain paint keys, which it also starts like.
     if (/^(fill|stroke):\d+:opacity$/.test(key)) return { type: "color", scope: "color-opacity" };
