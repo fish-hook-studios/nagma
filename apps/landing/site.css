@@ -11,7 +11,7 @@
 :root {
   --cream: #F6F1E7; --ink: #141413; --ink-2: #3D3B37; --mute: #6B675F;
   --orange: #EF7F42; --pink: #FC829A; --bubble: #F7B3C8; --green: #4FAF78; --mint: #BFE6C8; --brown: #5B3A2B; --yellow: #F5C842; --sky: #8FC1F0; --lime: #BFE6C8; --lilac: #C9B8F2; --red: #E4572E;
-  --display: "Coconat", "Bricolage Grotesque", Georgia, serif; --body: "Absans", "Inter", system-ui, sans-serif;
+  --display: "Coconat", Georgia, serif; --body: "Absans", "Inter", system-ui, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --bg: var(--cream); --fg: var(--ink);
 }
@@ -127,7 +127,7 @@ p { margin: 0; }
 .prose .asset-group li { display: flex; justify-content: space-between; gap: 10px; margin: 4px 0; font-size: 14px; }
 .asset-group li span { flex: none; color: var(--mute); }
 
-@media (max-width: 1240px) { .nav-links { display: none; } }
+@media (max-width: 360px) { .brand .wm { display: none; } .nav .cta { padding: 0 14px; } .nav .cta .ar { display: none; } }
 @media (max-width: 960px) {
   .nav-links { display: none; }
   .nav { padding: 10px 16px; } .brand .wm { height: 22px; } .nav .cta { min-height: 44px; padding: 0 16px; font-size: 13px; }

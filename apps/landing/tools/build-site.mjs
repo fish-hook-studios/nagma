@@ -335,7 +335,6 @@ const CURSOR = pick(/<div class="cur"[^>]*>[\s\S]*?<\/div>/, "cursor");
 const SYMBOLS = [...NAV.matchAll(/<use href="\/#([^"]+)"\/>/g)].map((m) => m[1]);
 const NAV_LOCAL = NAV.replace(/<use href="\/#([^"]+)"\/>/g, '<use href="#$1"/>');
 const SPRITE = `<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>\n${[...new Set(SYMBOLS)].map((id) => pick(new RegExp(`<symbol id="${id}"[\\s\\S]*?</symbol>`), `symbol ${id}`)).join("\n")}\n</defs></svg>`;
-const FONTS = pick(/<link rel="preconnect" href="https:\/\/fonts\.googleapis\.com">[\s\S]*?rel="stylesheet">/, "font links");
 
 function describe(html) {
   const p = html.match(/<p[^>]*>([\s\S]*?)<\/p>/);
@@ -368,7 +367,6 @@ function page({ url, title, description, body, single = false, extraClass = "" }
 <meta property="og:title" content="${esc(title)} | Nagma">
 <meta property="og:description" content="${esc(description)}">
 <meta property="og:image" content="${SITE}/img/og.png">
-${FONTS}
 <link rel="stylesheet" href="/site.css?v=${ASSET_V.css}">
 </head>
 <body>
