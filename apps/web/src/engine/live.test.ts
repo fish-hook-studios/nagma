@@ -4,7 +4,8 @@ import { applyCommand } from "./commands";
 import { activePage } from "./page";
 import { editor } from "./store";
 import { addMode, addVariable, collectionsOf, createCollection, fieldInfo, setFrameMode, setVariableValue } from "./variables";
-import { LIVE_STARTERS, bindLivePropCommand, coerce, declareCommand, liveCodeBlocks, liveCsp, liveFields, liveProps, liveSiteHtml, liveSrcdoc, makeLiveNode, normalizeSchema, sanitizeOrigin, scriptJson, setAllowCommand, setLivePropCommand, setSourceCommand } from "./live";
+import { LIVE_STARTERS, bindLivePropCommand, coerce, declareCommand, liveCodeBlocks, liveCsp, liveFields, liveProps, liveSiteHtml, documentNetwork, liveAppSrcdoc, liveDocument, liveSrcdoc, makeLiveAppNode, makeLiveNode, normalizeSchema, sanitizeOrigin, scriptJson, setAppFilesCommand, setLivePropCommand, setNetworkCommand, setSourceCommand } from "./live";
+import { absoluteImports, appComponentFile, inlineModules, liveEntry } from "./live-app";
 import { parseLocalCopy, localCopyJson } from "./local-copy";
 import { codeBlocks } from "./dev-code";
 import type { NagmaDocument, SceneNode } from "./types";
@@ -100,8 +101,50 @@ describe("Live frame model", () => {
         editor.execute({ type: "node.create", node });
         editor.execute(setSourceCommand(nodeOf(node.id), { html: "<b>hi</b>", css: "b{color:red}", js: "nagma.emit('x')" }));
         expect(nodeOf(node.id).live?.source).toEqual({ html: "<b>hi</b>", css: "b{color:red}", js: "nagma.emit('x')" });
-        editor.execute(setAllowCommand(nodeOf(node.id), ["api.example.com", "javascript:alert(1)", "http://evil.test", "https://api.example.com/path"]));
-        expect(nodeOf(node.id).live?.allow).toEqual(["https://api.example.com"]);
+        editor.execute(setNetworkCommand(ed(), ["api.example.com", "javascript:alert(1)", "http://evil.test", "https://api.example.com/path"]));
+        expect(ed().liveNetwork).toEqual(["https://api.example.com"]);
+        expect(nodeOf(node.id).live?.allow).toBeUndefined();
+    });
+
+    it("keeps one network list for the whole document, and moves frames' own lists into it", () => {
+        const a = makeLiveNode(ed(), starter("form"), { x: 0, y: 0 }, activePage.id);
+        editor.execute({ type: "node.create", node: { ...a, live: { ...a.live!, allow: ["https://old.example.com"] } } });
+        const b = makeLiveNode(ed(), starter("chart"), { x: 400, y: 0 }, activePage.id);
+        editor.execute({ type: "node.create", node: b });
+        // A frame's list from before counts for every frame in the file.
+        expect(documentNetwork(ed())).toEqual(["https://old.example.com"]);
+        expect(liveDocument(ed(), nodeOf(b.id))).toContain("connect-src https://old.example.com");
+        // The next edit moves it into the document's list (one undo step).
+        editor.execute(setNetworkCommand(ed(), [...documentNetwork(ed()), "https://api.example.com"]));
+        expect(ed().liveNetwork).toEqual(["https://old.example.com", "https://api.example.com"]);
+        expect(nodeOf(a.id).live?.allow).toBeUndefined();
+        expect(liveDocument(ed(), nodeOf(b.id))).toContain("connect-src https://old.example.com https://api.example.com");
+        editor.undo();
+        expect(ed().liveNetwork).toBeUndefined();
+        expect(nodeOf(a.id).live?.allow).toEqual(["https://old.example.com"]);
+        editor.redo();
+        editor.execute(setNetworkCommand(ed(), []));
+        expect(ed().liveNetwork).toBeUndefined();
+        expect(documentNetwork(ed())).toEqual([]);
+    });
+
+    it("makes a React component frame and a Make app frame, each running a project's files", () => {
+        const react = makeLiveNode(ed(), starter("react"), { x: 0, y: 0 }, activePage.id);
+        editor.execute({ type: "node.create", node: react });
+        expect(nodeOf(react.id).live?.kind).toBe("app");
+        expect(Object.keys(nodeOf(react.id).live?.files ?? {})).toEqual(["src/App.jsx"]);
+        expect(nodeOf(react.id).live?.props).toMatchObject({ title: "Pick a plan", rounded: true });
+        const app = makeLiveAppNode(ed(), { id: "make123", name: "Todo app", files: { "src/App.tsx": "export default function App() { return null; }" } }, { x: 0, y: 300 }, activePage.id);
+        editor.execute({ type: "node.create", node: app });
+        expect(nodeOf(app.id).live).toMatchObject({ kind: "app", app: "make123", appName: "Todo app" });
+        editor.execute(setAppFilesCommand(nodeOf(app.id), { "src/App.tsx": "export default () => 1;" }));
+        expect(nodeOf(app.id).live?.files).toEqual({ "src/App.tsx": "export default () => 1;" });
+        // Inspect lists the files, and the app it came from.
+        const titles = liveCodeBlocks(ed(), nodeOf(app.id)).map((b) => b.title);
+        expect(titles).toContain("src/App.tsx");
+        expect(titles).toContain("Make app");
+        // Until its bundle is ready, the frame shows a placeholder under the same sandbox rules.
+        expect(liveDocument(ed(), nodeOf(app.id))).toContain("Loading");
     });
 });
 
@@ -178,7 +221,7 @@ describe("Live frames in Inspect, Sites, the prototype and a local copy", () => 
         const next = applyCommand(doc, { type: "node.create", node });
         const blocks = codeBlocks(next.nodes[node.id]!, next, { lang: "swiftui", unit: "px", scale: 16 });
         expect(blocks.map((b) => b.title)).toEqual(["HTML", "CSS", "JavaScript", "Props"]);
-        expect(blocks[2]?.lines.join("\n")).toBe(starter("counter").source.js);
+        expect(blocks[2]?.lines.join("\n")).toBe(starter("counter").source?.js);
         expect(liveCodeBlocks(next, next.nodes[node.id]!)[3]?.lines.join("")).toContain('"label": "Clicked"');
     });
 
@@ -214,13 +257,69 @@ describe("Live frames in Inspect, Sites, the prototype and a local copy", () => 
         const node = makeLiveNode(next, starter("form"), { x: 5, y: 6 }, pageId);
         next = applyCommand(next, { type: "node.create", node });
         next = applyCommand(next, setLivePropCommand(next.nodes[node.id]!, "buttonText", "Join"));
-        next = applyCommand(next, setAllowCommand(next.nodes[node.id]!, ["https://api.example.com"]));
+        next = applyCommand(next, setNetworkCommand(next, ["https://api.example.com"]));
         next = applyCommand(next, { type: "node.update", id: node.id, patch: { interactions: [{ trigger: "live-event", event: "submit", delay: 0, actions: [{ type: "back" }] }] } });
         next = applyCommand(next, bindLivePropCommand(next.nodes[node.id]!, "color", "var1"));
         const parsed = parseLocalCopy(await localCopyJson(next)).doc;
         const back = parsed.nodes[node.id]!;
         expect(back.type).toBe("live");
         expect(back.live).toEqual(next.nodes[node.id]!.live);
+        expect(parsed.liveNetwork).toEqual(["https://api.example.com"]);
         expect(back.interactions?.[0]).toMatchObject({ trigger: "live-event", event: "submit" });
+    });
+});
+
+describe("Live frames running an app (bundled, network off)", () => {
+    it("finds the component to show and writes an entry that renders it with the props", () => {
+        expect(appComponentFile({ "src/App.tsx": "export default function App() {}", "src/main.tsx": "" })).toBe("src/App.tsx");
+        expect(appComponentFile({ "src/App.tsx": "export function App() {}" })).toBeNull();
+        const entry = liveEntry({ "src/App.tsx": "export default 1", "src/main.tsx": 'import "./index.css";\nimport "../styles/base.css";\nimport App from "./App";' }, "src/App.tsx");
+        expect(entry.path).toBe("src/__nagma_live.jsx");
+        expect(entry.code).toContain('import "./index.css";');
+        expect(entry.code).toContain('import "../styles/base.css";');
+        expect(entry.code).toContain('import App from "./App";');
+        expect(entry.code).toContain("window.nagma.on(\"props\", draw)");
+    });
+
+    it("makes a module's own imports absolute, leaving bare names to the import map", () => {
+        const { code, imports } = absoluteImports('import*as a from"/react@19/es2022/react.mjs";import b from "react";export*from"./x.mjs";import("../y.mjs")', "https://esm.sh/pkg@1/es2022/pkg.mjs");
+        expect(imports).toEqual(["https://esm.sh/react@19/es2022/react.mjs", "https://esm.sh/pkg@1/es2022/x.mjs", "https://esm.sh/pkg@1/y.mjs"]);
+        expect(code).toContain('from"https://esm.sh/react@19/es2022/react.mjs"');
+        expect(code).toContain('from "react"');
+        expect(code).toContain('import("https://esm.sh/pkg@1/y.mjs")');
+    });
+
+    it("inlines every CDN module as data, and lets through only the origins it couldn't fetch", async () => {
+        const served: Record<string, string> = {
+            "https://cdn.test/react@1": 'export * from "/react@1/react.mjs";',
+            "https://cdn.test/react@1/react.mjs": "export const version = 1;",
+            "https://cdn.test/lib@2": 'import "react"; export * from "/lib@2/lib.mjs";',
+            "https://cdn.test/lib@2/lib.mjs": 'import x from "https://other.test/dep.mjs"; export default x; const warn = "write it as import A from \'./MyComponent\'";',
+        };
+        // other.test can't be reached; anything else unknown is a 404 (no such module).
+        const fetcher = (async (url: string) => {
+            if (url.startsWith("https://other.test/")) throw new TypeError("Failed to fetch");
+            return served[url] !== undefined ? new Response(served[url], { status: 200 }) : new Response("", { status: 404 });
+        }) as unknown as typeof fetch;
+        const { map, blocked } = await inlineModules({ react: "https://cdn.test/react@1", lib: "https://cdn.test/lib@2", local: "data:text/javascript,1" }, fetcher);
+        expect(map.react).toMatch(/^data:text\/javascript;base64,/);
+        expect(map.lib).toMatch(/^data:text\/javascript;base64,/);
+        expect(map["https://cdn.test/react@1/react.mjs"]).toMatch(/^data:/);
+        expect(atob(map.react!.split(",")[1]!)).toContain('"https://cdn.test/react@1/react.mjs"');
+        expect(map.local).toBe("data:text/javascript,1");
+        // The one module that couldn't be fetched keeps its address; its origin is let through. An
+        // import written inside a string (a 404 at the CDN) is no module, and opens nothing.
+        expect(map["https://other.test/dep.mjs"]).toBeUndefined();
+        expect(blocked).toEqual(["https://other.test"]);
+    });
+
+    it("runs the bundle with data: modules allowed and the network otherwise off", () => {
+        const html = liveAppSrcdoc({ key: "k", head: '<script type="importmap">{}</script>', body: '<div id="root"></div>', blocked: ["https://esm.sh"], errors: [], component: true }, { title: "Hi" }, { allow: [], title: "App" });
+        expect(html).toContain("script-src 'unsafe-inline' data: https://esm.sh");
+        expect(html).toContain("connect-src 'none'");
+        expect(html).toContain('{"title":"Hi"}');
+        expect(html.indexOf("window.nagma")).toBeLessThan(html.indexOf("importmap"));
+        const failed = liveAppSrcdoc({ key: "k", head: "", body: "", blocked: [], errors: ["src/App.tsx: Unexpected token"], component: false }, {}, {});
+        expect(failed).toContain("Unexpected token");
     });
 });

@@ -2032,6 +2032,9 @@ export function renderScene(
     camera: Camera,
     overlay: Overlay,
     palette: Palette,
+    // Where the chrome (labels, hover, selection and handles, guides) goes when it isn't `ctx`: a
+    // canvas above the Live frames running over this one (canvas-view.tsx), cleared by the caller.
+    chrome?: CanvasRenderingContext2D | null,
 ) {
     const dpr = window.devicePixelRatio || 1;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -2062,6 +2065,10 @@ export function renderScene(
     if (overlay.layoutGuides) drawLayoutGuides(ctx, doc, camera);
 
     // Chrome in screen space: frame labels, hover, selection, marquee, rulers.
+    if (chrome && chrome !== ctx) {
+        ctx = chrome;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
     const selected = new Set(overlay.selection);
     ctx.font = fontString(FRAME_LABEL_SIZE, 500);
     ctx.textBaseline = "top";

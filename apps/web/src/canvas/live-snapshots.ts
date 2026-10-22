@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { notifyImageReady } from "../engine/image-store";
-import { LIVE_SANDBOX, isLive, liveDocument } from "../engine/live";
+import { LIVE_SANDBOX, documentNetwork, isLive, liveDocument, liveProps, liveVariables } from "../engine/live";
+import { cachedLiveApp, prepareLiveApps } from "../engine/live-app";
 import { editor } from "../engine/store";
 import type { NagmaDocument, SceneNode } from "../engine/types";
 
@@ -20,7 +21,10 @@ const snapshots = new Map<string, Snapshot>();
 
 // The frame's document and size: a different key means the picture is out of date.
 export function snapshotKey(doc: NagmaDocument, node: SceneNode): string {
-    return `${Math.round(node.w)}x${Math.round(node.h)}:${hash(liveDocument(doc, node))}`;
+    const size = `${Math.round(node.w)}x${Math.round(node.h)}`;
+    // An app frame's document holds its whole bundle: its build's key stands in for it.
+    if (node.live?.kind === "app") return `${size}:app:${cachedLiveApp(node.live.files)?.key ?? "pending"}:${hash(JSON.stringify([liveProps(doc, node), liveVariables(doc, node), documentNetwork(doc), node.name]))}`;
+    return `${size}:${hash(liveDocument(doc, node))}`;
 }
 
 function hash(text: string): string {
@@ -67,6 +71,9 @@ export function storeSnapshot(id: string, key: string, data: string): Promise<vo
 // out underneath (it would double up through transparent parts). Only the editor's own canvas pass
 // skips them; thumbnails and exports always draw the picture.
 export const liveShown = new Set<string>();
+// Layers whose live frame is laid over the canvas now (running, loading or paused): while there are
+// any, the canvas's chrome draws on the layer above them (canvas-view.tsx).
+export const liveMounted = new Set<string>();
 let canvasPass = false;
 export function setCanvasPass(on: boolean) {
     canvasPass = on;
@@ -173,7 +180,8 @@ async function pictureOffscreen(doc: NagmaDocument, node: SceneNode, key: string
             const timer = window.setTimeout(resolve, 5000);
             const asked = `${node.id}:${Date.now()}`;
             off = routeFrame(frame.contentWindow, (m) => {
-                if (m.type === "ready") window.setTimeout(() => frame.contentWindow?.postMessage({ nl: 1, type: "snapshot", id: asked, scale }, "*"), 150);
+                // An app renders after its modules run: a little longer before the picture.
+                if (m.type === "ready") window.setTimeout(() => frame.contentWindow?.postMessage({ nl: 1, type: "snapshot", id: asked, scale }, "*"), node.live?.kind === "app" ? 600 : 150);
                 if (m.type === "snapshot" && m.id === asked) {
                     window.clearTimeout(timer);
                     if (typeof m.data === "string") void storeSnapshot(node.id, key, m.data).then(resolve);
@@ -205,6 +213,8 @@ function liveIn(doc: NagmaDocument, ids: string[]): SceneNode[] {
 // Before an export or a thumbnail: every Live frame in these layers has an up-to-date picture.
 export async function ensureLiveSnapshots(doc: NagmaDocument, ids: string[], scale = 2): Promise<void> {
     if (typeof document === "undefined") return;
+    // App frames need their bundle first.
+    await prepareLiveApps(doc, ids);
     const stale = liveIn(doc, ids).filter((node) => liveSnapshotKey(node.id) !== snapshotKey(doc, node));
     await Promise.all(stale.map((node) => pictureOffscreen(doc, node, snapshotKey(doc, node), scale).catch(() => undefined)));
 }

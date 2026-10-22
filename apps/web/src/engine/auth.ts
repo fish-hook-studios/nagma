@@ -312,7 +312,7 @@ export async function unverifiedAccounts(): Promise<{ id: string; name: string; 
     return (await res.json()) as { id: string; name: string; email: string; createdAt: number | null }[];
 }
 // Server admins: how the server is used, counted on the server (engine/server-stats.tsx shows it).
-export interface UsageDay { day: string; loads: number; devices: number; signups: number; verified: number; files: number; peakEditors: number; peakConnections: number }
+export interface UsageDay { day: string; loads: number; devices: number; signups: number; verified: number; files: number; captures?: number; peakEditors: number; peakConnections: number }
 export interface UsageReport { today: string; since: string; days: UsageDay[]; totals: { accounts: number; verifiedAccounts: number; files: number; teams: number }; now: { connections: number; rooms: number; joined: number; editors: number } }
 export async function usageReport(): Promise<UsageReport> {
     const res = await fetch(`${httpBase()}/auth/admin/stats`, { headers: authHeaders() });

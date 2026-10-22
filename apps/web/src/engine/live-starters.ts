@@ -1,7 +1,8 @@
 import type { LivePropSchema, LiveSource } from "./types";
 
-// The Live frames Insert offers: small self-contained pieces of HTML, CSS and JavaScript, each
-// declaring its props (so the Inspector shows them) and the events it sends.
+// The Live frames Insert offers: small self-contained pieces of HTML, CSS and JavaScript, or a
+// React component (bundled like a Make app, engine/live-app.ts), each declaring its props (so the
+// Inspector shows them) and the events it sends.
 
 export interface LiveStarter {
     id: string;
@@ -10,7 +11,9 @@ export interface LiveStarter {
     description: string;
     w: number;
     h: number;
-    source: LiveSource;
+    // HTML, CSS and JavaScript; or a project's files (a React component), run as an app frame.
+    source?: LiveSource;
+    files?: Record<string, string>;
     schema: LivePropSchema[];
     events?: string[];
 }
@@ -283,4 +286,61 @@ render(nagma.props);`,
     },
 };
 
-export const LIVE_STARTERS: LiveStarter[] = [COUNTER, CHART, FORM];
+const REACT: LiveStarter = {
+    id: "react",
+    name: "React component",
+    description: "A React component whose props are the Inspector's",
+    w: 320,
+    h: 220,
+    schema: [
+        { name: "title", type: "text", label: "Title", default: "Pick a plan" },
+        { name: "options", type: "text", label: "Options", default: "Free, Pro, Team" },
+        { name: "color", type: "color", label: "Colour", default: "#7048E8" },
+        { name: "rounded", type: "boolean", label: "Rounded", default: true },
+    ],
+    events: ["select"],
+    files: {
+        "src/App.jsx": `import { useState } from "react";
+
+// The frame shows this file's default export; its props are the Inspector's (nagma.props).
+nagma.declare({
+    props: [
+        { name: "title", type: "text", label: "Title", default: "Pick a plan" },
+        { name: "options", type: "text", label: "Options", default: "Free, Pro, Team" },
+        { name: "color", type: "color", label: "Colour", default: "#7048E8" },
+        { name: "rounded", type: "boolean", label: "Rounded", default: true },
+    ],
+    events: ["select"],
+});
+
+export default function App({ title = "Pick a plan", options = "Free, Pro, Team", color = "#7048E8", rounded = true }) {
+    const [picked, setPicked] = useState(null);
+    const items = String(options).split(",").map((s) => s.trim()).filter(Boolean);
+    const radius = rounded ? 10 : 2;
+    return (
+        <div style={{ fontFamily: "Inter, system-ui, sans-serif", padding: 16, display: "grid", gap: 10 }}>
+            <strong style={{ fontSize: 16 }}>{title}</strong>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {items.map((item) => (
+                    <button
+                        key={item}
+                        type="button"
+                        onClick={() => {
+                            setPicked(item);
+                            nagma.emit("select", { option: item });
+                        }}
+                        style={{ border: \`1.5px solid \${color}\`, borderRadius: radius, padding: "8px 14px", font: "600 13px Inter, system-ui, sans-serif", cursor: "pointer", background: picked === item ? color : "#fff", color: picked === item ? "#fff" : color }}
+                    >
+                        {item}
+                    </button>
+                ))}
+            </div>
+            <span style={{ fontSize: 12, color: "#6b6b6b" }}>{picked ? \`Picked: \${picked}\` : "Nothing picked yet"}</span>
+        </div>
+    );
+}
+`,
+    },
+};
+
+export const LIVE_STARTERS: LiveStarter[] = [COUNTER, CHART, FORM, REACT];

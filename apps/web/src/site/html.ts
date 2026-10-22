@@ -1,5 +1,6 @@
 import { exportSvg } from "../engine/export-svg";
 import { liveSiteHtml } from "../engine/live";
+import { prepareLiveApps } from "../engine/live-app";
 import { BUNDLED } from "../engine/fonts";
 import { blobToDataUrl, imageBlob } from "../engine/image-store";
 import { loadMedia } from "../engine/media";
@@ -998,6 +999,8 @@ function extFor(type: string): string {
 
 // Builds the whole site. Preview inlines images and fonts as data so the result needs no server.
 export async function buildSite(doc: NagmaDocument, mode: Mode): Promise<SiteBuild> {
+    // Live frames running an app ship their bundle: build them first.
+    await prepareLiveApps(doc);
     const settings = settingsOf(doc);
     const warnings: string[] = [];
     const assets = new Map<string, Blob>();

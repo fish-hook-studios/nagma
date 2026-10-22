@@ -106,18 +106,66 @@ export function measureWidth(font: string, tracking: number, caps: Fragment["cap
     return w;
 }
 
-// The height of capital letters above the baseline, for vertical trim.
+// The writing system a run is in, by its first letter outside Latin: lines are measured with that
+// script's own letters, since Latin "Hg" says little about Arabic, Hebrew, Indic or Thai text.
+export type Script = "latin" | "arabic" | "hebrew" | "devanagari" | "bengali" | "gurmukhi" | "gujarati" | "tamil" | "telugu" | "kannada" | "malayalam" | "sinhala" | "thai" | "cjk";
+const SCRIPTS: [Script, RegExp][] = [
+    ["arabic", /[\u0600-\u06FF\u0750-\u077F\u0870-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/],
+    ["hebrew", /[\u0590-\u05FF\uFB1D-\uFB4F]/],
+    ["devanagari", /[\u0900-\u097F\uA8E0-\uA8FF]/],
+    ["bengali", /[\u0980-\u09FF]/],
+    ["gurmukhi", /[\u0A00-\u0A7F]/],
+    ["gujarati", /[\u0A80-\u0AFF]/],
+    ["tamil", /[\u0B80-\u0BFF]/],
+    ["telugu", /[\u0C00-\u0C7F]/],
+    ["kannada", /[\u0C80-\u0CFF]/],
+    ["malayalam", /[\u0D00-\u0D7F]/],
+    ["sinhala", /[\u0D80-\u0DFF]/],
+    ["thai", /[\u0E00-\u0E7F]/],
+    ["cjk", /[\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uAC00-\uD7AF\uF900-\uFAFF]/],
+];
+
+export function scriptOf(text: string): Script {
+    for (const ch of text) {
+        if (ch.charCodeAt(0) < 0x0590) continue;
+        for (const [script, re] of SCRIPTS) if (re.test(ch)) return script;
+    }
+    return "latin";
+}
+
+// Letters to measure each script with: a sample spanning its usual heights and depths, and the
+// letter whose top stands for "cap height" (the headline, or the tallest common letter).
+const SAMPLE: Record<Script, { line: string; cap: string }> = {
+    latin: { line: "Hg", cap: "H" },
+    arabic: { line: "مرحبا بالعالم", cap: "ا" },
+    hebrew: { line: "שלום עולם", cap: "ה" },
+    devanagari: { line: "नमस्ते दुनिया", cap: "क" },
+    bengali: { line: "বাংলা ভাষা", cap: "ক" },
+    gurmukhi: { line: "ਪੰਜਾਬੀ ਭਾਸ਼ਾ", cap: "ਕ" },
+    gujarati: { line: "ગુજરાતી ભાષા", cap: "ક" },
+    tamil: { line: "தமிழ் மொழி", cap: "க" },
+    telugu: { line: "తెలుగు భాష", cap: "క" },
+    kannada: { line: "ಕನ್ನಡ ಭಾಷೆ", cap: "ಕ" },
+    malayalam: { line: "മലയാളം ഭാഷ", cap: "മ" },
+    sinhala: { line: "සිංහල භාෂාව", cap: "ක" },
+    thai: { line: "ภาษาไทย", cap: "ก" },
+    cjk: { line: "永あ한", cap: "永" },
+};
+
+// The height of capital letters (or the script's own top line) above the baseline, for vertical trim.
 const capCache = new Map<string, number>();
-export function capHeight(font: string, size: number): number {
-    const hit = capCache.get(font);
+export function capHeight(font: string, size: number, text = ""): number {
+    const script = scriptOf(text);
+    const key = `${font}|${script}`;
+    const hit = capCache.get(key);
     if (hit !== undefined) return hit;
     const c = ctx();
     let cap = size * 0.7;
     if (c) {
         c.font = font;
-        cap = c.measureText("H").actualBoundingBoxAscent || cap;
+        cap = c.measureText(SAMPLE[script].cap).actualBoundingBoxAscent || cap;
     }
-    capCache.set(font, cap);
+    capCache.set(key, cap);
     return cap;
 }
 
@@ -125,21 +173,33 @@ export function capHeight(font: string, size: number): number {
 const HANG_START = /^[\u201C\u2018"'\u00AB\u2039([\u2014\u2013\u2022*-]/;
 const HANG_END = /[\u201D\u2019"'\u00BB\u203A)\].,;:!?\u2014\u2013-]$/;
 
+// A font's ascent and descent: the font's own metrics (TextMetrics fontBoundingBoxAscent and
+// Descent: what a browser lays CSS lines out with), measured with the run's script's letters. A
+// browser without them falls back to how far that script's letters actually reach, with a little
+// room, and to 0.8 and 0.2 of the size at least.
+export function metricsFrom(m: Partial<Pick<TextMetrics, "fontBoundingBoxAscent" | "fontBoundingBoxDescent" | "actualBoundingBoxAscent" | "actualBoundingBoxDescent">> | null, size: number): { ascent: number; descent: number } {
+    const fa = m?.fontBoundingBoxAscent;
+    const fd = m?.fontBoundingBoxDescent;
+    if (typeof fa === "number" && typeof fd === "number" && Number.isFinite(fa) && Number.isFinite(fd) && fa + fd > 0) return { ascent: fa, descent: fd };
+    const inkUp = Number(m?.actualBoundingBoxAscent) || 0;
+    const inkDown = Number(m?.actualBoundingBoxDescent) || 0;
+    return { ascent: Math.max(size * 0.8, inkUp * 1.1), descent: Math.max(size * 0.2, inkDown * 1.15) };
+}
+
 const metricCache = new Map<string, { ascent: number; descent: number }>();
-export function fontMetrics(font: string, size: number): { ascent: number; descent: number } {
-    const hit = metricCache.get(font);
+export function fontMetrics(font: string, size: number, text = ""): { ascent: number; descent: number } {
+    const script = scriptOf(text);
+    const key = `${font}|${script}`;
+    const hit = metricCache.get(key);
     if (hit) return hit;
     const c = ctx();
-    let ascent = size * 0.8;
-    let descent = size * 0.2;
+    let m: TextMetrics | null = null;
     if (c) {
         c.font = font;
-        const m = c.measureText("Hg");
-        ascent = m.fontBoundingBoxAscent || ascent;
-        descent = m.fontBoundingBoxDescent || descent;
+        m = c.measureText(SAMPLE[script].line);
     }
-    const out = { ascent, descent };
-    metricCache.set(font, out);
+    const out = metricsFrom(m, size);
+    metricCache.set(key, out);
     return out;
 }
 
@@ -184,7 +244,7 @@ export function runInfo(style: CharStyle, start: number, end: number, text: stri
     const family = renderFamily(style.fontFamily, style.openType, style.fontVariations);
     const weight = style.fontVariations.wght ?? style.fontWeight;
     const font = fontString(size, weight, family, style.italic);
-    const metrics = fontMetrics(font, size);
+    const metrics = fontMetrics(font, size, text);
     return {
         start,
         end,
@@ -417,7 +477,7 @@ function compute(node: SceneNode): TextLayout {
     const lastLine = lines[lines.length - 1];
     if (node.leadingTrim === "cap" && firstLine && lastLine) {
         const lead = firstLine.fragments[0] ?? null;
-        const cap = lead ? capHeight(lead.font, lead.style.fontSize) : capHeight(infoAt(0).font, infoAt(0).style.fontSize);
+        const cap = lead ? capHeight(lead.font, lead.style.fontSize, lead.text) : capHeight(infoAt(0).font, infoAt(0).style.fontSize, infoAt(0).text);
         const trimTop = Math.max(0, firstLine.baseline - cap);
         const trimBottom = Math.max(0, lastLine.top + lastLine.height - lastLine.baseline);
         for (const line of lines) {

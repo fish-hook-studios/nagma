@@ -6,6 +6,7 @@ import { exportLayers } from "../engine/export";
 import { pickImages } from "../engine/images";
 import { MENU_ACTIONS, actionEnabled, actionLabel, menuPaths } from "../engine/menu-actions";
 import { actionsQuery } from "../engine/modes";
+import { insertLiveApp, knownMakeApps, refreshMakeApps } from "../engine/live-actions";
 import { layerRoots } from "../engine/page";
 import { openPdfEditor } from "../engine/pdf";
 import { openPhotoEditor } from "../engine/photo";
@@ -84,6 +85,8 @@ function actions(): Action[] {
         ...MENU_ACTIONS.filter((a) => a.id !== "actions" && actionEnabled(a, s)).map(
             (a): Action => ({ id: a.id, label: actionLabel(a, s), group: a.group === "Menu" ? "Menu" : a.group, shortcut: a.shortcut, tab: "actions", keywords: `${a.keywords ?? ""} ${paths.get(a.id) ?? ""}`, run: a.run }),
         ),
+        // Insert › Live frame: the person's Make apps, each as a Live frame running it.
+        ...(s.readOnly || s.mode === "dev" ? [] : knownMakeApps()).map((a): Action => ({ id: `live-app-${a.id}`, label: `Live frame from Make app: ${a.name}`, group: "Object", tab: "actions", keywords: "insert live frame make app react component code", run: () => void insertLiveApp(a.id) })),
         // Assets: this file's components, inserted as instances.
         ...reusableAssets(s.doc).map((c): Action => ({ id: `asset-${c.id}`, label: c.name, group: "Components", tab: "assets", run: () => createInstance(c.id, viewCenter()) })),
         // Plugins & widgets: the built-in tools.
@@ -154,9 +157,19 @@ function Palette() {
         inputRef.current?.focus();
     }, []);
 
+    // The person's Make apps (for Live frames) are looked up once the palette is open.
+    const [apps, setApps] = useState(0);
+    useEffect(() => {
+        let live = true;
+        void refreshMakeApps().then(() => live && setApps((n) => n + 1));
+        return () => {
+            live = false;
+        };
+    }, []);
+
     // The list depends on what is selected.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    const all = useMemo(() => actions(), [selected]);
+    const all = useMemo(() => actions(), [selected, apps]);
     const items = useMemo(() => {
         const q = query.trim().toLowerCase();
         const inTab = all.filter((a) => tab === "all" || a.tab === tab);

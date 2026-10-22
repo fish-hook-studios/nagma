@@ -106,6 +106,91 @@ if (sitePreview) {
 // Nagma Capture (the browser extension) hands page captures to this window; each opens as a new file.
 void import("./engine/capture-open").then(({ listenForCaptures }) => listenForCaptures());
 
+// ?capture=<id>: a capture the extension sent to this server (POST /captures). It's fetched with the
+// signed-in account (the one that sent it), opened as a new file, and the server's copy deleted.
+// Signed out, it waits for sign-in (the sign-in dialog opens; signing in starts the page over, so
+// the id waits in this tab's session storage) and then opens.
+{
+    const PENDING_CAPTURE = "nagma.capture.pending";
+    const valid = (id: string | null): id is string => Boolean(id && /^[A-Za-z0-9_-]{16,32}$/.test(id));
+    const fromUrl = startParams.get("capture");
+    let captureId: string | null = valid(fromUrl) ? fromUrl : null;
+    if (fromUrl !== null) {
+        const url = new URL(location.href);
+        url.searchParams.delete("capture");
+        history.replaceState(null, "", url);
+    }
+    try {
+        if (captureId) sessionStorage.setItem(PENDING_CAPTURE, captureId);
+        else {
+            const kept = sessionStorage.getItem(PENDING_CAPTURE);
+            captureId = valid(kept) ? kept : null;
+        }
+    } catch {
+        // Without session storage it opens if the person is signed in now.
+    }
+    if (captureId) {
+        const id = captureId;
+        const forget = () => {
+            try {
+                sessionStorage.removeItem(PENDING_CAPTURE);
+            } catch {
+                // Nothing kept.
+            }
+        };
+        const fetchCapture = async () => {
+            const { httpBase } = await import("./engine/server-url");
+            const address = `${httpBase()}/captures/${id}`;
+            const res = await fetch(address, { headers: authModule.authHeaders(), cache: "no-store" });
+            if (res.status === 401) return "signed-out" as const;
+            if (!res.ok) {
+                forget();
+                const data = (await res.json().catch(() => ({}))) as { error?: string };
+                editor.notify(`Couldn't open the captured page: ${data.error ?? `the server answered ${res.status}`}`);
+                return "done" as const;
+            }
+            const capture: unknown = await res.json();
+            const { openCapture } = await import("./engine/capture-open");
+            await openCapture(capture);
+            forget();
+            await fetch(address, { method: "DELETE", headers: authModule.authHeaders() }).catch(() => undefined);
+            return "done" as const;
+        };
+        let busy = false;
+        let finished = false;
+        // A session the server refused isn't tried again; the next sign-in is.
+        let refused: string | null = null;
+        const attempt = async () => {
+            if (busy || finished || !authModule.auth.get().user || authModule.token() === refused) return;
+            busy = true;
+            try {
+                const result = await fetchCapture();
+                if (result === "done") finished = true;
+                else {
+                    refused = authModule.token();
+                    authModule.openSignIn();
+                }
+            } catch (error) {
+                finished = true;
+                forget();
+                editor.notify(`Couldn't open the captured page: ${error instanceof Error ? error.message : String(error)}`);
+            } finally {
+                busy = false;
+                if (finished) stop();
+            }
+        };
+        // After the start (the last file opening), so the capture's new file is the one left open;
+        // after a sign-in, once the page has had time to start over for the account.
+        const signedIn = Boolean(authModule.auth.get().user);
+        const stop = authModule.auth.subscribe(() => void setTimeout(() => void attempt(), signedIn ? 0 : 1500));
+        if (signedIn) setTimeout(() => void attempt(), 300);
+        else {
+            editor.notify("Sign in with the account that captured the page to open it.");
+            authModule.openSignIn();
+        }
+    }
+}
+
 // Preferences › Open links in desktop app: hand a file link to the desktop app.
 openLinkInDesktopApp();
 

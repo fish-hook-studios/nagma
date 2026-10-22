@@ -8,8 +8,8 @@ import { PREVIEW_RUNTIME } from "./runtime";
 // app gets them as separate files.
 
 export const REACT_VERSION = "19.2.0";
-const CDN = "https://esm.sh";
-const TAILWIND = "https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.11/dist/index.global.js";
+export const CDN = "https://esm.sh";
+export const TAILWIND = "https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.11/dist/index.global.js";
 
 type Sucrase = typeof import("sucrase");
 let sucrase: Promise<Sucrase> | null = null;
@@ -118,9 +118,14 @@ function findEntry(files: Record<string, string>): { entry: string; head: string
     return { entry: "src/__entry.tsx", head, body, synthetic };
 }
 
-export async function compileProject(source: Record<string, string>, options: { dev: boolean }): Promise<CompiledProject> {
+// `entry` runs that file instead of the project's own entry (a Live frame's, engine/live-app.ts).
+export async function compileProject(source: Record<string, string>, options: { dev: boolean; entry?: string }): Promise<CompiledProject> {
     const { transform } = await loadCompiler();
     const found = findEntry(source);
+    if (options.entry && options.entry in source) {
+        found.entry = options.entry;
+        delete found.synthetic;
+    }
     const files = found.synthetic ? { ...source, [found.entry]: found.synthetic } : source;
     const deps = dependencies(files);
     const modules = new Map<string, string>();
@@ -170,7 +175,7 @@ export async function compileProject(source: Record<string, string>, options: { 
     return { modules, entry: `@app/${found.entry}`, packages, errors, head: found.head, body: found.body, extraCss };
 }
 
-function reactImports(dev: boolean, devRuntime: string | null): Record<string, string> {
+export function reactImports(dev: boolean, devRuntime: string | null): Record<string, string> {
     const v = REACT_VERSION;
     return {
         react: `${CDN}/react@${v}`,

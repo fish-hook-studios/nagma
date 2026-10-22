@@ -19,6 +19,7 @@ import { createMake } from "./make.mjs";
 import { createAi } from "./ai.mjs";
 import { createSiteHosting } from "./sites.mjs";
 import { createApiTokens } from "./api-tokens.mjs";
+import { createCaptures } from "./captures.mjs";
 import { createIntegrations } from "./integrations.mjs";
 import { devMailFile, domainOf, keepUnsentLink, mailConfigured, sendMail } from "./mail.mjs";
 import { createHome, wantsEmail } from "./home.mjs";
@@ -152,7 +153,7 @@ function applyPatch(doc, patch) {
     if (typeof patch.name === "string") doc.name = patch.name;
     if (patch.images) doc.images = { ...doc.images, ...patch.images };
     // Styles, prototype settings, variables and the rest are whole values, like the sequence.
-    for (const key of ["sequence", "styles", "prototype", "variables", "colorProfile", "pluginData", "relaunchData"]) {
+    for (const key of ["sequence", "styles", "prototype", "variables", "colorProfile", "pluginData", "relaunchData", "liveNetwork"]) {
         if (patch[key] === undefined) continue;
         if (patch[key] === null) delete doc[key];
         else doc[key] = patch[key];
@@ -313,7 +314,7 @@ function usageToday() {
     const key = dayKey();
     let day = usage.days[key];
     if (!day) {
-        day = usage.days[key] = { loads: 0, devices: 0, signups: 0, verified: 0, files: 0, peakEditors: 0, peakConnections: 0, salt: randomBytes(16).toString("base64url"), seen: [] };
+        day = usage.days[key] = { loads: 0, devices: 0, signups: 0, verified: 0, files: 0, captures: 0, peakEditors: 0, peakConnections: 0, salt: randomBytes(16).toString("base64url"), seen: [] };
         // Older days keep their counts only: without their salt the hashes mean nothing.
         for (const [k, d] of Object.entries(usage.days)) {
             if (k === key) continue;
@@ -339,7 +340,8 @@ function countAppLoad(req) {
     saveUsage();
 }
 function countUsage(what) {
-    usageToday()[what]++;
+    const day = usageToday();
+    day[what] = (day[what] ?? 0) + 1;
     saveUsage();
 }
 // The most people editing at once and the most open connections, noted whenever someone joins.
@@ -360,7 +362,7 @@ async function usageReport() {
         .slice(-90)
         .map((day) => {
             const d = usage.days[day];
-            return { day, loads: d.loads, devices: d.devices, signups: d.signups, verified: d.verified, files: d.files, peakEditors: d.peakEditors, peakConnections: d.peakConnections };
+            return { day, loads: d.loads, devices: d.devices, signups: d.signups, verified: d.verified, files: d.files, captures: d.captures ?? 0, peakEditors: d.peakEditors, peakConnections: d.peakConnections };
         });
     let editors = 0;
     let joined = 0;
@@ -3971,6 +3973,17 @@ siteHosting.register("app", make.hosting);
 
 // Personal access tokens (Account settings › Tokens) and the read-only /v1 API they open (api-tokens.mjs).
 const apiTokens = createApiTokens({ DATA, rooms, refreshPresence: (room) => (roomWorkers && room ? roomWorkers.refreshPresence([...room.clients]) : undefined), userById, publicUser, userFromReq, loadRoom, roleFor, listFiles, readBody, CORS });
+// Page captures from Nagma Capture, kept a day for the app to open (captures.mjs).
+const captures = await createCaptures({
+    DATA,
+    CORS,
+    readBody,
+    userFromReq,
+    userFromPat: (req) => apiTokens.userFromToken(req),
+    // Where the link in the answer opens: the app's address, else the server's public one, else this host.
+    appUrl: (req) => (process.env.NAGMA_APP_URL ?? process.env.NAGMA_PUBLIC_URL ?? `http://${req.headers.host ?? "localhost"}`).replace(/\/$/, ""),
+    countUsage,
+});
 // Team integrations: Slack and Teams webhooks for Inspect status notices, and Inspect settings (integrations.mjs).
 const integrations = createIntegrations({ DATA, teamById, teamRole, projectById, userFromReq, loadRoom, roleFor, readBody, CORS, postChat });
 // Home: account settings, search, stars, inbox actions, the community and media providers (home.mjs).
@@ -4025,6 +4038,9 @@ async function route(req, res) {
     if (req.method !== "OPTIONS") admin.noteActive(userFromReq(req));
     if (/^\/(account\/tokens|v1)(\/|$)/.test(new URL(req.url ?? "/", "http://local").pathname) && req.method !== "OPTIONS") {
         if (await apiTokens.serve(req, res)) return;
+    }
+    if (/^\/captures(\/|$)/.test(new URL(req.url ?? "/", "http://local").pathname)) {
+        if (await captures.serve(req, res)) return;
     }
     if (/^\/(teams\/[A-Za-z0-9_-]+\/integrations|files\/[A-Za-z0-9_-]+\/team-settings|code-connect\/github)$/.test(new URL(req.url ?? "/", "http://local").pathname) && req.method !== "OPTIONS") {
         if (await integrations.serve(req, res)) return;

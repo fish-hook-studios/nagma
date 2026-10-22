@@ -19,6 +19,8 @@ export interface DocPatch {
     // Plugin data and relaunch buttons on the document itself (null: none).
     pluginData?: Record<string, string> | null;
     relaunchData?: Record<string, Record<string, string>> | null;
+    // The origins every Live frame in the file may reach (null: none).
+    liveNetwork?: string[] | null;
 }
 
 function same(a: unknown, b: unknown): boolean {
@@ -28,7 +30,7 @@ function same(a: unknown, b: unknown): boolean {
 }
 
 export function isEmpty(patch: DocPatch): boolean {
-    return !patch.nodes && !patch.removed && !patch.roots && patch.name === undefined && !patch.images && patch.sequence === undefined && patch.styles === undefined && patch.prototype === undefined && patch.variables === undefined && patch.colorProfile === undefined && patch.pluginData === undefined && patch.relaunchData === undefined;
+    return !patch.nodes && !patch.removed && !patch.roots && patch.name === undefined && !patch.images && patch.sequence === undefined && patch.styles === undefined && patch.prototype === undefined && patch.variables === undefined && patch.colorProfile === undefined && patch.pluginData === undefined && patch.relaunchData === undefined && patch.liveNetwork === undefined;
 }
 
 // What changed from `from` to `to`, property by property. Documents are immutable, so untouched
@@ -77,6 +79,7 @@ export function diffDocs(from: NagmaDocument, to: NagmaDocument): DocPatch {
     if (from.colorProfile !== to.colorProfile) patch.colorProfile = to.colorProfile ?? null;
     if (from.pluginData !== to.pluginData && !same(from.pluginData, to.pluginData)) patch.pluginData = to.pluginData ?? null;
     if (from.relaunchData !== to.relaunchData && !same(from.relaunchData, to.relaunchData)) patch.relaunchData = to.relaunchData ?? null;
+    if (from.liveNetwork !== to.liveNetwork && !same(from.liveNetwork, to.liveNetwork)) patch.liveNetwork = to.liveNetwork ?? null;
     if (from.images !== to.images) {
         const images: Record<string, string> = {};
         for (const [id, data] of Object.entries(to.images)) if (from.images[id] !== data) images[id] = data;
@@ -123,6 +126,7 @@ export function invertPatch(before: NagmaDocument, patch: DocPatch): DocPatch {
     if (patch.colorProfile !== undefined) inverse.colorProfile = before.colorProfile ?? null;
     if (patch.pluginData !== undefined) inverse.pluginData = before.pluginData ?? null;
     if (patch.relaunchData !== undefined) inverse.relaunchData = before.relaunchData ?? null;
+    if (patch.liveNetwork !== undefined) inverse.liveNetwork = before.liveNetwork ?? null;
     // Images are never removed (other layers may use them), so there's nothing to undo there.
     return inverse;
 }
@@ -200,6 +204,7 @@ export function applyPatch(doc: NagmaDocument, patch: DocPatch): NagmaDocument {
         colorProfile: patch.colorProfile === undefined ? doc.colorProfile : (patch.colorProfile ?? undefined),
         pluginData: patch.pluginData === undefined ? doc.pluginData : (patch.pluginData ?? undefined),
         relaunchData: patch.relaunchData === undefined ? doc.relaunchData : (patch.relaunchData ?? undefined),
+        liveNetwork: patch.liveNetwork === undefined ? doc.liveNetwork : (patch.liveNetwork ?? undefined),
     };
     return settle(doc, repairTree(raw));
 }

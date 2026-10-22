@@ -3,7 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import { Button as AriaButton, Dialog as AriaDialog, DialogTrigger as AriaDialogTrigger, Popover as AriaPopover } from "react-aria-components";
 import { clearErrors, useLiveUi } from "../canvas/live-snapshots";
 import { applyCommand } from "../engine/commands";
-import { type LiveField, bindLivePropCommand, liveFields, liveOf, liveProps, sanitizeOrigin, setAllowCommand, setLivePropCommand, setSourceCommand, sourceOf } from "../engine/live";
+import { type LiveField, bindLivePropCommand, documentNetwork, liveFields, liveOf, liveProps, sanitizeOrigin, setAppFilesCommand, setLivePropCommand, setNetworkCommand, setSourceCommand, sourceOf } from "../engine/live";
+import { filesKey, makeAppFiles, useLiveApp } from "../engine/live-app";
 import { editor, useEditor } from "../engine/store";
 import type { LiveSource, SceneNode } from "../engine/types";
 import { findVariable, resolveVariable } from "../engine/variables";
@@ -15,8 +16,9 @@ import { Select } from "./select";
 import { VariablePicker } from "./variable-picker";
 
 // The Inspector for a Live frame: Props generated from the schema its code declares (each bindable to
-// a variable), and Code: the HTML, CSS and JavaScript in Make's editor, applied on Apply or a moment
-// after typing stops, with the frame's errors under it and the network origins it may reach.
+// a variable), and Code: the HTML, CSS and JavaScript (or an app frame's files) in Make's editor,
+// applied on Apply or a moment after typing stops, with the frame's errors under it and the network
+// origins every Live frame in the file may reach. In a view-only file both are shown, locked.
 
 const input = "h-6 w-full min-w-0 rounded-[5px] border border-transparent bg-input px-1.5 text-ink outline-none hover:border-panel-border focus:border-brand-500";
 
@@ -32,7 +34,7 @@ export function LiveSections({ node }: { node: SceneNode }) {
         <>
             <PropsSection node={node} />
             {/* Keyed by layer: another layer starts from its own saved code. */}
-            <CodeSection key={node.id} node={node} />
+            {node.live?.kind === "app" ? <AppCodeSection key={node.id} node={node} /> : <CodeSection key={node.id} node={node} />}
         </>
     );
 }
@@ -72,12 +74,14 @@ function PropsSection({ node }: { node: SceneNode }) {
     const props = liveProps(doc, node);
     const writer = usePropWriter(node.id);
     const event = useLiveUi((s) => s.lastEvent[node.id]);
+    const readOnly = useEditor((s) => s.readOnly);
     return (
         <Section title="Props" label="Props">
-            {fields.length === 0 && <p className="text-[11px] leading-relaxed text-ink-muted">The code declares no props yet. Call nagma.declare in the Code below to list them here.</p>}
+            {fields.length === 0 && <p className="text-[11px] leading-relaxed text-ink-muted">{node.live?.kind === "app" ? "The app declares no props yet. Its default export gets them as React props once the code calls nagma.declare." : "The code declares no props yet. Call nagma.declare in the Code below to list them here."}</p>}
             {fields.map((field) => (
-                <PropRow key={field.name} node={node} field={field} value={props[field.name]} write={writer.write} />
+                <PropRow key={field.name} node={node} field={field} value={props[field.name]} write={writer.write} readOnly={readOnly} />
             ))}
+            {readOnly && fields.length > 0 && <p className="text-[11px] text-ink-muted">View only: double-click the frame on the canvas to use it.</p>}
             {event && (
                 <p className="truncate text-[11px] text-ink-muted" title={JSON.stringify(event.detail) ?? ""}>
                     Last event: <span className="font-medium text-ink">{event.name}</span>
@@ -87,7 +91,7 @@ function PropsSection({ node }: { node: SceneNode }) {
     );
 }
 
-function PropRow({ node, field, value, write }: { node: SceneNode; field: LiveField; value: unknown; write: (name: string, value: unknown, now?: boolean) => void }) {
+function PropRow({ node, field, value, write, readOnly }: { node: SceneNode; field: LiveField; value: unknown; write: (name: string, value: unknown, now?: boolean) => void; readOnly: boolean }) {
     const doc = useEditor((s) => s.doc);
     const bound = node.live?.bindings?.[field.name] ?? null;
     const found = bound ? findVariable(doc, bound) : null;
@@ -98,12 +102,25 @@ function PropRow({ node, field, value, write }: { node: SceneNode; field: LiveFi
             </span>
             <div className="min-w-0">
                 {found ? (
-                    <BoundPill node={node} field={field} name={found.variable.name} variableId={found.variable.id} />
+                    <BoundPill node={node} field={field} name={found.variable.name} variableId={found.variable.id} readOnly={readOnly} />
+                ) : readOnly ? (
+                    <LockedValue field={field} value={value} />
                 ) : (
                     <PropControl field={field} value={value} onChange={(v, now) => write(field.name, v, now)} />
                 )}
             </div>
-            <BindButton node={node} field={field} current={bound} />
+            {readOnly ? <span /> : <BindButton node={node} field={field} current={bound} />}
+        </div>
+    );
+}
+
+// A prop's value in a view-only file: shown, not editable.
+function LockedValue({ field, value }: { field: LiveField; value: unknown }) {
+    const text = value === undefined || value === null ? "" : field.control === "toggle" ? (value === true ? "On" : "Off") : field.control === "image" ? (value ? "Picture" : "None") : Array.isArray(value) ? value.join(", ") : String(value);
+    return (
+        <div aria-label={`${field.label} (locked)`} aria-readonly="true" className="flex h-6 min-w-0 items-center gap-1.5 rounded-[5px] bg-input/60 px-1.5 text-[11px] text-ink-muted">
+            {field.control === "color" && typeof value === "string" && <span className="size-3.5 shrink-0 rounded border border-black/20" style={{ background: value }} />}
+            <span className="truncate">{text}</span>
         </div>
     );
 }
@@ -213,7 +230,7 @@ function ImageControl({ label, value, onChange }: { label: string; value: string
     );
 }
 
-function BoundPill({ node, field, name, variableId }: { node: SceneNode; field: LiveField; name: string; variableId: string }) {
+function BoundPill({ node, field, name, variableId, readOnly }: { node: SceneNode; field: LiveField; name: string; variableId: string; readOnly?: boolean }) {
     const doc = useEditor((s) => s.doc);
     const r = resolveVariable(doc, variableId, node);
     return (
@@ -221,9 +238,11 @@ function BoundPill({ node, field, name, variableId }: { node: SceneNode; field: 
             {field.variableType === "color" && <span className="size-3.5 shrink-0 rounded border border-black/20" style={{ background: typeof r?.value === "string" ? r.value : "#000" }} />}
             <span className="text-ink-subtle">{VAR_ICON}</span>
             <span className="min-w-0 flex-1 truncate">{name.split("/").pop()}</span>
-            <button type="button" aria-label={`Detach ${field.label}`} onClick={() => editor.execute(bindLivePropCommand(node, field.name, null))} className="flex size-4 shrink-0 items-center justify-center rounded text-ink-subtle hover:text-ink">
-                <X className="size-3" />
-            </button>
+            {!readOnly && (
+                <button type="button" aria-label={`Detach ${field.label}`} onClick={() => editor.execute(bindLivePropCommand(node, field.name, null))} className="flex size-4 shrink-0 items-center justify-center rounded text-ink-subtle hover:text-ink">
+                    <X className="size-3" />
+                </button>
+            )}
         </div>
     );
 }
@@ -338,30 +357,48 @@ function CodeSection({ node }: { node: SceneNode }) {
     );
 }
 
-// The origins this frame may reach. None: the code has no network at all.
+// The origins every Live frame in this file may reach (the document's list). None: no network at
+// all. An app frame also lists the origins its scripts still come from (modules that couldn't be
+// kept offline).
 function NetworkRow({ node }: { node: SceneNode }) {
     const readOnly = useEditor((s) => s.readOnly);
-    const allow = liveOf(node).allow ?? [];
+    const doc = useEditor((s) => s.doc);
+    const allow = documentNetwork(doc);
+    const app = useLiveApp(node.live?.kind === "app" ? node.live.files : undefined);
     const [adding, setAdding] = useState("");
+    const write = (next: string[]) => editor.execute(setNetworkCommand(editor.get().doc, next));
     const add = () => {
         const origin = sanitizeOrigin(adding);
         if (!origin) return editor.notify("Type an https address, like https://api.example.com.");
-        editor.execute(setAllowCommand(node, [...allow, origin]));
+        write([...allow, origin]);
         setAdding("");
     };
     return (
-        <div className="space-y-1">
-            <div className="text-[11px] text-ink-muted">{allow.length ? "Network: only these origins" : "Network: off"}</div>
+        <div className="space-y-1" data-live-network="">
+            <div className="text-[11px] text-ink-muted" title="The same list applies to every Live frame in this file">
+                {allow.length ? "Network: only these origins, for every Live frame in this file" : "Network: off for every Live frame in this file"}
+            </div>
             {allow.map((o) => (
                 <div key={o} className="flex h-6 items-center gap-1 rounded-[5px] bg-input px-1.5 text-[11px]">
                     <span className="min-w-0 flex-1 truncate font-mono">{o}</span>
                     {!readOnly && (
-                        <button type="button" aria-label={`Remove ${o}`} onClick={() => editor.execute(setAllowCommand(node, allow.filter((x) => x !== o)))} className="flex size-4 items-center justify-center text-ink-subtle hover:text-ink">
+                        <button type="button" aria-label={`Remove ${o}`} onClick={() => write(allow.filter((x) => x !== o))} className="flex size-4 items-center justify-center text-ink-subtle hover:text-ink">
                             <X className="size-3" />
                         </button>
                     )}
                 </div>
             ))}
+            {(app?.blocked ?? []).length > 0 && (
+                <div className="space-y-1" data-live-app-network="">
+                    <div className="text-[11px] text-ink-muted">Scripts this app still loads (they couldn't be kept offline):</div>
+                    {app?.blocked.map((o) => (
+                        <div key={o} className="flex h-6 items-center gap-1 rounded-[5px] border border-dashed border-panel-border px-1.5 text-[11px]">
+                            <span className="min-w-0 flex-1 truncate font-mono">{o}</span>
+                            <span className="text-[10px] text-ink-subtle">this frame</span>
+                        </div>
+                    ))}
+                </div>
+            )}
             {!readOnly && (
                 <div className="flex gap-1">
                     <input aria-label="Allow an origin" placeholder="https://api.example.com" value={adding} onChange={(e) => setAdding(e.target.value)} onKeyDown={(e) => (e.stopPropagation(), e.key === "Enter" && add())} className={input} />
@@ -371,5 +408,107 @@ function NetworkRow({ node }: { node: SceneNode }) {
                 </div>
             )}
         </div>
+    );
+}
+
+// ---- An app frame's code: its files ----
+
+function AppCodeSection({ node }: { node: SceneNode }) {
+    const readOnly = useEditor((s) => s.readOnly);
+    const live = liveOf(node);
+    const saved = live.files ?? {};
+    const paths = Object.keys(saved).sort((a, b) => (a === "src/App.jsx" || a === "src/App.tsx" ? -1 : b === "src/App.jsx" || b === "src/App.tsx" ? 1 : a.localeCompare(b)));
+    const [path, setPath] = useState(() => paths.find((p) => /App\.(jsx|tsx)$/.test(p)) ?? paths[0] ?? "");
+    const [draft, setDraft] = useState<Record<string, string> | null>(null);
+    const [checking, setChecking] = useState(false);
+    const [changed, setChanged] = useState<boolean | null>(null);
+    const errors = useLiveUi((s) => s.errors[node.id]) ?? [];
+    const app = useLiveApp(live.files);
+    const timer = useRef(0);
+    // A Make app's copy is changed in Make, then brought over; a component's code is edited here.
+    const fromMake = Boolean(live.app);
+    const locked = readOnly || fromMake;
+    const files = draft ?? saved;
+    const dirty = draft !== null && filesKey(draft) !== filesKey(saved);
+
+    const apply = (next: Record<string, string> | null = draft) => {
+        window.clearTimeout(timer.current);
+        const current = editor.get().doc.nodes[node.id];
+        if (!next || !current) return;
+        if (filesKey(next) !== filesKey(current.live?.files ?? {})) {
+            clearErrors(node.id);
+            editor.execute(setAppFilesCommand(current, next));
+        }
+        setDraft(null);
+    };
+    useEffect(() => () => window.clearTimeout(timer.current), []);
+    const change = (value: string) => {
+        const next = { ...files, [path]: value };
+        setDraft(next);
+        window.clearTimeout(timer.current);
+        timer.current = window.setTimeout(() => apply(next), 900);
+    };
+
+    // Whether the Make app has changed since this copy (checked when asked, and once on open).
+    const check = async (update: boolean) => {
+        if (!live.app) return;
+        setChecking(true);
+        const got = await makeAppFiles(live.app).catch(() => null);
+        setChecking(false);
+        if (!got) return void editor.notify("That Make app can't be opened from here.");
+        const differs = filesKey(got.files) !== filesKey(saved);
+        setChanged(differs);
+        const current = editor.get().doc.nodes[node.id];
+        if (update && differs && current) {
+            clearErrors(node.id);
+            editor.execute(setAppFilesCommand(current, got.files));
+            setChanged(false);
+            editor.notify(`Updated from ${got.name}.`);
+        } else if (update) editor.notify("Already up to date.");
+    };
+    useEffect(() => {
+        if (live.app && !readOnly) void check(false);
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- once per layer
+    }, []);
+
+    return (
+        <Section title="Code" label="Code">
+            {fromMake && (
+                <div className="flex items-center gap-1.5 text-[11px] text-ink-muted">
+                    <span className="min-w-0 flex-1 truncate">
+                        Runs a copy of <span className="font-medium text-ink">{live.appName ?? "a Make app"}</span>
+                        {changed ? " (the app has changed since)" : ""}
+                    </span>
+                    {!readOnly && (
+                        <button type="button" disabled={checking} onClick={() => void check(true)} className="h-6 shrink-0 rounded-md border border-panel-border px-2 text-[11px] text-ink hover:bg-panel-hover disabled:opacity-40">
+                            {checking ? "Checking…" : "Update from app"}
+                        </button>
+                    )}
+                </div>
+            )}
+            <div role="tablist" aria-label="File" className="flex flex-wrap gap-1">
+                {paths.map((p) => (
+                    <button key={p} type="button" role="tab" aria-selected={path === p} title={p} onClick={() => setPath(p)} className={`h-6 max-w-[140px] truncate rounded-md px-2 text-[11px] font-semibold ${path === p ? "bg-panel-hover text-ink" : "text-ink-muted hover:text-ink"}`}>
+                        {p.split("/").pop()}
+                    </button>
+                ))}
+                {dirty && <span className="ml-auto self-center text-[10px] text-ink-subtle">Not applied</span>}
+            </div>
+            <div className="flex h-56 overflow-hidden rounded-md border border-panel-border bg-canvas">
+                <CodeEditor key={path} compact path={path || "src/App.jsx"} value={files[path] ?? ""} readOnly={locked} onChange={change} onCommit={() => dirty && apply()} label={`${path} of ${node.name}`} />
+            </div>
+            {!app && <p className="text-[11px] text-ink-muted">Bundling the app…</p>}
+            {app && !app.component && <p className="text-[11px] text-ink-muted">No default export in App: the app runs as it does in Make, without props.</p>}
+            {errors.length > 0 && (
+                <div role="alert" className="flex items-start gap-1.5 rounded-md border border-red-500/40 p-1.5 text-[11px]">
+                    <AlertCircle className="mt-px size-3.5 shrink-0 text-red-500" />
+                    <div className="min-w-0 flex-1 font-mono break-words whitespace-pre-wrap text-ink-muted">{errors[errors.length - 1]}</div>
+                    <button type="button" aria-label="Dismiss" onClick={() => clearErrors(node.id)} className="flex size-4 items-center justify-center text-ink-subtle hover:text-ink">
+                        <X className="size-3" />
+                    </button>
+                </div>
+            )}
+            <NetworkRow node={node} />
+        </Section>
     );
 }

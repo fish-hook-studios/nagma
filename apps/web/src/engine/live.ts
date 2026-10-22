@@ -1,3 +1,4 @@
+import { type LiveAppBuild, cachedLiveApp } from "./live-app";
 import { LIVE_RUNTIME } from "./live-runtime";
 import { LIVE_STARTERS, type LiveStarter } from "./live-starters";
 import { makeNode } from "./nodes";
@@ -187,14 +188,39 @@ export function sanitizeOrigin(raw: string): string | null {
     return url.origin;
 }
 
+const cleanOrigins = (list: string[]) => [...new Set(list.map(sanitizeOrigin).filter((o): o is string => Boolean(o)))];
+
+// The origins every Live frame in the document may reach: the document's list, and lists frames
+// kept for themselves before the list was the document's (moved there on the next edit).
+export function documentNetwork(doc: NagmaDocument): string[] {
+    const legacy: string[] = [];
+    for (const node of Object.values(doc.nodes)) if (node.type === "live" && node.live?.allow?.length) legacy.push(...node.live.allow);
+    return cleanOrigins([...(doc.liveNetwork ?? []), ...legacy]);
+}
+
+// Sets the document's list, and moves frames' own lists into it (one step, so it undoes as one).
+export function setNetworkCommand(doc: NagmaDocument, allow: string[]): Command {
+    const clean = cleanOrigins(allow);
+    const commands: Command[] = [{ type: "doc.settings", patch: { liveNetwork: clean.length ? clean : undefined } }];
+    for (const node of Object.values(doc.nodes)) {
+        if (node.type !== "live" || !node.live?.allow) continue;
+        const { allow: _old, ...rest } = node.live;
+        commands.push({ type: "node.update", id: node.id, patch: { live: rest } });
+    }
+    return commands.length === 1 ? (commands[0] as Command) : { type: "batch", commands };
+}
+
 // Network is off unless origins are allowed: scripts and styles inline only, pictures and fonts as
-// data, no requests, no forms, no frames, no base. The approved origins open each of those.
-export function liveCsp(allow: string[] = []): string {
-    const origins = [...new Set(allow.map(sanitizeOrigin).filter((o): o is string => Boolean(o)))];
+// data, no requests, no forms, no frames, no base. The approved origins open each of those. An app
+// frame (`modules`) also runs data: modules (its bundle), and scripts from `scripts` (modules that
+// couldn't be kept offline).
+export function liveCsp(allow: string[] = [], options: { modules?: boolean; scripts?: string[] } = {}): string {
+    const origins = cleanOrigins(allow);
     const extra = origins.length ? ` ${origins.join(" ")}` : "";
+    const scripts = cleanOrigins(options.scripts ?? []).filter((o) => !origins.includes(o));
     return [
         "default-src 'none'",
-        `script-src 'unsafe-inline'${extra}`,
+        `script-src 'unsafe-inline'${options.modules ? " data:" : ""}${extra}${scripts.length ? ` ${scripts.join(" ")}` : ""}`,
         `style-src 'unsafe-inline'${extra}`,
         `img-src data: blob:${extra}`,
         `font-src data:${extra}`,
@@ -236,13 +262,40 @@ export function liveSrcdoc(source: LiveSource, props: Record<string, unknown>, o
     );
 }
 
+// An app frame's document: the runtime, then the bundle (import map, styles, the app's markup and
+// entry). Until the bundle is ready, a quiet placeholder.
+export function liveAppSrcdoc(build: LiveAppBuild | null, props: Record<string, unknown>, options: { allow?: string[]; variables?: Record<string, unknown>; title?: string } = {}): string {
+    if (!build) return liveSrcdoc(PENDING, props, options);
+    if (!build.head && build.errors.length) return liveSrcdoc(failedSource(build.errors), props, options);
+    const runtime = LIVE_RUNTIME.replace("__NL_PROPS__", () => scriptJson(props)).replace("__NL_VARS__", () => scriptJson(options.variables ?? {}));
+    return (
+        "<!doctype html><html><head>" +
+        '<meta charset="utf-8">' +
+        `<meta http-equiv="Content-Security-Policy" content="${attrEsc(liveCsp(options.allow, { modules: true, scripts: build.blocked }))}">` +
+        '<meta name="viewport" content="width=device-width, initial-scale=1">' +
+        (options.title ? `<title>${attrEsc(options.title)}</title>` : "") +
+        "<style>html,body{margin:0;padding:0;width:100%;height:100%}</style>" +
+        `<script>${runtime}</script>` +
+        build.head +
+        "</head><body>" +
+        build.body +
+        "</body></html>"
+    );
+}
+
+const PENDING: LiveSource = { html: '<div class="nl-wait">Loading…</div>', css: ".nl-wait{display:grid;place-items:center;height:100%;font:500 12px system-ui,sans-serif;color:#8a8a8a}", js: "" };
+const failedSource = (errors: string[]): LiveSource => ({ html: "<pre class=\"nl-fail\"></pre>", css: ".nl-fail{margin:12px;font:12px/1.4 ui-monospace,monospace;color:#c92a2a;white-space:pre-wrap}", js: `document.querySelector(".nl-fail").textContent = ${scriptJson(errors.join("\n"))};` });
+
 // The sandbox every Live frame runs in: scripts only, its own opaque origin (never same-origin, so
 // it can't reach the editor's storage, cookies or tokens).
 export const LIVE_SANDBOX = "allow-scripts";
 
-// The frame's document for a layer now.
+// The frame's document for a layer now (an app frame's from its finished bundle, or a placeholder).
 export function liveDocument(doc: NagmaDocument, node: SceneNode, overrides?: Overrides): string {
-    return liveSrcdoc(sourceOf(node), liveProps(doc, node, overrides), { allow: liveOf(node).allow, variables: liveVariables(doc, node, overrides), title: node.name });
+    const options = { allow: documentNetwork(doc), variables: liveVariables(doc, node, overrides), title: node.name };
+    const live = liveOf(node);
+    if (live.kind === "app") return liveAppSrcdoc(cachedLiveApp(live.files), liveProps(doc, node, overrides), options);
+    return liveSrcdoc(sourceOf(node), liveProps(doc, node, overrides), options);
 }
 
 // ---- Creating and changing ----
@@ -251,12 +304,29 @@ export const LIVE_SIZE = { w: 320, h: 200 };
 
 export function makeLiveNode(doc: NagmaDocument, starter: LiveStarter, rect: Partial<Rect> & { x: number; y: number }, parentId: string | null): SceneNode {
     const schema = normalizeSchema(starter.schema);
+    const content: Pick<LiveData, "kind" | "source" | "files"> = starter.files ? { kind: "app", files: { ...starter.files } } : { kind: "html", source: { ...(starter.source ?? { html: "", css: "", js: "" }) } };
     const node = makeNode(doc, "live", { x: rect.x, y: rect.y, w: rect.w ?? starter.w ?? LIVE_SIZE.w, h: rect.h ?? starter.h ?? LIVE_SIZE.h }, parentId, {
         name: starter.name,
         clip: true,
-        live: { kind: "html", source: { ...starter.source }, props: defaultsOf(schema), schema, events: normalizeEvents(starter.events) },
+        live: { ...content, props: defaultsOf(schema), schema, events: normalizeEvents(starter.events) },
     });
     return node;
+}
+
+export const LIVE_APP_SIZE = { w: 480, h: 360 };
+
+// A Live frame running a Make app: a copy of its files, and the app it came from.
+export function makeLiveAppNode(doc: NagmaDocument, app: { id: string; name: string; files: Record<string, string> }, rect: Partial<Rect> & { x: number; y: number }, parentId: string | null): SceneNode {
+    return makeNode(doc, "live", { x: rect.x, y: rect.y, w: rect.w ?? LIVE_APP_SIZE.w, h: rect.h ?? LIVE_APP_SIZE.h }, parentId, {
+        name: app.name,
+        clip: true,
+        live: { kind: "app", app: app.id, appName: app.name, files: { ...app.files }, props: {} },
+    });
+}
+
+// Replaces an app frame's files (the Make app changed, or its code was edited here).
+export function setAppFilesCommand(node: SceneNode, files: Record<string, string>): Command {
+    return liveUpdate(node, { files: { ...files } });
 }
 
 export function liveUpdate(node: SceneNode, patch: Partial<LiveData>): Command {
@@ -284,11 +354,6 @@ export function setSourceCommand(node: SceneNode, source: LiveSource): Command {
     return liveUpdate(node, { source: { html: source.html, css: source.css, js: source.js } });
 }
 
-export function setAllowCommand(node: SceneNode, allow: string[]): Command {
-    const clean = [...new Set(allow.map(sanitizeOrigin).filter((o): o is string => Boolean(o)))];
-    return liveUpdate(node, { allow: clean.length ? clean : undefined });
-}
-
 const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 
 // What the code declared, kept on the layer when it differs: the schema, the events, and defaults
@@ -312,9 +377,10 @@ export function liveCodeBlocks(doc: NagmaDocument, node: SceneNode): { title: st
     if (source.html.trim()) blocks.push({ title: "HTML", lines: source.html.split("\n") });
     if (source.css.trim()) blocks.push({ title: "CSS", lines: source.css.split("\n") });
     if (source.js.trim()) blocks.push({ title: "JavaScript", lines: source.js.split("\n") });
+    if (live.kind === "app") for (const [path, text] of Object.entries(live.files ?? {}).sort(([a], [b]) => a.localeCompare(b))) blocks.push({ title: path, lines: text.split("\n") });
     const props = liveProps(doc, node);
     if (Object.keys(props).length) blocks.push({ title: "Props", lines: JSON.stringify(props, null, 2).split("\n") });
-    if (live.kind === "app" && live.app) blocks.push({ title: "Make app", lines: [live.app] });
+    if (live.kind === "app" && live.app) blocks.push({ title: "Make app", lines: [live.appName ? `${live.appName} (${live.app})` : live.app] });
     return blocks;
 }
 

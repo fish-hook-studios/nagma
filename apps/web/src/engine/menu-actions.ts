@@ -48,7 +48,7 @@ import { pickImages } from "./images";
 import { vectorUi } from "./vector-ui";
 import { openLibraries } from "../components/library-ui";
 import { suggestAutoLayout } from "./suggest-layout";
-import { openActions, setMode } from "./modes";
+import { openActions, openActionsWith, setMode } from "./modes";
 import { layerRoots } from "./page";
 import { openPathDialog } from "./path-ops";
 import { closePluginConsole, openPluginConsole, pickPluginManifest, pluginStore, runLastPlugin } from "./plugins";
@@ -228,6 +228,8 @@ export const MENU_ACTIONS: MenuAction[] = [
     { id: "liveCounter", label: "Live frame: Counter button", group: "Object", keywords: "insert live frame code widget button counter interactive", run: () => insertLiveFrame("counter") },
     { id: "liveChart", label: "Live frame: Chart", group: "Object", keywords: "insert live frame code chart graph bars data", run: () => insertLiveFrame("chart") },
     { id: "liveForm", label: "Live frame: Form", group: "Object", keywords: "insert live frame code form fields input validation", run: () => insertLiveFrame("form") },
+    { id: "liveReact", label: "Live frame: React component", group: "Object", keywords: "insert live frame code react component jsx props", run: () => insertLiveFrame("react") },
+    { id: "liveMakeApp", label: "Live frame from a Make app…", group: "Object", keywords: "insert live frame make app react", run: () => openActionsWith("Live frame from Make app") },
     { id: "section", label: "Wrap in new section", group: "Object", shortcut: "⌘ S", needs: ["selection"], run: sectionSelection },
     { id: "toSection", label: "Convert to section", group: "Object", needs: ["selection", "frameOrSection"], run: toggleSection },
     { id: "toFrame", label: "Convert to frame", group: "Object", needs: ["selection", "section"], run: convertToFrame },
@@ -586,7 +588,7 @@ export const MAIN_MENU: MenuNode[] = [
             "frame",
             "group",
             "ungroup",
-            { sub: "live", label: "Live frame", items: ["liveCounter", "liveChart", "liveForm"] },
+            { sub: "live", label: "Live frame", items: ["liveCounter", "liveChart", "liveForm", "liveReact", "liveMakeApp"] },
             "section",
             "toSection",
             "toFrame",

@@ -99,7 +99,7 @@ export const LIVE_RUNTIME = String.raw`(function () {
       var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + w * k + '" height="' + h * k + '" viewBox="0 0 ' + w + " " + h + '">' +
         '<foreignObject x="0" y="0" width="' + w + '" height="' + h + '">' +
         '<div xmlns="http://www.w3.org/1999/xhtml" class="nl-html" style="width:' + w + "px;height:" + h + "px;overflow:hidden;" + esc(htmlStyle) + '">' +
-        "<style>" + styles().replace(/</g, "\\3c ") + "</style>" +
+        "<style>" + styles().replace(/&/g, "&amp;").replace(/</g, "\\3c ") + "</style>" +
         '<div class="nl-body' + esc(bodyClass) + '" style="height:100%;' + esc(bodyStyle) + '">' + markup + "</div></div></foreignObject></svg>";
       var img = new Image();
       img.onload = function () {

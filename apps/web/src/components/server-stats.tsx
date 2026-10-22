@@ -3,7 +3,7 @@ import { type UsageReport, usageReport } from "../engine/auth";
 
 // Settings › Stats, for server admins: how this server is used, counted on the server and nowhere
 // else. App loads and the distinct devices behind them (hashed under a salt drawn fresh each day),
-// sign-ups, verifications, files made, the most people editing at once; and what is happening now.
+// sign-ups, verifications, files made, pages captured, the most people editing at once; and what is happening now.
 // Nothing runs in anyone's browser for this, so the website's "no trackers" stays true.
 
 const SECTION = "border-b border-panel-border py-4 last:border-0";
@@ -35,7 +35,7 @@ export function StatsTab() {
     }, []);
     if (error) return <p className="py-10 text-center text-red-500">{error}</p>;
     if (!report) return <p className="py-10 text-center text-ink-muted">Counting…</p>;
-    const today = report.days.find((d) => d.day === report.today) ?? { day: report.today, loads: 0, devices: 0, signups: 0, verified: 0, files: 0, peakEditors: 0, peakConnections: 0 };
+    const today = report.days.find((d) => d.day === report.today) ?? { day: report.today, loads: 0, devices: 0, signups: 0, verified: 0, files: 0, captures: 0, peakEditors: 0, peakConnections: 0 };
     const week = report.days.slice(-7);
     const rows = [...report.days].reverse().slice(0, 30);
     return (
@@ -55,7 +55,7 @@ export function StatsTab() {
                     <Figure label="Devices" value={n(today.devices)} hint="distinct address and browser" />
                     <Figure label="App loads" value={n(today.loads)} hint="the page served to a browser" />
                     <Figure label="Sign-ups" value={n(today.signups)} hint={`${n(today.verified)} verified`} />
-                    <Figure label="Files made" value={n(today.files)} hint={`peak ${n(today.peakEditors)} editing at once`} />
+                    <Figure label="Files made" value={n(today.files)} hint={`peak ${n(today.peakEditors)} editing at once; ${n(today.captures ?? 0)} page${today.captures === 1 ? "" : "s"} captured`} />
                 </div>
             </div>
             <div className={SECTION}>
@@ -64,7 +64,7 @@ export function StatsTab() {
                     <Figure label="Devices" value={n(sum(week, "devices"))} hint="device-days, not distinct people" />
                     <Figure label="App loads" value={n(sum(week, "loads"))} />
                     <Figure label="Sign-ups" value={n(sum(week, "signups"))} hint={`${n(sum(week, "verified"))} verified`} />
-                    <Figure label="Files made" value={n(sum(week, "files"))} />
+                    <Figure label="Files made" value={n(sum(week, "files"))} hint={`${n(sum(week, "captures"))} pages captured`} />
                 </div>
             </div>
             <div className={SECTION}>
@@ -87,6 +87,7 @@ export function StatsTab() {
                             <th className="py-1 text-right font-medium">Sign-ups</th>
                             <th className="py-1 text-right font-medium">Verified</th>
                             <th className="py-1 text-right font-medium">Files</th>
+                            <th className="py-1 text-right font-medium">Captures</th>
                             <th className="py-1 text-right font-medium">Peak editing</th>
                         </tr>
                     </thead>
@@ -99,6 +100,7 @@ export function StatsTab() {
                                 <td className="py-1 text-right">{n(d.signups)}</td>
                                 <td className="py-1 text-right">{n(d.verified)}</td>
                                 <td className="py-1 text-right">{n(d.files)}</td>
+                                <td className="py-1 text-right">{n(d.captures ?? 0)}</td>
                                 <td className="py-1 text-right">{n(d.peakEditors)}</td>
                             </tr>
                         ))}

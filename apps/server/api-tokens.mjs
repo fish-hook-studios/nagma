@@ -2,7 +2,8 @@
 // settings › Tokens; a token is shown once, and only its SHA-256 hash is kept (data/tokens.json).
 // Tokens are scoped read-only: they reach /v1/* (GET only) and nothing else, so tools such as the
 // MCP server and the code-editor extension can read files a person has access to but never edit,
-// share or delete anything.
+// share or delete anything. The one exception is page captures (captures.mjs): Nagma Capture sends
+// a page with the token, kept a day for its owner to open; no file changes until the person opens it.
 import { createHash, randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -170,5 +171,12 @@ export function createApiTokens({ DATA, rooms, refreshPresence, userById, public
         return out;
     }
 
-    return { serve };
+    // The person behind a request's personal access token, or null (for routes outside /v1 that
+    // also take tokens, such as POST /captures).
+    async function userFromToken(req) {
+        await load();
+        return userFromPat(req);
+    }
+
+    return { serve, userFromToken };
 }

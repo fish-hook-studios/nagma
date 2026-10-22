@@ -81,7 +81,7 @@ import { PALETTES, RULER_SIZE, renderScene } from "./render";
 import { protoHover, protoPointerDown, protoPointerMove, protoPointerUp } from "./prototype-connections";
 import { TextEditor } from "./text-editor";
 import { LiveFrames } from "./live-frames";
-import { enterLive, liveUi, setCanvasPass } from "./live-snapshots";
+import { enterLive, liveMounted, liveUi, setCanvasPass } from "./live-snapshots";
 import { drawPluginOverlays, pluginDoubleClick, pluginDown, pluginMove, pluginUp } from "./canvas-plugins";
 import { focusResizePlugin } from "./plugins/focus-resize";
 import "./vector-plugins";
@@ -140,6 +140,9 @@ export function CanvasView() {
     const colorProfile = useEditor((s) => (s.prefs.colorManaged ? (s.doc.colorProfile ?? "srgb") : "srgb"));
     const containerRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    // The canvas's chrome (selection, handles, labels, guides) while Live frames run over the canvas:
+    // drawn on this layer above them.
+    const chromeRef = useRef<HTMLCanvasElement>(null);
     const gestureRef = useRef<Gesture | null>(null);
     // A right-button press while "Right-click and drag to pan" is on.
     const rightPanRef = useRef<{ moved: boolean; x: number; y: number; meta: boolean } | null>(null);
@@ -215,10 +218,20 @@ export function CanvasView() {
         const canvas = canvasRef.current;
         const ctx = canvas?.getContext("2d", colorProfile === "p3" ? { colorSpace: "display-p3" } : undefined);
         if (!canvas || !ctx) return;
+        const chromeCanvas = chromeRef.current;
+        const chromeCtx = chromeCanvas?.getContext("2d", colorProfile === "p3" ? { colorSpace: "display-p3" } : undefined) ?? null;
+        let chromeUsed = false;
         let frame = 0;
         const draw = () => {
             frame = 0;
             const s = editor.get();
+            // With Live frames showing, the chrome goes on the layer above them.
+            const chrome = liveMounted.size > 0 && chromeCtx ? chromeCtx : null;
+            if (chromeCtx && chromeCanvas && (chrome || chromeUsed)) {
+                chromeCtx.setTransform(1, 0, 0, 1, 0, 0);
+                chromeCtx.clearRect(0, 0, chromeCanvas.width, chromeCanvas.height);
+            }
+            chromeUsed = Boolean(chrome);
             // Video fills follow the playhead in Motion mode, and rest on their poster elsewhere.
             if (s.mode === "motion" && hasVideo(s.doc)) syncPlayback(s.doc, s.time / 1000, s.playing);
             else if (s.mode !== "motion" && !s.presentingId) stopPlayback();
@@ -267,8 +280,9 @@ export function CanvasView() {
                         unmanagedColor: !s.prefs.colorManaged,
                     },
                     PALETTES[s.prefs.theme],
+                    chrome,
                 );
-                if (!s.presentingId && !s.uiHidden) drawPluginOverlays(ctx, s.camera);
+                if (!s.presentingId && !s.uiHidden) drawPluginOverlays(chrome ?? ctx, s.camera);
             } catch (error) {
                 console.error("Canvas draw failed", error);
             } finally {
@@ -1295,7 +1309,17 @@ export function CanvasView() {
         if (s.presentingId) return;
         const p = local(event);
         const world = screenToWorld(s.camera, p.x, p.y);
-        if (s.tool === "pen" || s.readOnly) return;
+        if (s.tool === "pen") return;
+        // Double-clicking a Live frame enters it: the pointer and keyboard go to its code. In
+        // view-only files too, to use it (its props and code stay locked there).
+        const enterLiveAt = () => {
+            const liveHit = hitTest(s.doc, world.x, world.y, true);
+            if (liveHit?.type !== "live" || liveHit.locked) return false;
+            editor.set({ selection: [liveHit.id] });
+            enterLive(liveHit.id);
+            return true;
+        };
+        if (s.readOnly) return void enterLiveAt();
         if (pluginDoubleClick(pointer(event))) return;
         // In point editing, double-clicking a point switches it between sharp and smooth.
         if (s.editingVectorId) {
@@ -1311,13 +1335,7 @@ export function CanvasView() {
             ui.set({ labelRename: label.id });
             return;
         }
-        // Double-clicking a Live frame enters it: the pointer and keyboard go to its code.
-        const liveHit = hitTest(s.doc, world.x, world.y, true);
-        if (liveHit?.type === "live" && !liveHit.locked) {
-            editor.set({ selection: [liveHit.id] });
-            enterLive(liveHit.id);
-            return;
-        }
+        if (enterLiveAt()) return;
         const selectedNode = s.selection.length === 1 ? s.doc.nodes[s.selection[0] ?? ""] : undefined;
         // Images open in the photo editor rather than turning into a vector.
         if (selectedNode && firstImagePaint(selectedNode) >= 0 && nodeContains(s.doc, selectedNode, world.x, world.y)) {
@@ -1422,6 +1440,15 @@ export function CanvasView() {
                 className="block"
             />
             <LiveFrames />
+            <canvas
+                key={`chrome-${colorProfile}`}
+                ref={chromeRef}
+                aria-hidden="true"
+                width={Math.round(size.width * (window.devicePixelRatio || 1))}
+                height={Math.round(size.height * (window.devicePixelRatio || 1))}
+                style={{ width: size.width, height: size.height }}
+                className="pointer-events-none absolute top-0 left-0 block"
+            />
             {editingTextId && <TextEditor nodeId={editingTextId} />}
             <CanvasOverlays />
             <ModeBanner />

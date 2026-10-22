@@ -305,19 +305,26 @@ export interface SceneNode {
 }
 
 // A Live frame's content: code run in a sandboxed frame on the canvas, with props the code
-// declares and the Inspector edits. "html" carries its own source; "app" points at a Make file.
+// declares and the Inspector edits. "html" carries its own source; "app" carries a project's files
+// (a Make app's, copied from the Make file `app`, or a React component's) bundled the way Make
+// bundles apps, its default export taking the props.
 export interface LiveData {
     kind: "html" | "app";
     source?: LiveSource;
-    // A Make app's file id (kind "app").
+    // A Make app's file id (kind "app" made from a Make file), and its name then.
     app?: string;
+    appName?: string;
+    // The project's files by path (kind "app"): the copy this layer runs, so it works for everyone
+    // the file is shared with, in Sites and in local copies.
+    files?: Record<string, string>;
     props: Record<string, unknown>;
     // What the code declared with nagma.declare: its props, and the events it may emit.
     schema?: LivePropSchema[];
     events?: string[];
     // Prop name to variable id: the prop follows the variable (in the layer's mode).
     bindings?: Record<string, string>;
-    // Network origins the person approved for this frame ("https://api.example.com"). None: no network.
+    // Network origins approved for this frame alone, from before the list was the document's
+    // (NagmaDocument.liveNetwork): read as part of the document's list, moved there on its next edit.
     allow?: string[];
 }
 
@@ -892,6 +899,8 @@ export interface NagmaDocument {
     pdf?: boolean;
     // The colour space colours are picked and exported in (sRGB when absent).
     colorProfile?: "srgb" | "p3";
+    // Network origins every Live frame in the file may reach ("https://api.example.com"). None: no network.
+    liveNetwork?: string[];
     // Plugin data and relaunch buttons set on the document itself (nagma.root in the plugin API).
     pluginData?: Record<string, string>;
     relaunchData?: Record<string, Record<string, string>>;
@@ -1189,7 +1198,7 @@ export type Command =
     | { type: "node.reparent"; id: string; parentId: string | null; index?: number }
     | { type: "doc.rename"; name: string }
     // Document-wide settings (the colour profile).
-    | { type: "doc.settings"; patch: Partial<Pick<NagmaDocument, "colorProfile" | "pluginData" | "relaunchData">> }
+    | { type: "doc.settings"; patch: Partial<Pick<NagmaDocument, "colorProfile" | "pluginData" | "relaunchData" | "liveNetwork">> }
     | { type: "sequence.set"; sequence: Sequence }
     | { type: "styles.set"; styles: Styles }
     | { type: "prototype.set"; prototype: PrototypeSettings }
