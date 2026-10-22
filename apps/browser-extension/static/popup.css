@@ -47,7 +47,7 @@ kbd { font: inherit; font-size: 11px; padding: 0 4px; border: 1px solid var(--li
 details { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; }
 summary { cursor: pointer; font-weight: 600; }
 label { display: block; margin: 10px 0 4px; color: var(--muted); }
-select, input[type="url"] {
+select, input[type="url"], input[type="text"], input[type="password"] {
     width: 100%;
     padding: 6px 8px;
     border: 1px solid var(--line);
@@ -57,6 +57,12 @@ select, input[type="url"] {
     font: inherit;
 }
 input[type="url"] { margin-top: 6px; }
+.choices { border: 0; margin: 12px 0 0; padding: 0; }
+.choices .check { margin: 6px 0 0; }
+.indent { margin-left: 22px; width: calc(100% - 22px); }
+input.indent { width: calc(100% - 22px); margin-top: 4px; font-size: 12px; }
+input.indent:disabled { opacity: 0.55; }
+a { color: var(--accent); }
 .check { display: flex; align-items: center; gap: 6px; color: var(--fg); }
 .check.disabled { color: var(--muted); }
 .soon { font-size: 11px; padding: 1px 6px; border-radius: 999px; background: var(--soft); white-space: nowrap; margin-left: auto; }

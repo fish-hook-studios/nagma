@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Questions · Lumen</title>
+<link rel="stylesheet" href="fonts.css">
+<style>
+body { margin: 0; font-family: "Source Sans 3", sans-serif; background: #f4efe6; color: #1f1a17; }
+main { padding: 56px; }
+h1 { font-size: 40px; margin: 0 0 24px; }
+.faq { width: 640px; border-top: 1px solid #d6cfc2; }
+.item { border-bottom: 1px solid #d6cfc2; }
+.q { display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 18px 4px; border: 0; background: none; font: 600 19px "Source Sans 3", sans-serif; color: inherit; text-align: left; cursor: pointer; }
+.q .chev { width: 12px; height: 12px; border-right: 2px solid #1f1a17; border-bottom: 2px solid #1f1a17; transform: rotate(45deg); transition: transform .2s ease; }
+.q[aria-expanded="true"] .chev { transform: rotate(225deg); }
+.a { padding: 0 4px 18px; color: #5c5349; line-height: 1.55; }
+</style></head>
+<body><main>
+<h1>Questions</h1>
+<div class="faq">
+  <div class="item"><button class="q" aria-expanded="true" aria-controls="a1">Is it free?<span class="chev"></span></button><div class="a" id="a1">Yes. Everything is free for one person, and for teams of up to five.</div></div>
+  <div class="item"><button class="q" aria-expanded="false" aria-controls="a2">Can I work offline?<span class="chev"></span></button><div class="a" id="a2" hidden>Notes are kept on your computer and sync when you're back online.</div></div>
+  <div class="item"><button class="q" aria-expanded="false" aria-controls="a3">Where is my data kept?<span class="chev"></span></button><div class="a" id="a3" hidden>On your computer, and on the server you choose.</div></div>
+</div>
+</main>
+<script>
+for (const q of document.querySelectorAll(".q")) q.addEventListener("click", () => {
+  const open = q.getAttribute("aria-expanded") !== "true";
+  q.setAttribute("aria-expanded", open);
+  document.getElementById(q.getAttribute("aria-controls")).hidden = !open;
+});
+</script>
+</body></html>

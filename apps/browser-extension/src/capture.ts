@@ -7,7 +7,9 @@
 // then taken out again. Pictures are listed by URL and read afterwards, first from the page (same
 // origin, CORS, data and blob URLs), then by the service worker for the rest.
 
-import type { Capture, CaptureBackground, CaptureBox, CaptureFont, CaptureNode, CaptureRun, CaptureShadow, CaptureStyle, CaptureText, CaptureTextStyle } from "../../web/src/engine/capture-format";
+import type { Capture, CaptureBackground, CaptureBox, CaptureFont, CaptureFontFace, CaptureLive, CaptureNode, CaptureRun, CaptureShadow, CaptureStateName, CaptureStates, CaptureStyle, CaptureText, CaptureTextStyle } from "../../web/src/engine/capture-format";
+import { captureLiveParts, clearListenerMarks, listenerCandidates, markListener } from "./live-capture";
+import { applyState, findStateElements, installForcedRules, ownStyle, readableSheets, stillTransitions, styleChanges, unreadableSheets, type ExtraSheet, type StateElement } from "./states";
 
 export interface CaptureOptions {
     // Read every picture from the page itself (standalone use, tests); otherwise the ones the page
@@ -15,6 +17,16 @@ export interface CaptureOptions {
     inlineAssets?: boolean;
     // The most bytes of pictures a capture carries (40 MB).
     maxAssetBytes?: number;
+    // Hover, focus and press states: read here, with attribute twins of the page's state rules
+    // ("rules"), or left for the service worker to force through the devtools protocol
+    // ("external": the page stays prepared until __nagmaStateEnd).
+    states?: "rules" | "external" | false;
+    // The text of style sheets from other origins (the service worker fetched them).
+    sheets?: ExtraSheet[];
+    // Starts asset ids with this, so captures at several widths can share one asset table.
+    assetPrefix?: string;
+    // Parts the page runs with script become Live frames (where a behaviour shim fits them).
+    live?: boolean;
 }
 
 // A picture still to read: by URL, or (when the URL can't be read) as a screenshot of its box.
@@ -27,6 +39,8 @@ export interface PendingAsset {
 export interface CaptureResult {
     capture: Capture;
     pending: PendingAsset[];
+    // "external" states: how many elements wait for their states (marked data-nagma-state="<n>").
+    stateKeys?: number;
 }
 
 const SKIP = new Set(["script", "style", "noscript", "template", "head", "meta", "link", "title", "base", "datalist", "source", "track", "param", "map", "area"]);
@@ -118,6 +132,36 @@ function nameOf(el: Element): string {
     const detail = id || cls || "";
     if (base && detail) return `${base} · ${detail}`;
     return base || detail || tag;
+}
+
+// ---- Paths ----
+
+const pathCache = new Map<Element, string>();
+
+// Where an element sits in the DOM: tag (or #id) and index among same-tag siblings per step, so
+// a re-capture of the page finds the same element again (stand-ins for ::before and ::after are
+// named for what they stand in for).
+function domPath(el: Element): string {
+    const known = pathCache.get(el);
+    if (known) return known;
+    const tag = el.tagName.toLowerCase();
+    const pseudo = el.getAttribute("data-nagma-pseudo");
+    let parent: Element | null = el.parentElement;
+    let siblings: Element[] = parent ? Array.from(parent.children) : [];
+    if (!parent) {
+        const root = el.getRootNode();
+        if (root instanceof ShadowRoot) {
+            parent = root.host;
+            siblings = Array.from(root.children);
+        }
+    }
+    let step: string;
+    if (pseudo) step = `::${pseudo}`;
+    else if (el.id && /^[A-Za-z][\w-]{0,40}$/.test(el.id) && !/\d{3,}|^(radix|r\d|ember|react|headlessui|mui)/i.test(el.id)) step = `${tag}#${el.id}`;
+    else step = `${tag}:${siblings.filter((c) => c.tagName === el.tagName).indexOf(el)}`;
+    const out = tag === "body" || !parent ? (tag === "body" ? "body" : step) : `${domPath(parent)}>${step}`;
+    pathCache.set(el, out);
+    return out;
 }
 
 // ---- Fonts ----
@@ -224,14 +268,31 @@ function blurOf(filter: string): number | undefined {
     return m ? parseFloat(m[1] as string) : undefined;
 }
 
-// The element's own rotation (degrees) and scale from its computed transform.
+// The element's own rotation (degrees) and scale: its computed transform, then the individual
+// rotate and scale properties (applied after it).
 function rotationOf(cs: CSSStyleDeclaration): { angle: number; scale: number } {
+    let angle = 0;
+    let scale = 1;
     const t = cs.transform;
-    if (!t || t === "none") return { angle: 0, scale: 1 };
-    const m = /matrix\(([^)]+)\)/.exec(t);
-    if (!m) return { angle: 0, scale: 1 };
-    const [a = 1, b = 0] = (m[1] as string).split(",").map(parseFloat);
-    return { angle: (Math.atan2(b, a) * 180) / Math.PI, scale: Math.hypot(a, b) };
+    const m = t && t !== "none" ? /matrix\(([^)]+)\)/.exec(t) : null;
+    if (m) {
+        const [a = 1, b = 0] = (m[1] as string).split(",").map(parseFloat);
+        angle = (Math.atan2(b, a) * 180) / Math.PI;
+        scale = Math.hypot(a, b);
+    }
+    const rotate = cs.getPropertyValue("rotate");
+    // "20deg" or "z 20deg" turn in the page's plane; other axes aren't a flat rotation.
+    const r = rotate && rotate !== "none" ? /^(?:z\s+|0 0 1\s+)?(-?[\d.]+)(deg|turn|rad|grad)$/.exec(rotate.trim()) : null;
+    if (r) {
+        const n = parseFloat(r[1] as string);
+        angle += r[2] === "turn" ? n * 360 : r[2] === "rad" ? (n * 180) / Math.PI : r[2] === "grad" ? n * 0.9 : n;
+    }
+    const sc = cs.getPropertyValue("scale");
+    if (sc && sc !== "none") {
+        const [x = 1, y = x] = sc.trim().split(/\s+/).map(parseFloat);
+        if (Number.isFinite(x) && Math.abs(x - y) < 0.001) scale *= x;
+    }
+    return { angle, scale };
 }
 
 interface Ctx {
@@ -339,14 +400,23 @@ function textStyleOf(cs: CSSStyleDeclaration, text = ""): CaptureTextStyle {
         italic: cs.fontStyle === "italic" || cs.fontStyle.startsWith("oblique"),
         lineHeight: lh,
         letterSpacing: cs.letterSpacing === "normal" ? 0 : px(cs.letterSpacing),
-        color: transparent(cs.color) && px(cs.getPropertyValue("-webkit-text-stroke-width")) > 0 ? cs.getPropertyValue("-webkit-text-stroke-color") : cs.color,
+        color: cs.color,
         align: align === "center" || align === "-webkit-center" ? "center" : align === "justify" ? "justify" : align === "right" || align === "-webkit-right" ? "right" : align === "left" || align === "-webkit-left" ? "left" : align === "end" ? (rtl ? "left" : "right") : rtl ? "right" : "left",
         decoration: decoration.includes("underline") ? "underline" : decoration.includes("line-through") ? "line-through" : "none",
         transform: cs.textTransform === "uppercase" || cs.textTransform === "lowercase" || cs.textTransform === "capitalize" ? cs.textTransform : "none",
         whiteSpace: cs.whiteSpace,
         direction: rtl ? "rtl" : "ltr",
         ...(cs.textShadow && cs.textShadow !== "none" ? { shadows: shadowsOf(cs.textShadow) } : {}),
+        ...strokeOf(cs),
     };
+}
+
+// -webkit-text-stroke: an outline round the glyphs (outlined text has a transparent colour).
+function strokeOf(cs: CSSStyleDeclaration): Pick<CaptureTextStyle, "stroke"> {
+    const width = px(cs.getPropertyValue("-webkit-text-stroke-width"));
+    const color = cs.getPropertyValue("-webkit-text-stroke-color");
+    if (!(width > 0) || !color || transparent(color)) return {};
+    return { stroke: { width: round(width), color } };
 }
 
 // ---- Assets ----
@@ -356,6 +426,7 @@ class Assets {
     data: Record<string, { url: string; data: string | null; bitmap?: boolean }> = {};
     pending: PendingAsset[] = [];
     private next = 1;
+    constructor(private prefix = "a") {}
 
     add(url: string, box: CaptureBox): string | null {
         if (!url) return null;
@@ -367,7 +438,7 @@ class Assets {
         }
         const known = this.byUrl.get(abs);
         if (known) return known;
-        const id = `a${this.next++}`;
+        const id = `${this.prefix}${this.next++}`;
         this.byUrl.set(abs, id);
         this.data[id] = { url: abs, data: abs.startsWith("data:") ? abs : null };
         if (!abs.startsWith("data:")) this.pending.push({ id, url: abs, box });
@@ -376,14 +447,14 @@ class Assets {
 
     // Bytes the page already has (a canvas, a video frame).
     addData(label: string, data: string): string {
-        const id = `a${this.next++}`;
+        const id = `${this.prefix}${this.next++}`;
         this.data[id] = { url: label, data };
         return id;
     }
 
     // Read later from a screenshot of the box.
     addScreenshot(label: string, box: CaptureBox): string {
-        const id = `a${this.next++}`;
+        const id = `${this.prefix}${this.next++}`;
         this.data[id] = { url: label, data: null, bitmap: true };
         this.pending.push({ id, url: null, box });
         return id;
@@ -500,6 +571,8 @@ function inlineFlow(node: Node): boolean {
 interface Segment {
     text: string;
     el: Element;
+    // The text node it comes from (for where it was drawn).
+    node?: Node;
     href?: string;
     // A stand-in for an inline element's padding, border and margin at one end: a no-break space
     // as wide as that (px).
@@ -523,7 +596,7 @@ function segmentsOf(nodes: Node[], container: Element, href: string | undefined)
     const visit = (node: Node, link: string | undefined) => {
         if (node.nodeType === Node.TEXT_NODE) {
             const el = node.parentElement ?? container;
-            out.push({ text: node.textContent ?? "", el, href: link });
+            out.push({ text: node.textContent ?? "", el, node, href: link });
             return;
         }
         if (node.nodeType !== Node.ELEMENT_NODE) return;
@@ -572,7 +645,7 @@ function segmentsOf(nodes: Node[], container: Element, href: string | undefined)
     return out.filter((s) => s.text.length);
 }
 
-const SAME_KEYS: (keyof CaptureTextStyle)[] = ["family", "size", "weight", "italic", "color", "decoration", "letterSpacing", "transform"];
+const SAME_KEYS: (keyof CaptureTextStyle)[] = ["family", "size", "weight", "italic", "color", "decoration", "letterSpacing", "transform", "stroke"];
 
 // Text decoration isn't inherited in computed style but shows on the text inside: the nearest
 // inline ancestor's.
@@ -646,8 +719,11 @@ function textNodeOf(nodes: Node[], container: Element, ctx: Ctx, alone: boolean)
         const start = content.length;
         content += s.text;
         const diff: Partial<CaptureTextStyle> = {};
-        for (const k of SAME_KEYS) if (st[k] !== base[k]) (diff as Record<string, unknown>)[k] = st[k];
-        if (Object.keys(diff).length || (s.href && s.href !== ctx.href)) runs.push({ start, end: content.length, style: diff, ...(s.href && s.href !== ctx.href ? { href: s.href } : {}) });
+        for (const k of SAME_KEYS) if (JSON.stringify(st[k]) !== JSON.stringify(base[k])) (diff as Record<string, unknown>)[k] = st[k];
+        // An outline that differs from the block's: where its characters were drawn, so it can be
+        // set over the block as a layer of its own.
+        const rects = "stroke" in diff && s.node ? glyphRects(s.node, ctx) : undefined;
+        if (Object.keys(diff).length || (s.href && s.href !== ctx.href)) runs.push({ start, end: content.length, style: diff, ...(s.href && s.href !== ctx.href ? { href: s.href } : {}), ...(rects?.length ? { rects } : {}) });
     });
     if (!content.trim()) return null;
     // Range boxes are the glyphs' content area, not the line box: the line box (line-height tall)
@@ -682,6 +758,23 @@ function textNodeOf(nodes: Node[], container: Element, ctx: Ctx, alone: boolean)
     }
     const box = boxOf(ctx, { left: x, top: lineTop, width: w, height: Math.max(lh * lines, bottom - lineTop - (contentH - lh) / 2) });
     return { tag: "#text", name: shortText(content, 40), box, style: emptyStyle(), text, children: [], ...(ctx.href ? { href: ctx.href } : {}) };
+}
+
+// The boxes a text node's characters were drawn in, one per line.
+function glyphRects(node: Node, ctx: Ctx): CaptureBox[] {
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    const lines: DOMRect[] = [];
+    for (const r of Array.from(range.getClientRects())) {
+        if (r.width <= 0 || r.height <= 0) continue;
+        const same = lines.find((l) => Math.abs(l.top - r.top) < r.height / 2);
+        if (same) {
+            const left = Math.min(same.left, r.left);
+            const right = Math.max(same.right, r.right);
+            lines[lines.indexOf(same)] = new DOMRect(left, same.top, right - left, same.height);
+        } else lines.push(r);
+    }
+    return lines.map((r) => boxOf(ctx, r));
 }
 
 function emptyStyle(): CaptureStyle {
@@ -953,11 +1046,15 @@ function walkChildren(el: Element, ctx: Ctx): CaptureNode[] {
     const flags = kids.map((k) => inlineFlow(k));
     const alone = flags.every(Boolean);
     let group: Node[] = [];
+    let texts = 0;
     const flush = () => {
         if (!group.length) return;
         out.push(...inlineBoxes(group, ctx));
         const t = textNodeOf(group, el, ctx, alone);
-        if (t) out.push(t);
+        if (t) {
+            t.path = `${domPath(el)}>#text:${texts++}`;
+            out.push(t);
+        }
         group = [];
     };
     kids.forEach((k, i) => {
@@ -983,8 +1080,10 @@ function walk(el: Element, parentCtx: Ctx): CaptureNode[] {
     if (tag === "a" && (el as HTMLAnchorElement).href) ctx = { ...ctx, href: (el as HTMLAnchorElement).href };
     const r = el.getBoundingClientRect();
     const { angle, scale } = rotationOf(cs);
-    const turned = Math.abs(angle) > 0.5 && el instanceof HTMLElement;
-    const box = turned ? boxOf(ctx, r, { w: (el as HTMLElement).offsetWidth * scale, h: (el as HTMLElement).offsetHeight * scale }) : boxOf(ctx, r);
+    // Its own size before turning: the layout size (an <svg>'s from its computed width and height).
+    const own = el instanceof HTMLElement ? { w: el.offsetWidth, h: el.offsetHeight } : el instanceof SVGSVGElement ? { w: px(cs.width), h: px(cs.height) } : null;
+    const turned = Math.abs(angle) > 0.5 && own !== null && own.w > 0 && own.h > 0;
+    const box = turned && own ? boxOf(ctx, r, { w: own.w * scale, h: own.h * scale }) : boxOf(ctx, r);
     if (box.w < 0.5 || box.h < 0.5) {
         // Nothing of its own to show; what overflows it still does.
         if (cs.overflowX !== "visible" || cs.overflowY !== "visible" || REPLACED.has(tag)) return [];
@@ -995,8 +1094,21 @@ function walk(el: Element, parentCtx: Ctx): CaptureNode[] {
     let style = styleOf(el, cs, ctx, box);
     if (turned) style.rotation = round(angle);
     if (hidden) style = hiddenStyle(style);
-    const node: CaptureNode = { tag, name: nameOf(el), box, style, children: [] };
+    const node: CaptureNode = { tag, name: nameOf(el), box, style, path: domPath(el), children: [] };
     if (el.getAttribute("data-nagma-pseudo")) node.name = `::${el.getAttribute("data-nagma-pseudo")}`;
+    const live = liveParts.get(el);
+    if (live) {
+        // A part the page runs with script: a Live frame with its markup, styles and a shim.
+        node.live = live;
+        node.name = `Live: ${node.name}`;
+        return [node];
+    }
+    const stateKey = session?.keys.get(el);
+    if (stateKey !== undefined && !session?.reading) {
+        session?.ctxs.set(stateKey, parentCtx);
+        session?.nodes.set(stateKey, node);
+        (node as CaptureNode & { stateKey?: number }).stateKey = stateKey;
+    }
     if (fixed) node.scroll = "fixed";
     else if (cs.position === "sticky") node.scroll = "sticky";
     if (tag === "a" && ctx.href) node.href = ctx.href;
@@ -1029,25 +1141,35 @@ function walk(el: Element, parentCtx: Ctx): CaptureNode[] {
         return [node];
     }
     if (tag === "video") {
+        // The frame showing now: drawn from the video when the page may read it, else taken from
+        // the screen (a video from another origin); the poster only before any frame has loaded.
         const v = el as HTMLVideoElement;
+        const src = v.currentSrc || v.src || v.querySelector("source")?.src || "";
         let asset: string | null = null;
+        let bitmap = false;
         if (v.readyState >= 2 && v.videoWidth) {
             try {
                 const c = document.createElement("canvas");
                 c.width = v.videoWidth;
                 c.height = v.videoHeight;
                 c.getContext("2d")?.drawImage(v, 0, 0);
-                asset = ctx.assets.addData("video frame", c.toDataURL("image/jpeg", 0.9));
+                asset = ctx.assets.addData(src || "video frame", c.toDataURL("image/jpeg", 0.92));
             } catch {
-                asset = null;
+                asset = ctx.assets.addScreenshot(src || "video", box);
+                bitmap = true;
             }
         }
         if (!asset && v.poster) asset = ctx.assets.add(v.poster, box);
         if (!asset) {
-            asset = ctx.assets.addScreenshot("video", box);
-            node.name = `${node.name} (bitmap)`;
+            asset = ctx.assets.addScreenshot(src || "video", box);
+            bitmap = true;
         }
         node.image = { asset, fit: cs.objectFit === "fill" ? "fill" : cs.objectFit };
+        if (src) {
+            node.video = { src };
+            node.name = `Video · ${src.startsWith("data:") || src.startsWith("blob:") ? src.slice(0, 40) : src}`;
+        }
+        if (bitmap) node.name = `${node.name} (bitmap)`;
         return [node];
     }
     if (SCREENSHOT_TAGS.has(tag)) {
@@ -1061,7 +1183,10 @@ function walk(el: Element, parentCtx: Ctx): CaptureNode[] {
     }
     if (cs.display === "list-item") {
         const marker = markerNode(el, cs, box, ctx);
-        if (marker) node.children.push(marker);
+        if (marker) {
+            marker.path = `${domPath(el)}>::marker`;
+            node.children.push(marker);
+        }
     }
     node.children.push(...walkChildren(el, childCtx));
     return [node];
@@ -1069,7 +1194,15 @@ function walk(el: Element, parentCtx: Ctx): CaptureNode[] {
 
 // ---- The page ----
 
-function fontsOf(root: CaptureNode): CaptureFont[] {
+// Every @font-face rule, in any sheet (other origins' from their fetched text), at any depth.
+function* fontFaceRules(list: CSSRuleList): Generator<CSSFontFaceRule> {
+    for (const rule of Array.from(list)) {
+        if (rule instanceof CSSFontFaceRule) yield rule;
+        else if ("cssRules" in rule && (rule as CSSGroupingRule).cssRules && !(rule instanceof CSSKeyframesRule)) yield* fontFaceRules((rule as CSSGroupingRule).cssRules);
+    }
+}
+
+function fontsOf(root: CaptureNode, sheets: ExtraSheet[]): CaptureFont[] {
     const used = new Map<string, { weights: Set<number>; styles: Set<string> }>();
     const note = (st: Partial<CaptureTextStyle>, base: CaptureTextStyle) => {
         const family = st.family ?? base.family;
@@ -1084,30 +1217,43 @@ function fontsOf(root: CaptureNode): CaptureFont[] {
             for (const r of n.text.runs) note(r.style, n.text.style);
         }
         n.children.forEach(visit);
+        for (const v of [n.states?.hover, n.states?.active, n.states?.focus]) if (v) visit(v);
     };
     visit(root);
-    const sources = new Map<string, string[]>();
-    for (const sheet of Array.from(document.styleSheets)) {
+    const faces = new Map<string, CaptureFontFace[]>();
+    for (const { sheet, href } of readableSheets(sheets)) {
         let rules: CSSRuleList;
         try {
             rules = sheet.cssRules;
         } catch {
             continue;
         }
-        for (const rule of Array.from(rules)) {
-            if (!(rule instanceof CSSFontFaceRule)) continue;
-            const family = rule.style.getPropertyValue("font-family").replace(/^["']|["']$/g, "");
-            const urls = [...rule.style.getPropertyValue("src").matchAll(/url\(["']?([^"')]+)["']?\)/g)].map((m) => {
+        for (const rule of fontFaceRules(rules)) {
+            const family = rule.style.getPropertyValue("font-family").trim().replace(/^["']|["']$/g, "");
+            if (!family) continue;
+            const src = rule.style.getPropertyValue("src");
+            // The first source that's a file (not local()), preferring WOFF2.
+            const files = [...src.matchAll(/url\(\s*["']?([^"')]+)["']?\s*\)(?:\s*format\(\s*["']?([\w-]+)["']?\s*\))?/g)].map((m) => {
+                let url = m[1] as string;
                 try {
-                    return new URL(m[1] as string, sheet.href ?? document.baseURI).href;
+                    url = new URL(url, href).href;
                 } catch {
-                    return m[1] as string;
+                    // Kept as written.
                 }
+                return { url, format: m[2] ?? (/\.woff2(\?|#|$)/i.test(url) ? "woff2" : /\.woff(\?|#|$)/i.test(url) ? "woff" : /\.otf(\?|#|$)/i.test(url) ? "opentype" : /\.ttf(\?|#|$)/i.test(url) ? "truetype" : undefined) };
             });
-            sources.set(family, [...(sources.get(family) ?? []), ...urls]);
+            const pick = files.find((f) => f.format === "woff2") ?? files.find((f) => f.format !== "embedded-opentype" && f.format !== "svg") ?? null;
+            if (!pick) continue;
+            const face: CaptureFontFace = { weight: rule.style.getPropertyValue("font-weight").trim() || "400", style: rule.style.getPropertyValue("font-style").trim() || "normal", url: pick.url, ...(pick.format ? { format: pick.format } : {}) };
+            const list = faces.get(family.toLowerCase()) ?? [];
+            if (!list.some((f) => f.url === face.url)) list.push(face);
+            faces.set(family.toLowerCase(), list);
         }
     }
-    return [...used.entries()].map(([family, e]) => ({ family, weights: [...e.weights].sort((a, b) => a - b), styles: [...e.styles], ...(sources.get(family)?.length ? { sources: sources.get(family) } : {}) }));
+    return [...used.entries()].map(([family, e]) => {
+        const list = faces.get(family.toLowerCase()) ?? [];
+        return { family, weights: [...e.weights].sort((a, b) => a - b), styles: [...e.styles], ...(list.length ? { sources: list.map((f) => f.url), faces: list } : {}) };
+    });
 }
 
 function transparent(c: string): boolean {
@@ -1149,14 +1295,123 @@ async function readInPage(assets: Assets, budget: { left: number }, all: boolean
     assets.pending = still;
 }
 
+// ---- States ----
+
+// A capture that reads interaction states keeps the page prepared (stand-ins for pseudo elements,
+// the elements numbered) until the states are read: here, or by the service worker in turns.
+interface Session {
+    keys: Map<Element, number>;
+    elements: StateElement[];
+    ctxs: Map<number, Ctx>;
+    nodes: Map<number, CaptureNode>;
+    assets: Assets;
+    undo: () => void;
+    // While a state is being read: the walk doesn't register elements again.
+    reading: boolean;
+    baseline: Map<number, { node: CaptureNode | null; own: Record<string, string> }>;
+}
+
+let session: Session | null = null;
+// The interactive parts of this capture, by their root element.
+let liveParts = new Map<Element, CaptureLive>();
+
+// The parts of a subtree that show: what the element looks like, without names, asset ids (a
+// canvas read twice gets two ids) or bookkeeping.
+function fingerprint(node: CaptureNode | null): string {
+    return JSON.stringify(node, (k, v) => (k === "name" || k === "asset" || k === "stateKey" || k === "path" ? undefined : v));
+}
+
+function readOne(key: number): CaptureNode | null {
+    const s = session;
+    const el = s?.elements[key]?.el;
+    const ctx = s?.ctxs.get(key);
+    if (!s || !el || !ctx) return null;
+    s.reading = true;
+    try {
+        return walk(el, ctx)[0] ?? null;
+    } finally {
+        s.reading = false;
+    }
+}
+
+// The element's default look, read the way its states will be (transitions off).
+function readBaseline(key: number) {
+    const el = session?.elements[key]?.el;
+    if (!session || !el) return;
+    session.baseline.set(key, { node: readOne(key), own: ownStyle(el) });
+}
+
+// One state of one element, as the page draws it now (the state is already forced): the subtree
+// when it looks different from the default, and what changed on the element itself.
+function readState(key: number, state: CaptureStateName): { node: CaptureNode; changes: Record<string, [string, string]> } | null {
+    const el = session?.elements[key]?.el;
+    const base = session?.baseline.get(key);
+    if (!session || !el || !base) return null;
+    const node = readOne(key);
+    if (!node || fingerprint(node) === fingerprint(base.node)) return null;
+    return { node, changes: styleChanges(base.own, ownStyle(el)) };
+}
+
+function attachState(key: number, state: CaptureStateName, read: { node: CaptureNode; changes: Record<string, [string, string]> } | null) {
+    const target = session?.nodes.get(key);
+    const element = session?.elements[key];
+    if (!target || !element || !read) return;
+    target.states ??= { changes: {}, transition: element.transition };
+    target.states[state] = read.node;
+    target.states.changes[state] = read.changes;
+}
+
+// Every state of every element, forced with the attribute twins of the page's rules.
+function readStatesHere(sheets: ExtraSheet[]) {
+    if (!session) return;
+    const still = stillTransitions();
+    const uninstall = installForcedRules(sheets);
+    try {
+        session.elements.forEach((e, key) => {
+            readBaseline(key);
+            for (const state of e.states) {
+                const undo = applyState(e.el, state);
+                try {
+                    attachState(key, state, readState(key, state));
+                } finally {
+                    undo();
+                }
+            }
+        });
+    } finally {
+        uninstall();
+        still();
+    }
+}
+
+function endSession() {
+    if (!session) return;
+    session.undo();
+    for (const el of session.keys.keys()) el.removeAttribute("data-nagma-state");
+    session = null;
+}
+
+// ---- The page ----
+
 export async function capturePage(options: CaptureOptions = {}): Promise<CaptureResult> {
     familyCache.clear();
     loadedFamilies = null;
-    const assets = new Assets();
+    pathCache.clear();
+    endSession();
+    const assets = new Assets(options.assetPrefix ?? "a");
     const ctx: Ctx = { ox: window.scrollX, oy: window.scrollY, turns: [], assets };
+    // Before the stand-ins for pseudo elements go in: the parts' markup is the page's own.
+    try {
+        liveParts = options.live ? captureLiveParts(options.sheets ?? []) : new Map();
+    } finally {
+        clearListenerMarks();
+    }
     const undo = standInPseudos();
+    const elements = options.states ? findStateElements(options.sheets ?? []) : [];
+    session = { keys: new Map(elements.map((e, i) => [e.el, i])), elements, ctxs: new Map(), nodes: new Map(), assets, undo, reading: false, baseline: new Map() };
     let root: CaptureNode;
     let background: string;
+    let keep = false;
     try {
         const htmlCs = getComputedStyle(document.documentElement);
         const bodyCs = getComputedStyle(document.body);
@@ -1164,10 +1419,21 @@ export async function capturePage(options: CaptureOptions = {}): Promise<Capture
         const fromBody = transparent(htmlCs.backgroundColor) && !transparent(bodyCs.backgroundColor);
         background = fromBody ? bodyCs.backgroundColor : transparent(htmlCs.backgroundColor) ? "rgb(255, 255, 255)" : htmlCs.backgroundColor;
         const nodes = walk(document.body, ctx);
-        root = nodes[0] ?? { tag: "body", name: "Body", box: { x: 0, y: 0, w: document.documentElement.clientWidth, h: 1 }, style: emptyStyle(), children: [] };
+        // A body with no size of its own (everything in it positioned) hands back its children:
+        // they go in a body as big as the page.
+        const only = nodes.length === 1 ? nodes[0] : undefined;
+        root =
+            only && only.tag === "body"
+                ? only
+                : { tag: "body", name: "Body", box: { x: 0, y: 0, w: document.documentElement.clientWidth, h: Math.max(document.documentElement.scrollHeight, document.body.scrollHeight, 1) }, style: emptyStyle(), path: "body", children: nodes };
         if (fromBody) root.style.backgroundColor = "rgba(0, 0, 0, 0)";
+        if (options.states === "rules") readStatesHere(options.sheets ?? []);
+        else if (options.states === "external" && session.nodes.size) {
+            for (const [el, key] of session.keys) if (session.nodes.has(key)) el.setAttribute("data-nagma-state", String(key));
+            keep = true;
+        }
     } finally {
-        undo();
+        if (!keep) endSession();
     }
     const budget = { left: options.maxAssetBytes ?? 40 * 1024 * 1024 };
     await readInPage(assets, budget, Boolean(options.inlineAssets));
@@ -1184,9 +1450,72 @@ export async function capturePage(options: CaptureOptions = {}): Promise<Capture
         background,
         root,
         assets: assets.data,
-        fonts: fontsOf(root),
+        fonts: fontsOf(root, options.sheets ?? []),
     };
-    return { capture, pending: assets.pending };
+    if (!keep) stripKeys(root);
+    return { capture, pending: assets.pending, ...(keep ? { stateKeys: session?.elements.length ?? 0 } : {}) };
 }
 
+function stripKeys(node: CaptureNode) {
+    delete (node as CaptureNode & { stateKey?: number }).stateKey;
+    node.children.forEach(stripKeys);
+}
+
+// The service worker's side of "external" states: transitions off and baselines read, then each
+// state read while the devtools protocol forces it, then the page put back.
+function stateBegin(): { key: number; states: CaptureStateName[]; transition: CaptureStates["transition"] }[] {
+    if (!session) return [];
+    const still = stillTransitions();
+    const prev = session.undo;
+    session.undo = () => {
+        still();
+        prev();
+    };
+    const out: { key: number; states: CaptureStateName[]; transition: CaptureStates["transition"] }[] = [];
+    session.elements.forEach((e, key) => {
+        if (!session?.nodes.has(key)) return;
+        readBaseline(key);
+        out.push({ key, states: e.states, transition: e.transition });
+    });
+    return out;
+}
+
+// When the devtools protocol isn't there after all: every state read here, by key.
+function stateAllHere(sheets: ExtraSheet[]): Record<number, CaptureStates> {
+    if (!session) return {};
+    readStatesHere(sheets);
+    const out: Record<number, CaptureStates> = {};
+    for (const [key, node] of session.nodes) if (node.states) out[key] = node.states;
+    return out;
+}
+
+function stateRead(key: number, state: CaptureStateName): { node: CaptureNode; changes: Record<string, [string, string]> } | null {
+    return readState(key, state);
+}
+
+async function stateEnd(): Promise<{ assets: Record<string, { url: string; data: string | null; bitmap?: boolean }>; pending: PendingAsset[] }> {
+    const assets = session?.assets;
+    endSession();
+    if (!assets) return { assets: {}, pending: [] };
+    await readInPage(assets, { left: 8 * 1024 * 1024 }, false);
+    return { assets: assets.data, pending: assets.pending };
+}
+
+const api = globalThis as unknown as Record<string, unknown>;
+api.__nagmaStateBegin = stateBegin;
+api.__nagmaStateRead = stateRead;
+api.__nagmaStateEnd = stateEnd;
+api.__nagmaStateAll = stateAllHere;
+api.__nagmaUnreadableSheets = unreadableSheets;
+api.__nagmaListenerCandidates = listenerCandidates;
+api.__nagmaMarkListener = markListener;
+api.__nagmaViewport = () => ({ w: document.documentElement.clientWidth, h: window.innerHeight });
+// After a width change: two frames for layout, then the fonts and the pictures in view.
+api.__nagmaSettle = async () => {
+    // (A tab in the background gets no animation frames: a timeout stands in.)
+    await Promise.race([new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))), new Promise((r) => setTimeout(r, 300))]);
+    await Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 1500))]);
+    await Promise.race([Promise.all(Array.from(document.images).filter((i) => !i.complete).map((i) => new Promise((r) => { i.addEventListener("load", r, { once: true }); i.addEventListener("error", r, { once: true }); }))), new Promise((r) => setTimeout(r, 1500))]);
+    return true;
+};
 (globalThis as unknown as { __nagmaCapture: typeof capturePage }).__nagmaCapture = capturePage;

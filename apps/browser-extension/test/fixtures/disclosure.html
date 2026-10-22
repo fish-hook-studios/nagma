@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Disclosure · Lumen</title>
+<link rel="stylesheet" href="fonts.css">
+<style>
+body { margin: 0; font-family: "Source Sans 3", sans-serif; background: #fff; color: #101828; }
+main { padding: 56px; }
+.box { width: 560px; border: 1px solid #eaecf0; border-radius: 12px; }
+.head { padding: 16px 20px; font-weight: 700; cursor: pointer; }
+.body { padding: 0 20px 16px; color: #475467; display: none; }
+.box.open .body { display: block; }
+</style></head>
+<body><main>
+<!-- No ARIA: only the page's listener says the header opens the text under it. -->
+<div class="box"><div class="head">Show the details</div><div class="body">Only a script listener on the header says it opens this.</div></div>
+</main>
+<script>document.querySelector(".head").addEventListener("click", (e) => e.currentTarget.parentElement.classList.toggle("open"));</script>
+</body></html>

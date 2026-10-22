@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Video · Studio</title>
+<link rel="stylesheet" href="fonts.css">
+<style>
+body { margin: 0; font-family: "Source Sans 3", sans-serif; background: #101828; color: #fff; }
+main { display: flex; gap: 32px; padding: 48px; }
+figure { margin: 0; }
+video { display: block; width: 560px; height: 315px; border-radius: 16px; object-fit: cover; background: #000; }
+figcaption { margin-top: 12px; color: #d0d5dd; }
+</style></head>
+<body><main>
+<figure><video id="same" src="media/clip.webm" muted preload="auto"></video><figcaption>From this page's own address</figcaption></figure>
+<!-- Another origin (localhost vs 127.0.0.1) without CORS: the page can't read its pixels. -->
+<figure><video id="other" src="http://localhost:5733/media/clip.webm" muted preload="auto"></video><figcaption>From another address</figcaption></figure>
+</main>
+<script>
+// Both stopped on the same frame, one second in.
+for (const v of document.querySelectorAll("video")) v.addEventListener("loadeddata", () => { v.currentTime = 1; }, { once: true });
+</script>
+</body></html>

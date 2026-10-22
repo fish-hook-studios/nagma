@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Responsive · Lumen</title>
+<link rel="stylesheet" href="fonts.css">
+<style>
+body { margin: 0; font-family: "Source Sans 3", sans-serif; background: #f9fafb; color: #101828; }
+header { display: flex; align-items: center; justify-content: space-between; padding: 18px 48px; background: #fff; border-bottom: 1px solid #eaecf0; }
+.brand { font-weight: 700; font-size: 22px; }
+nav { display: flex; gap: 28px; }
+nav a { color: #475467; text-decoration: none; font-weight: 600; }
+.menu { display: none; width: 40px; height: 40px; border-radius: 8px; background: #f2f4f7; border: 0; }
+.menu span { display: block; width: 18px; height: 2px; margin: 4px auto; background: #344054; }
+.hero { padding: 72px 48px 48px; }
+.hero h1 { font-size: 52px; line-height: 1.1; margin: 0 0 16px; max-width: 760px; }
+.hero p { font-size: 20px; color: #475467; margin: 0; max-width: 640px; }
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; padding: 0 48px 72px; }
+.tile { background: #fff; border: 1px solid #eaecf0; border-radius: 16px; padding: 24px; }
+.tile .icon { width: 44px; height: 44px; border-radius: 12px; background: #eef2ff; margin-bottom: 16px; }
+.tile h3 { margin: 0 0 6px; font-size: 20px; }
+.tile p { margin: 0; color: #475467; }
+@media (max-width: 1023px) {
+  header { padding: 16px 32px; }
+  .hero { padding: 56px 32px 40px; }
+  .hero h1 { font-size: 42px; }
+  .grid { grid-template-columns: repeat(2, 1fr); padding: 0 32px 56px; }
+}
+@media (max-width: 600px) {
+  header { padding: 14px 20px; }
+  nav { display: none; }
+  .menu { display: block; }
+  .hero { padding: 40px 20px 28px; }
+  .hero h1 { font-size: 32px; }
+  .hero p { font-size: 17px; }
+  .grid { grid-template-columns: 1fr; gap: 16px; padding: 0 20px 40px; }
+}
+</style></head>
+<body>
+<header><span class="brand">Lumen</span><nav><a href="#">Product</a><a href="#">Pricing</a><a href="#">Docs</a><a href="#">Sign in</a></nav><button class="menu" aria-label="Menu"><span></span><span></span><span></span></button></header>
+<section class="hero"><h1>Notes that plan with you</h1><p>Write, link and share. Lumen turns your notes into plans your team can follow.</p></section>
+<section class="grid">
+  <div class="tile"><div class="icon"></div><h3>Notebooks</h3><p>Everything you write, in one place.</p></div>
+  <div class="tile"><div class="icon"></div><h3>Spaces</h3><p>Plan together with your team.</p></div>
+  <div class="tile"><div class="icon"></div><h3>History</h3><p>Every version, kept for you.</p></div>
+  <div class="tile"><div class="icon"></div><h3>Links</h3><p>Notes that point at each other.</p></div>
+  <div class="tile"><div class="icon"></div><h3>Search</h3><p>Find anything in a moment.</p></div>
+  <div class="tile"><div class="icon"></div><h3>Export</h3><p>Take your notes anywhere.</p></div>
+</section>
+</body></html>

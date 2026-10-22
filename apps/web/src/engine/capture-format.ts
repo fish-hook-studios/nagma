@@ -87,6 +87,14 @@ export interface CaptureTextStyle {
     whiteSpace: string;
     direction: "ltr" | "rtl";
     shadows?: CaptureShadow[];
+    // -webkit-text-stroke: the glyphs' outline (centred on the edge). Outlined text has a
+    // transparent `color` and a stroke.
+    stroke?: CaptureTextStroke;
+}
+
+export interface CaptureTextStroke {
+    width: number;
+    color: string;
 }
 
 // A styled range of the text: characters start to end (UTF-16 units), with what differs from the
@@ -96,6 +104,9 @@ export interface CaptureRun {
     end: number;
     style: Partial<CaptureTextStyle>;
     href?: string;
+    // Where the run's characters were drawn, one box per line (runs whose stroke differs from the
+    // block's: the importer sets them as layers of their own over the block).
+    rects?: CaptureBox[];
 }
 
 export interface CaptureText {
@@ -129,7 +140,48 @@ export interface CaptureNode {
     scroll?: "fixed" | "sticky";
     // A link the element opens.
     href?: string;
+    // Where the element sits in the page's DOM ("body>main:1>section:2>h2:0"): tag and index among
+    // its element siblings for each step. Re-captures of the same page match layers by it.
+    path?: string;
+    // How the element looks in each interaction state, when that differs from its default.
+    states?: CaptureStates;
+    // A <video>: where it plays from (the picture is its current frame).
+    video?: { src: string };
+    // A part of the page that keeps working: its HTML, the CSS that applies to it and a behaviour
+    // shim, for a Live frame in place of layers.
+    live?: CaptureLive;
     children: CaptureNode[];
+}
+
+export type CaptureStateName = "hover" | "active" | "focus";
+
+export interface CaptureTransition {
+    // The CSS property the transition is for ("all", "background-color"…), in ms, and the timing
+    // function as computed ("ease", "cubic-bezier(0.2, 0.8, 0.2, 1)").
+    property: string;
+    duration: number;
+    easing: string;
+    delay: number;
+}
+
+export interface CaptureStates {
+    // The element's whole subtree drawn in that state (hover; active is pressed, with hover;
+    // focus is keyboard focus).
+    hover?: CaptureNode;
+    active?: CaptureNode;
+    focus?: CaptureNode;
+    // The element's own computed properties that change in each state: [default, state].
+    changes: Partial<Record<CaptureStateName, Record<string, [string, string]>>>;
+    transition: CaptureTransition | null;
+}
+
+export interface CaptureLive {
+    html: string;
+    css: string;
+    js: string;
+    // The behaviour the shim gives it: "tabs", "carousel", "accordion", "dialog", "autocomplete",
+    // "toggle", "counter".
+    pattern: string;
 }
 
 export interface CaptureAsset {
@@ -147,6 +199,28 @@ export interface CaptureFont {
     styles: string[];
     // Font files the page loaded for it, when it's a web font.
     sources?: string[];
+    // Its @font-face rules: the descriptors and the file each loads, with the file itself (an
+    // asset holding a data URL) when the extension could read it.
+    faces?: CaptureFontFace[];
+}
+
+export interface CaptureFontFace {
+    // As in the rule: "400", "700 800", "normal", "italic".
+    weight: string;
+    style: string;
+    url: string;
+    format?: string;
+    asset?: string;
+}
+
+// The page at another window width (Phase 2 breakpoints): the capture itself is the first.
+export interface CaptureBreakpoint {
+    label: string;
+    width: number;
+    viewport: { w: number; h: number };
+    scroll: { w: number; h: number };
+    background: string;
+    root: CaptureNode;
 }
 
 export interface Capture {
@@ -163,6 +237,10 @@ export interface Capture {
     root: CaptureNode;
     assets: Record<string, CaptureAsset>;
     fonts: CaptureFont[];
+    // Breakpoints: the label of the width this capture was taken at ("Desktop"), and the same page
+    // at the other widths (their pictures share `assets`).
+    label?: string;
+    breakpoints?: CaptureBreakpoint[];
 }
 
 export class NotACapture extends Error {}
@@ -182,7 +260,15 @@ export function parseCapture(input: string | unknown): Capture {
     if (typeof c.version !== "number" || c.version > CAPTURE_VERSION) throw new NotACapture("it was made by a newer Nagma Capture.");
     if (!c.root || typeof c.root !== "object" || !Array.isArray(c.root.children) || !c.root.box) throw new NotACapture("the capture is damaged.");
     if (!c.viewport || !(c.viewport.w > 0)) throw new NotACapture("the capture is damaged.");
-    return { ...c, assets: c.assets && typeof c.assets === "object" ? c.assets : {}, fonts: Array.isArray(c.fonts) ? c.fonts : [], title: typeof c.title === "string" ? c.title : "", url: typeof c.url === "string" ? c.url : "" } as Capture;
+    const breakpoints = Array.isArray(c.breakpoints) ? c.breakpoints.filter((b) => b && typeof b === "object" && b.root && Array.isArray(b.root.children) && b.root.box && b.viewport?.w > 0) : [];
+    return {
+        ...c,
+        assets: c.assets && typeof c.assets === "object" ? c.assets : {},
+        fonts: Array.isArray(c.fonts) ? c.fonts : [],
+        title: typeof c.title === "string" ? c.title : "",
+        url: typeof c.url === "string" ? c.url : "",
+        ...(breakpoints.length ? { breakpoints } : { breakpoints: undefined }),
+    } as Capture;
 }
 
 export function isCaptureFile(file: File): boolean {

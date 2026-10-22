@@ -1,0 +1,3 @@
+/* Served from another origin than states.html: only the extension can read these rules. */
+.chip { transition: background-color .3s linear; }
+.chip:hover { background: #fef3c7; color: #92400e; }

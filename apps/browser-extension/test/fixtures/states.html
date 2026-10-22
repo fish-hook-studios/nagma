@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>States · Lumen</title>
+<link rel="stylesheet" href="fonts.css">
+<!-- From another origin (localhost vs 127.0.0.1): the page can't read its rules; the extension fetches it. -->
+<link rel="stylesheet" href="http://localhost:5733/states-remote.css">
+<style>
+body { margin: 0; font-family: "Source Sans 3", sans-serif; background: #ffffff; color: #101828; }
+.nav { display: flex; align-items: center; gap: 8px; padding: 16px 48px; border-bottom: 1px solid #eaecf0; }
+.nav .brand { font-weight: 700; font-size: 20px; margin-right: 24px; }
+.nav a { padding: 8px 12px; border-radius: 6px; color: #475467; text-decoration: none; font-weight: 600; transition: color .15s ease, background-color .15s ease; }
+.nav a:hover { color: #4f46e5; background-color: #eef2ff; }
+main { padding: 48px; }
+h1 { font-size: 36px; margin: 0 0 24px; }
+.row { display: flex; gap: 16px; align-items: center; margin-bottom: 40px; }
+.btn { border: 0; border-radius: 10px; padding: 12px 22px; font: 600 16px "Source Sans 3", sans-serif; background: #4f46e5; color: #fff; cursor: pointer; transition: background-color .2s cubic-bezier(.2, .8, .2, 1), transform .2s cubic-bezier(.2, .8, .2, 1); }
+.btn:hover { background: #4338ca; }
+.btn:active { background: #3730a3; transform: scale(.96); }
+.btn.secondary { background: #fff; color: #344054; box-shadow: inset 0 0 0 1px #d0d5dd; }
+.btn.secondary:hover { background: #f2f4f7; }
+.btn:focus-visible { outline: 3px solid #a5b4fc; outline-offset: 2px; }
+.field { width: 280px; padding: 11px 14px; border: 1px solid #d0d5dd; border-radius: 8px; font: 16px "Source Sans 3", sans-serif; color: #101828; transition: border-color .15s ease, box-shadow .15s ease; }
+.field:focus { outline: none; border-color: #4f46e5; box-shadow: 0 0 0 4px rgba(79, 70, 229, .2); }
+.cards { display: flex; gap: 24px; }
+.card { width: 260px; padding: 24px; border-radius: 16px; border: 1px solid #eaecf0; background: #fff; transition: transform .25s ease-out, box-shadow .25s ease-out; }
+.card:hover { transform: translateY(-4px); box-shadow: 0 12px 32px rgba(16, 24, 40, .14); }
+.card h3 { margin: 0 0 8px; font-size: 20px; transition: color .25s ease-out; }
+.card:hover h3 { color: #4f46e5; }
+.card p { margin: 0; color: #475467; }
+.chip { display: inline-block; padding: 6px 12px; border-radius: 999px; background: #f2f4f7; color: #344054; font-size: 14px; }
+</style></head>
+<body>
+<nav class="nav"><span class="brand">Lumen</span><a href="#">Product</a><a href="#">Pricing</a><a href="#">Docs</a><a href="#">Blog</a></nav>
+<main>
+<h1>Buttons, fields and cards</h1>
+<div class="row"><button class="btn">Save changes</button><button class="btn secondary">Cancel</button><input class="field" placeholder="Search the docs"><span class="chip">New</span></div>
+<div class="cards">
+  <div class="card"><h3>Notebooks</h3><p>Write, link and share your notes.</p></div>
+  <div class="card"><h3>Spaces</h3><p>Plan together in one place.</p></div>
+  <div class="card"><h3>History</h3><p>Every version, kept for you.</p></div>
+</div>
+</main>
+</body></html>

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Carousel · Shop</title>
+<link rel="stylesheet" href="fonts.css">
+<style>
+body { margin: 0; font-family: "Source Sans 3", sans-serif; background: #fff; color: #101828; }
+main { padding: 48px; }
+.head { display: flex; align-items: center; justify-content: space-between; width: 960px; margin-bottom: 16px; }
+.head h1 { margin: 0; font-size: 32px; }
+.arrows { display: flex; gap: 8px; }
+.arrow { width: 44px; height: 44px; border-radius: 999px; border: 1px solid #d0d5dd; background: #fff; font-size: 20px; cursor: pointer; }
+.track { display: flex; gap: 16px; width: 960px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; }
+.track::-webkit-scrollbar { display: none; }
+.slide { flex: 0 0 300px; scroll-snap-align: start; border-radius: 16px; overflow: hidden; background: #f2f4f7; }
+.slide .pic { height: 220px; background-size: cover; background-position: center; }
+.slide h3 { margin: 12px 16px 4px; font-size: 18px; }
+.slide p { margin: 0 16px 16px; color: #475467; }
+</style></head>
+<body><main>
+<div class="carousel">
+  <div class="head"><h1>New this week</h1><div class="arrows"><button class="arrow" aria-label="Previous">‹</button><button class="arrow" aria-label="Next">›</button></div></div>
+  <div class="track">
+    <div class="slide"><div class="pic" style="background-image:url(img/product-1.jpg)"></div><h3>Desk lamp</h3><p>$48</p></div>
+    <div class="slide"><div class="pic" style="background-image:url(img/product-2.jpg)"></div><h3>Notebook</h3><p>$12</p></div>
+    <div class="slide"><div class="pic" style="background-image:url(img/product-3.jpg)"></div><h3>Pen set</h3><p>$24</p></div>
+    <div class="slide"><div class="pic" style="background-image:url(img/product-4.jpg)"></div><h3>Mug</h3><p>$16</p></div>
+    <div class="slide"><div class="pic" style="background-image:url(img/product-5.jpg)"></div><h3>Planner</h3><p>$30</p></div>
+    <div class="slide"><div class="pic" style="background-image:url(img/product-6.jpg)"></div><h3>Bag</h3><p>$64</p></div>
+  </div>
+</div>
+</main>
+<script>
+const track = document.querySelector(".track");
+document.querySelector('[aria-label="Next"]').addEventListener("click", () => track.scrollBy({ left: 316, behavior: "smooth" }));
+document.querySelector('[aria-label="Previous"]').addEventListener("click", () => track.scrollBy({ left: -316, behavior: "smooth" }));
+</script>
+</body></html>

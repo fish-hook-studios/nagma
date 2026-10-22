@@ -1,12 +1,13 @@
 import { nanoid } from "nanoid";
-import type { Capture, CaptureBackground, CaptureNode, CaptureShadow, CaptureStyle, CaptureText, CaptureTextStyle } from "./capture-format";
+import type { Capture, CaptureBackground, CaptureNode, CaptureShadow, CaptureStateName, CaptureStyle, CaptureText, CaptureTextStyle, CaptureTransition } from "./capture-format";
 import { settle } from "./commands";
 import { mirrorId } from "./components";
 import { syncLayouts } from "./layout";
 import { makeNode } from "./nodes";
 import { imagePaint, solid } from "./paint";
 import { parseColor, svgLayerCommands } from "./svg-import";
-import type { AutoLayout, Effect, GradientPaint, GradientStop, NagmaDocument, Paint, SceneNode, TextSpan } from "./types";
+import type { StateStyle, SiteNodeData } from "../site/types";
+import type { AutoLayout, Effect, GradientPaint, GradientStop, Interaction, NagmaDocument, Paint, SceneNode, TextSpan, Transition } from "./types";
 
 // A page capture (engine/capture-format.ts, made by Nagma Capture) as a Design document: one top
 // frame named after the page, the viewport's width and the page's full height, holding the page's
@@ -26,21 +27,36 @@ export interface CaptureImportOptions {
     fontFor?: (family: string) => string | null;
     // Repeated siblings become a component and instances (on unless false).
     components?: boolean;
+    // Elements with hover, press and focus looks become component sets with those variants and
+    // prototype interactions between them (on unless false).
+    states?: boolean;
 }
 
 export interface CaptureImportResult {
     doc: NagmaDocument;
-    // The page's top frame.
+    // The page's top frame (the widest, when it was captured at several widths), and all of them.
     frameId: string;
+    frameIds: string[];
     // The families the layers use, for loading.
     families: string[];
     // Families that weren't available and fell back to Inter.
     substituted: string[];
     components: number;
     instances: number;
+    // Elements whose interaction states became component sets.
+    stateSets: number;
     // Pictures the capture couldn't read (left as grey placeholders).
     missingImages: number;
 }
+
+// What the importer keeps on layers (plugin data, so it travels with the file): the page's address
+// and when it was captured on the top frame, each layer's DOM path and each picture's source, which
+// a later capture of the same page is compared against (engine/capture-diff.ts).
+export const CAPTURE_URL = "capture:url";
+export const CAPTURE_AT = "capture:at";
+export const CAPTURE_WIDTH = "capture:width";
+export const CAPTURE_PATH = "capture:path";
+export const CAPTURE_SRC = "capture:src";
 
 const FALLBACK_FAMILY = "Inter";
 
@@ -406,6 +422,13 @@ function hasVisuals(node: Partial<SceneNode>): boolean {
 const TEXT_CASE = { none: "none", uppercase: "upper", lowercase: "lower", capitalize: "title" } as const;
 const DECORATION = { none: "none", underline: "underline", "line-through": "strikethrough" } as const;
 
+export interface Anchor {
+    id: string;
+    align: CaptureTextStyle["align"];
+    x: number;
+    w: number;
+}
+
 interface Ctx {
     nodes: Record<string, SceneNode>;
     images: Record<string, string>;
@@ -418,7 +441,18 @@ interface Ctx {
     blank: NagmaDocument;
     // Single lines that size themselves: where they sat on the page, to line them up again once
     // measured (centred and right-aligned text grows from its own side).
-    anchors: { id: string; align: CaptureTextStyle["align"]; x: number; w: number }[];
+    anchors: Anchor[];
+    // Capture asset ids to where the picture came from.
+    sources: Map<string, string>;
+    // Component sets for interaction states sit beside the page frame, one under another.
+    states: boolean;
+    pageId: string;
+    setsAt: { x: number; y: number };
+    stateSets: number;
+    // Elements that look and behave alike share one set: by their look, the default variant.
+    setsByLook: Map<string, string>;
+    // Sites: hover and press looks become the layer's web hover and press states instead.
+    siteStates?: boolean;
 }
 
 function family(ctx: Ctx, captured: string): { family: string; missing: boolean } {
@@ -442,6 +476,12 @@ function spansOf(ctx: Ctx, text: CaptureText, size: number, lineHeight: number):
             const c = cssColor(s.color);
             if (c) span.fills = [solid(c.hex, c.alpha)];
         }
+        // Outlined characters that can't be a layer of their own (they wrap across lines): drawn
+        // filled in the outline's colour.
+        if (s.stroke && !outlinedAlone(run)) {
+            const c = cssColor(s.stroke.color);
+            if (c) span.fills = [solid(c.hex, c.alpha)];
+        }
         if (s.weight !== undefined) span.fontWeight = s.weight;
         if (s.size !== undefined) {
             span.fontSize = s.size;
@@ -457,6 +497,58 @@ function spansOf(ctx: Ctx, text: CaptureText, size: number, lineHeight: number):
         if (Object.keys(span).length > 2) spans.push(span);
     }
     return spans;
+}
+
+// A run outlined differently from its block that sits on one line: set over the block as a layer of
+// its own (outlines are per layer), the block leaving its characters clear.
+function outlinedAlone(run: CaptureText["runs"][number]): boolean {
+    return Boolean(run.style.stroke && run.rects?.length === 1);
+}
+
+function strokePaint(stroke: CaptureTextStyle["stroke"]): Partial<SceneNode> {
+    const c = stroke ? cssColor(stroke.color) : null;
+    if (!stroke || !c || c.alpha <= 0) return {};
+    return { strokes: [solid(c.hex, c.alpha)], strokeWidth: stroke.width, strokeAlign: "center", strokeJoin: "round" };
+}
+
+function outlineLayers(ctx: Ctx, cn: CaptureNode, parentId: string): SceneNode[] {
+    const t = cn.text as CaptureText;
+    const out: SceneNode[] = [];
+    for (const run of t.runs) {
+        if (!outlinedAlone(run)) continue;
+        const rect = run.rects?.[0] as NonNullable<typeof run.rects>[number];
+        const st: CaptureTextStyle = { ...t.style, ...run.style };
+        const size = st.size || 16;
+        const lh = t.style.lineHeight ?? rect.h;
+        const content = t.content.slice(run.start, run.end);
+        const fam = family(ctx, st.family);
+        out.push(
+            makeNode(ctx.blank, "text", rect, parentId, {
+                id: nanoid(10),
+                name: `${content.trim()} (outline)`,
+                x: rect.x,
+                y: rect.y + (rect.h - lh) / 2,
+                w: rect.w,
+                h: lh,
+                text: content,
+                fontSize: size,
+                fontWeight: st.weight || 400,
+                fontFamily: fam.family,
+                italic: st.italic,
+                lineHeight: lh / size,
+                letterSpacing: (st.letterSpacing / size) * 100,
+                textAlign: "left",
+                textCase: TEXT_CASE[st.transform] ?? "none",
+                direction: st.direction,
+                fills: [],
+                ...strokePaint(st.stroke),
+                sizing: { h: "hug", v: "hug" },
+                positioning: "absolute",
+                ...(cn.path ? { pluginData: { [CAPTURE_PATH]: `${cn.path}~${run.start}` } } : {}),
+            }),
+        );
+    }
+    return out;
 }
 
 function textNode(ctx: Ctx, cn: CaptureNode, parentId: string, inLayout: boolean): SceneNode {
@@ -506,6 +598,7 @@ function textNode(ctx: Ctx, cn: CaptureNode, parentId: string, inLayout: boolean
         textCase: TEXT_CASE[st.transform] ?? "none",
         direction: st.direction,
         fills: [solid(color.hex, color.alpha)],
+        ...strokePaint(st.stroke),
         sizing: { h: hugs ? "hug" : "fixed", v: "hug" },
         ...(spans.length ? { spans } : {}),
         ...(shadows.length ? { effects: shadows } : {}),
@@ -677,6 +770,7 @@ function buildSvg(ctx: Ctx, cn: CaptureNode, parentId: string): string | null {
         if (node.id === made.frameId) {
             node.name = cn.name;
             node.opacity = cn.style.opacity;
+            if (cn.style.rotation) node.rotation = cn.style.rotation;
         }
         add(ctx, node);
     }
@@ -684,11 +778,48 @@ function buildSvg(ctx: Ctx, cn: CaptureNode, parentId: string): string | null {
 }
 
 // Builds a capture node under a parent; returns the layer made (null when it draws nothing).
-function build(ctx: Ctx, cn: CaptureNode, parentId: string, inLayout: boolean): string | null {
+// `keepFrame`: the node becomes a frame of its own even when it would fold into its only child or
+// draw nothing (a component's root).
+function build(ctx: Ctx, cn: CaptureNode, parentId: string, inLayout: boolean, keepFrame = false): string | null {
+    if (ctx.states && hasStates(cn)) return buildStateful(ctx, cn, parentId);
+    const id = buildLayer(ctx, cn, parentId, inLayout, keepFrame);
+    const node = id ? ctx.nodes[id] : undefined;
+    if (node && ctx.siteStates && cn.states) {
+        const hover = stateStyleOf(cn.states.changes.hover, cn.states.transition);
+        const press = stateStyleOf(cn.states.changes.active, cn.states.transition);
+        if (hover || press) node.site = { ...((node.site as SiteNodeData | undefined) ?? {}), ...(hover ? { hover } : {}), ...(press ? { press } : {}) };
+    }
+    if (node) {
+        const data: Record<string, string> = { ...(node.pluginData ?? {}) };
+        // The innermost element's path stays when a wrapper folds into its child.
+        if (cn.path && !data[CAPTURE_PATH]) data[CAPTURE_PATH] = cn.path;
+        const src = cn.video?.src || (cn.image ? ctx.sources.get(cn.image.asset) : undefined);
+        if (src && !data[CAPTURE_SRC]) data[CAPTURE_SRC] = src;
+        if (Object.keys(data).length) node.pluginData = data;
+    }
+    return id;
+}
+
+function buildLayer(ctx: Ctx, cn: CaptureNode, parentId: string, inLayout: boolean, keepFrame: boolean): string | null {
+    if (cn.live) {
+        // A part the page runs with script: a Live frame running its markup, styles and the
+        // capture's behaviour shim in the sandbox (nothing of the page runs anywhere else).
+        const node = makeNode(ctx.blank, "live", cn.box, parentId, {
+            id: nanoid(10),
+            name: cn.name.startsWith("Live: ") ? cn.name : `Live: ${cn.name}`,
+            ...cn.box,
+            clip: true,
+            sizing: { h: "fixed", v: "fixed" },
+            live: { kind: "html", source: { html: cn.live.html, css: cn.live.css, js: cn.live.js }, props: {} },
+        });
+        add(ctx, node);
+        return node.id;
+    }
     if (cn.text) {
         const node = textNode(ctx, cn, parentId, inLayout);
         add(ctx, node);
         if (node.sizing.h === "hug") ctx.anchors.push({ id: node.id, align: cn.text.style.align, x: cn.box.x, w: cn.box.w });
+        for (const outline of outlineLayers(ctx, cn, parentId)) add(ctx, outline);
         return node.id;
     }
     if (cn.svg) return buildSvg(ctx, cn, parentId);
@@ -718,15 +849,15 @@ function build(ctx: Ctx, cn: CaptureNode, parentId: string, inLayout: boolean): 
     if (!base.effects?.length) delete base.effects;
     const kids = cn.children;
     // A picture with nothing inside: a rectangle.
-    if (cn.image && !kids.length) {
+    if (cn.image && !kids.length && !keepFrame) {
         const node = makeNode(ctx.blank, "rect", box, parentId, { id: nanoid(10), name: cn.name, ...box, ...base, sizing: { h: "fixed", v: "fixed" } });
         add(ctx, node);
         return node.id;
     }
-    if (!kids.length && !hasVisuals(base)) return null;
+    if (!kids.length && !hasVisuals(base) && !keepFrame) return null;
     // A box with no look of its own around a single child that fills it is that child (a heading
     // or a link around its text, a wrapper around a card).
-    if (!hasVisuals(base) && !base.clip && kids.length === 1 && style.opacity === 1 && !style.rotation && !cn.scroll) {
+    if (!keepFrame && !hasVisuals(base) && !base.clip && kids.length === 1 && style.opacity === 1 && !style.rotation && !cn.scroll) {
         const only = kids[0] as CaptureNode;
         const tol = only.text ? 1.5 : 0.5;
         if (near(only.box.x, box.x, tol) && near(only.box.y, box.y, tol) && near(only.box.w, box.w, tol) && near(only.box.h, box.h, tol) && isFlowChild(only) && (!cn.href || only.text)) {
@@ -766,11 +897,153 @@ function build(ctx: Ctx, cn: CaptureNode, parentId: string, inLayout: boolean): 
             if (child.type === "text" && flowIds.has(id) && fit.layout.grid && child.sizing.h === "hug") child.sizing = { h: "fixed", v: "hug" };
         }
     }
-    if (!(ctx.nodes[frame.id] as SceneNode).children.length && !hasVisuals(base)) {
+    if (!keepFrame && !(ctx.nodes[frame.id] as SceneNode).children.length && !hasVisuals(base)) {
         removeLeaf(ctx, frame.id);
         return null;
     }
     return frame.id;
+}
+
+// ---- Interaction states ----
+
+const STATE_ORDER: CaptureStateName[] = ["hover", "active", "focus"];
+const STATE_LABEL: Record<CaptureStateName, string> = { hover: "Hover", active: "Pressed", focus: "Focused" };
+
+function hasStates(cn: CaptureNode): boolean {
+    return Boolean(cn.states && STATE_ORDER.some((s) => cn.states?.[s]));
+}
+
+// A CSS timing function as a prototype easing.
+export function easingOf(css: string | undefined): Pick<Transition, "easing" | "bezier"> {
+    const v = (css ?? "ease").trim().toLowerCase();
+    if (v === "linear" || v.startsWith("linear(") || v.startsWith("steps") || v === "step-start" || v === "step-end") return { easing: "linear" };
+    if (v === "ease-in") return { easing: "ease-in" };
+    if (v === "ease-out") return { easing: "ease-out" };
+    if (v === "ease-in-out") return { easing: "ease-in-out" };
+    const m = /^cubic-bezier\(([^)]+)\)$/.exec(v);
+    const b = v === "ease" ? [0.25, 0.1, 0.25, 1] : m ? (m[1] as string).split(",").map((n) => parseFloat(n)) : null;
+    if (b && b.length === 4 && b.every((n) => Number.isFinite(n))) return { easing: "custom-bezier", bezier: b as [number, number, number, number] };
+    return { easing: "ease-out" };
+}
+
+// The page's CSS transition as the prototype's: match animated, with its duration and easing
+// (instant when the page has none).
+export function transitionOf(t: CaptureTransition | null | undefined): Transition {
+    if (!t || t.duration <= 0) return { type: "instant", direction: "left", duration: 0, easing: "ease-out" };
+    return { type: "smart", direction: "left", duration: Math.round(t.duration), ...easingOf(t.easing) };
+}
+
+// Moves a subtree (positions are on the canvas, so every layer in it moves).
+function shift(ctx: Ctx, id: string, dx: number, dy: number) {
+    const moved = new Set<string>();
+    const visit = (n: string) => {
+        const node = ctx.nodes[n];
+        if (!node) return;
+        node.x += dx;
+        node.y += dy;
+        moved.add(n);
+        node.children.forEach(visit);
+    };
+    visit(id);
+    for (const a of ctx.anchors) if (moved.has(a.id)) a.x += dx;
+}
+
+// An element with hover, press or focus looks: a component set beside the page (State=Default,
+// Hover, Pressed, Focused), with While hovering and While pressing changing to those variants the
+// way the page's transition does, and an instance where the element was.
+// What makes two stateful elements the same component: everything but their names, places and
+// links. (Their text and pictures count: an instance that shows another variant in the prototype
+// takes that variant's layers, so a shared set would show the first element's text on hover.)
+const LOOK_SKIP = new Set(["name", "path", "href", "x", "y", "stateKey"]);
+function lookOf(cn: CaptureNode): string {
+    return JSON.stringify(cn, (k, v) => (LOOK_SKIP.has(k) ? undefined : typeof v === "number" ? Math.round(v) : v));
+}
+
+function instanceOf(ctx: Ctx, plain: CaptureNode, parentId: string, mainId: string): string | null {
+    const copy = build(ctx, plain, parentId, false, true);
+    const copied = copy ? ctx.nodes[copy] : undefined;
+    const main = ctx.nodes[mainId];
+    if (!copy || !copied || !main) return copy;
+    if (main.interactions) copied.interactions = main.interactions;
+    if (!sameShape(ctx.nodes, copy, mainId)) return copy;
+    copied.name = plain.name;
+    makeInstance(ctx.nodes, copy, mainId);
+    return copy;
+}
+
+// Whether two subtrees have the same layers in the same places (an instance mirrors them one to one).
+function sameShape(nodes: Record<string, SceneNode>, a: string, b: string): boolean {
+    const x = nodes[a];
+    const y = nodes[b];
+    if (!x || !y || x.children.length !== y.children.length) return false;
+    if ((x.type === "text") !== (y.type === "text")) return false;
+    return x.children.every((c, i) => sameShape(nodes, c, y.children[i] as string));
+}
+
+function buildStateful(ctx: Ctx, cn: CaptureNode, parentId: string): string | null {
+    const states = cn.states;
+    const plain: CaptureNode = { ...cn, states: undefined };
+    if (!states) return build(ctx, plain, parentId, false);
+    const look = lookOf(cn);
+    const known = ctx.setsByLook.get(look);
+    if (known && ctx.nodes[known]) return instanceOf(ctx, plain, parentId, known);
+    const looks: { label: string; state: CaptureStateName | null; node: CaptureNode }[] = [{ label: "Default", state: null, node: plain }];
+    for (const s of STATE_ORDER) {
+        const look = states[s];
+        if (look) looks.push({ label: STATE_LABEL[s], state: s, node: { ...look, states: undefined, path: cn.path } });
+    }
+    const set = makeNode(ctx.blank, "componentSet", { x: ctx.setsAt.x, y: ctx.setsAt.y, w: 1, h: 1 }, ctx.pageId, {
+        id: nanoid(10),
+        name: cn.name,
+        strokes: [solid("#9747FF")],
+        dash: [4, 4],
+        strokeWidth: 1,
+        fills: [],
+        radius: 5,
+    });
+    add(ctx, set);
+    const variants: { id: string; state: CaptureStateName | null }[] = [];
+    let x = ctx.setsAt.x + 20;
+    let tallest = 0;
+    for (const look of looks) {
+        const id = build(ctx, look.node, set.id, false, true);
+        const node = id ? ctx.nodes[id] : undefined;
+        if (!id || !node) continue;
+        node.type = "component";
+        node.name = `State=${look.label}`;
+        shift(ctx, id, x - node.x, ctx.setsAt.y + 20 - node.y);
+        x += node.w + 20;
+        tallest = Math.max(tallest, node.h);
+        variants.push({ id, state: look.state });
+    }
+    const main = variants.find((v) => v.state === null);
+    if (!main || variants.length < 2) {
+        // Nothing to vary after all: the element as plain layers.
+        for (const v of variants) removeSubtree(ctx, v.id);
+        removeLeaf(ctx, set.id);
+        return build(ctx, plain, parentId, false);
+    }
+    Object.assign(ctx.nodes[set.id] as SceneNode, { w: x - ctx.setsAt.x, h: tallest + 40 });
+    ctx.setsAt.y += tallest + 40 + 40;
+    ctx.stateSets++;
+    // While hovering and While pressing, from the default and (pressing) from the hover look.
+    const transition = transitionOf(states.transition);
+    const to = (state: CaptureStateName) => variants.find((v) => v.state === state)?.id;
+    const change = (trigger: Interaction["trigger"], target: string | undefined): Interaction[] => (target ? [{ trigger, delay: 0, actions: [{ type: "change-to", target, transition }] }] : []);
+    const fromDefault = [...change("hover", to("hover")), ...change("press", to("active"))];
+    if (fromDefault.length) (ctx.nodes[main.id] as SceneNode).interactions = fromDefault;
+    const hoverId = to("hover");
+    if (hoverId && to("active")) (ctx.nodes[hoverId] as SceneNode).interactions = change("press", to("active"));
+    ctx.setsByLook.set(look, main.id);
+    // The instance: a copy of the default look where the element was, linked to the component.
+    return instanceOf(ctx, plain, parentId, main.id);
+}
+
+function removeSubtree(ctx: Ctx, id: string) {
+    const n = ctx.nodes[id];
+    if (!n) return;
+    for (const c of [...n.children]) removeSubtree(ctx, c);
+    removeLeaf(ctx, id);
 }
 
 function removeLeaf(ctx: Ctx, id: string) {
@@ -901,43 +1174,171 @@ export function captureToDocument(capture: Capture, options: CaptureImportOption
     // Pictures get ids of their own (image ids are shared across open files, so a capture's short
     // ones would collide).
     const assets = new Map<string, string>();
+    const fonts = fontAssets(capture);
     for (const [id, asset] of Object.entries(capture.assets ?? {})) {
-        if (!asset?.data || !asset.data.startsWith("data:")) continue;
+        if (!asset?.data || !asset.data.startsWith("data:") || fonts.has(id)) continue;
         const own = nanoid(12);
         assets.set(id, own);
         images[own] = asset.data;
     }
     const blank: NagmaDocument = { name: "", nodes: {}, roots: [], images: {} };
-    const ctx: Ctx = { anchors: [], nodes: {}, images, assets, missing: { count: 0 }, families: new Set(), substituted: new Set(), fontFor: options.fontFor ?? defaultFontFor, blank };
+    const sources = new Map(Object.entries(capture.assets ?? {}).map(([id, a]) => [id, a?.url ?? ""]));
     const name = capture.title?.trim() || hostName(capture.url) || "Captured page";
     const page = makeNode(blank, "page", { x: 0, y: 0, w: 1, h: 1 }, null, { id: nanoid(10), name: "Page 1" });
+    const widths = pageWidths(capture);
+    const ctx: Ctx = { anchors: [], nodes: {}, images, assets, sources, missing: { count: 0 }, families: new Set(), substituted: new Set(), fontFor: options.fontFor ?? defaultFontFor, blank, states: options.states !== false, pageId: page.id, setsAt: { x: 0, y: 0 }, stateSets: 0, setsByLook: new Map() };
     ctx.nodes[page.id] = page;
-    const w = Math.max(1, capture.viewport.w);
-    const h = Math.max(capture.viewport.h, capture.scroll?.h ?? 0, 1);
-    const bg = cssColor(capture.background);
-    const top = makeNode(blank, "frame", { x: 0, y: 0, w, h }, page.id, { id: nanoid(10), name, x: 0, y: 0, w, h, fills: [bg && bg.alpha > 0 ? solid(bg.hex, bg.alpha) : solid("#FFFFFF")], clip: true });
-    add(ctx, top);
-    build(ctx, capture.root, top.id, false);
-    const made = options.components === false ? { components: 0, instances: 0 } : makeComponents(ctx.nodes, top.id);
+    // One frame per width, side by side (named with their width when there are several), and the
+    // component sets for states after them.
+    const frameIds: string[] = [];
+    let x = 0;
+    for (const at of widths) {
+        const label = widths.length > 1 ? `${name} ${at.width}` : name;
+        // Built where the page had it, then moved into its place in the row.
+        const top = topFrame(ctx, capture, at, label);
+        if (frameIds.length === 0) ctx.setsAt = { x: at.width + 200, y: 0 };
+        ctx.states = options.states !== false && frameIds.length === 0;
+        build(ctx, at.root, top, false);
+        if (x) shift(ctx, top, x, 0);
+        frameIds.push(top);
+        x += at.width + BREAKPOINT_SPACING;
+        if (frameIds.length === 1 && ctx.stateSets) x = Math.max(x, ...Object.values(ctx.nodes).filter((n) => n.type === "componentSet").map((n) => n.x + n.w + BREAKPOINT_SPACING));
+    }
+    let made = { components: 0, instances: 0 };
+    if (options.components !== false)
+        for (const id of frameIds) {
+            const m = makeComponents(ctx.nodes, id);
+            made = { components: made.components + m.components, instances: made.instances + m.instances };
+        }
     const raw: NagmaDocument = { name, nodes: ctx.nodes, roots: [page.id], images: ctx.images };
     let doc = settle({ name, nodes: {}, roots: [], images: {} }, raw);
     doc = reanchor(doc, ctx.anchors);
-    return { doc, frameId: top.id, families: [...ctx.families], substituted: [...ctx.substituted], components: made.components, instances: made.instances, missingImages: ctx.missing.count };
+    return { doc, frameId: frameIds[0] as string, frameIds, families: [...ctx.families], substituted: [...ctx.substituted], components: made.components, instances: made.instances, stateSets: ctx.stateSets, missingImages: ctx.missing.count };
+}
+
+// Space between the frames of a capture taken at several widths.
+const BREAKPOINT_SPACING = 160;
+
+export interface CaptureWidth {
+    label: string;
+    width: number;
+    viewport: { w: number; h: number };
+    scroll: { w: number; h: number };
+    background: string;
+    root: CaptureNode;
+}
+
+// The capture's widths, widest first: the capture itself, then its breakpoints.
+export function pageWidths(capture: Capture): CaptureWidth[] {
+    const main: CaptureWidth = { label: capture.label ?? "Desktop", width: Math.max(1, Math.round(capture.viewport.w)), viewport: capture.viewport, scroll: capture.scroll, background: capture.background, root: capture.root };
+    const others = (capture.breakpoints ?? []).map((b) => ({ label: b.label, width: Math.max(1, Math.round(b.viewport.w || b.width)), viewport: b.viewport, scroll: b.scroll, background: b.background, root: b.root }));
+    return [main, ...others.filter((b) => b.width !== main.width)].sort((a, b) => b.width - a.width);
+}
+
+function topFrame(ctx: Ctx, capture: Capture, at: CaptureWidth, label: string): string {
+    const w = at.width;
+    const h = Math.max(at.viewport.h, at.scroll?.h ?? 0, 1);
+    const bg = cssColor(at.background);
+    const top = makeNode(ctx.blank, "frame", { x: 0, y: 0, w, h }, ctx.pageId, { id: nanoid(10), name: label, x: 0, y: 0, w, h, fills: [bg && bg.alpha > 0 ? solid(bg.hex, bg.alpha) : solid("#FFFFFF")], clip: true, pluginData: pageData(capture, w) });
+    add(ctx, top);
+    return top.id;
+}
+
+// A state's changes on the element as a Sites hover or press state (fill, text colour, opacity,
+// lift and scale, a shadow), or null when none of them changed.
+export function stateStyleOf(changes: Record<string, [string, string]> | undefined, transition: CaptureTransition | null | undefined): StateStyle | null {
+    if (!changes) return null;
+    const out: StateStyle = {};
+    const to = (p: string) => changes[p]?.[1];
+    const bg = cssColor(to("background-color"));
+    if (bg && bg.alpha > 0) out.fill = bg.hex;
+    const color = cssColor(to("color"));
+    if (color) out.textColor = color.hex;
+    const opacity = to("opacity");
+    if (opacity !== undefined && Number.isFinite(parseFloat(opacity))) out.opacity = parseFloat(opacity);
+    const m = /matrix\(([^)]+)\)/.exec(to("transform") ?? "");
+    if (m) {
+        const [a = 1, b = 0, , , , f = 0] = (m[1] as string).split(",").map((n) => parseFloat(n));
+        if (Math.abs(f) > 0.01) out.y = Math.round(f * 100) / 100;
+        const k = Math.hypot(a, b);
+        if (Math.abs(k - 1) > 0.001) out.scale = Math.round(k * 1000) / 1000;
+    }
+    const translate = to("translate");
+    if (translate && translate !== "none") {
+        const y = parseFloat(translate.split(/\s+/)[1] ?? "0");
+        if (Number.isFinite(y) && Math.abs(y) > 0.01) out.y = y;
+    }
+    const scale = to("scale");
+    if (scale && scale !== "none" && Number.isFinite(parseFloat(scale))) out.scale = parseFloat(scale);
+    const shadow = to("box-shadow");
+    if (shadow && shadow !== "none") out.shadow = true;
+    if (!Object.keys(out).length) return null;
+    if (transition && transition.duration > 0) out.duration = transition.duration;
+    return out;
+}
+
+export interface LayerBuild {
+    // The layers made, the parent included (with its new children).
+    nodes: Record<string, SceneNode>;
+    images: Record<string, string>;
+    rootId: string | null;
+    // Single lines to line up again once measured (reanchor, after the caller settles).
+    anchors: Anchor[];
+    families: string[];
+    substituted: string[];
+    missingImages: number;
+}
+
+// One width of a capture built into a frame that already exists (a site breakpoint's): the page's
+// body as one frame in it, positions moved to the frame's place. Interaction states become web
+// hover and press states; no components are made.
+export function buildCaptureLayers(capture: Capture, at: CaptureWidth, parent: SceneNode, options: CaptureImportOptions = {}, images: Record<string, string> = {}): LayerBuild {
+    const assets = new Map<string, string>();
+    const known = new Map(Object.entries(images).map(([id, data]) => [data, id]));
+    const fonts = fontAssets(capture);
+    for (const [id, asset] of Object.entries(capture.assets ?? {})) {
+        if (!asset?.data || !asset.data.startsWith("data:") || fonts.has(id)) continue;
+        const own = known.get(asset.data) ?? nanoid(12);
+        assets.set(id, own);
+        images[own] = asset.data;
+        known.set(asset.data, own);
+    }
+    const sources = new Map(Object.entries(capture.assets ?? {}).map(([id, a]) => [id, a?.url ?? ""]));
+    const blank: NagmaDocument = { name: "", nodes: {}, roots: [], images: {} };
+    const ctx: Ctx = { anchors: [], nodes: { [parent.id]: { ...parent, children: [] } }, images, assets, sources, missing: { count: 0 }, families: new Set(), substituted: new Set(), fontFor: options.fontFor ?? defaultFontFor, blank, states: false, siteStates: true, pageId: parent.parentId ?? parent.id, setsAt: { x: 0, y: 0 }, stateSets: 0, setsByLook: new Map() };
+    const rootId = build(ctx, at.root, parent.id, false, true);
+    if (rootId && (parent.x || parent.y)) shift(ctx, rootId, parent.x, parent.y);
+    return { nodes: ctx.nodes, images, rootId, anchors: ctx.anchors, families: [...ctx.families], substituted: [...ctx.substituted], missingImages: ctx.missing.count };
+}
+
+// Assets that are font files: never pictures in the document (they stay on this device,
+// engine/capture-fonts.ts).
+function fontAssets(capture: Capture): Set<string> {
+    const out = new Set<string>();
+    for (const f of capture.fonts ?? []) for (const face of f.faces ?? []) if (face.asset) out.add(face.asset);
+    for (const [id, a] of Object.entries(capture.assets ?? {})) if (a?.data?.startsWith("data:font/")) out.add(id);
+    return out;
+}
+
+// The top frame's record of where the capture came from.
+function pageData(capture: Capture, width: number): Record<string, string> {
+    return { [CAPTURE_URL]: capture.url ?? "", [CAPTURE_AT]: capture.capturedAt ?? "", [CAPTURE_WIDTH]: String(Math.round(width)) };
 }
 
 // Measured single lines outside a stack, moved so they keep the page's alignment: centred on
 // the same middle, or ending at the same right edge.
-function reanchor(doc: NagmaDocument, anchors: Ctx["anchors"]): NagmaDocument {
+export function reanchor(doc: NagmaDocument, anchors: Anchor[], rename?: Map<string, string>): NagmaDocument {
     let nodes: Record<string, SceneNode> | null = null;
     for (const a of anchors) {
-        const n = (nodes ?? doc.nodes)[a.id];
+        const id = rename?.get(a.id) ?? a.id;
+        const n = (nodes ?? doc.nodes)[id];
         if (!n || n.type !== "text") continue;
         const parent = n.parentId ? doc.nodes[n.parentId] : undefined;
         if (parent?.layout && n.positioning !== "absolute") continue;
         const x = a.align === "center" ? a.x + a.w / 2 - n.w / 2 : a.align === "right" ? a.x + a.w - n.w : a.x;
         if (Math.abs(x - n.x) < 0.01) continue;
         nodes ??= { ...doc.nodes };
-        nodes[a.id] = { ...n, x };
+        nodes[id] = { ...n, x };
     }
     return nodes ? settle(doc, { ...doc, nodes }) : doc;
 }

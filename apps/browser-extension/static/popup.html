@@ -14,6 +14,13 @@
     <p class="hint"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd> captures the page you're on.</p>
     <button id="download" class="secondary">Download capture</button>
     <p id="status" role="status" aria-live="polite"></p>
+    <fieldset class="choices">
+        <label class="check"><input id="states" type="checkbox" /> Include hover and focus states</label>
+        <label class="check"><input id="breakpointsOn" type="checkbox" /> Breakpoints</label>
+        <input id="breakpoints" type="text" class="indent" spellcheck="false" aria-label="Breakpoints, as a name and a width each" placeholder="Desktop 1280, Tablet 800, Phone 375" />
+        <label class="check"><input id="interactive" type="checkbox" /> Keep interactive parts working</label>
+        <p id="precise" class="hint indent" hidden>States and widths use the fallbacks. <a href="#" id="ask-debugger">Allow precise states and widths</a></p>
+    </fieldset>
     <details>
         <summary>Options</summary>
         <label for="address">Send to</label>
@@ -23,10 +30,10 @@
             <option value="custom">Another address…</option>
         </select>
         <input id="custom" type="url" placeholder="https://nagma.example.com" hidden />
-        <label class="check disabled">
-            <input id="states" type="checkbox" disabled />
-            Include hover and focus states <span class="soon">Coming soon</span>
-        </label>
+        <label class="check"><input id="viaServer" type="checkbox" /> Send through the server</label>
+        <p class="hint indent">Uploads the capture to the address above with your token, then opens it there. Off: hands it to a Nagma tab in this browser.</p>
+        <label for="token">Personal access token</label>
+        <input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="Made in Nagma › Settings › Tokens" />
     </details>
     <p class="privacy">Captures stay in this browser until you send or save one. No account needed.</p>
     <script src="popup.js"></script>

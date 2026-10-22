@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Tabs · Lumen</title>
+<link rel="stylesheet" href="fonts.css">
+<style>
+:root { --brand: #4f46e5; --line: #eaecf0; --muted: #475467; }
+body { margin: 0; font-family: "Source Sans 3", sans-serif; background: #f9fafb; color: #101828; }
+main { padding: 48px; }
+h1 { margin: 0 0 24px; font-size: 36px; }
+.card { width: 720px; background: #fff; border: 1px solid var(--line); border-radius: 16px; }
+.tabs { display: flex; gap: 4px; padding: 0 20px; border-bottom: 1px solid var(--line); }
+.tab { padding: 14px 16px; border: 0; border-bottom: 2px solid transparent; background: none; font: 600 16px "Source Sans 3", sans-serif; color: var(--muted); cursor: pointer; }
+.tab:hover { color: #101828; }
+.tab.is-active { color: var(--brand); border-bottom-color: var(--brand); }
+.panel { padding: 24px; }
+.panel h2 { margin: 0 0 8px; font-size: 22px; }
+.panel p { margin: 0; color: var(--muted); line-height: 1.5; }
+.panel .art { height: 120px; margin-top: 16px; border-radius: 12px; background: url(img/hero.jpg) center / cover; }
+p.note { color: var(--muted); }
+</style></head>
+<body><main>
+<h1>Plans and notes</h1>
+<div class="card">
+  <div class="tabs" role="tablist" aria-label="Sections">
+    <button class="tab is-active" role="tab" aria-selected="true" aria-controls="p-overview" id="t-overview">Overview</button>
+    <button class="tab" role="tab" aria-selected="false" aria-controls="p-features" id="t-features" tabindex="-1">Features</button>
+    <button class="tab" role="tab" aria-selected="false" aria-controls="p-pricing" id="t-pricing" tabindex="-1">Pricing</button>
+  </div>
+  <section class="panel" role="tabpanel" id="p-overview" aria-labelledby="t-overview"><h2>Everything in one place</h2><p>Notebooks, spaces and history, linked together so your team can follow the plan.</p><div class="art"></div></section>
+  <section class="panel" role="tabpanel" id="p-features" aria-labelledby="t-features" hidden><h2>Built for teams</h2><p>Shared spaces, comments on any line, and a history of every change.</p></section>
+  <section class="panel" role="tabpanel" id="p-pricing" aria-labelledby="t-pricing" hidden><h2>Free to start</h2><p>Pay only when your team grows past five people.</p></section>
+</div>
+<p class="note">The tabs above switch with this page's script.</p>
+</main>
+<script>
+for (const tab of document.querySelectorAll('[role="tab"]')) tab.addEventListener("click", () => {
+  for (const t of document.querySelectorAll('[role="tab"]')) {
+    const on = t === tab;
+    t.classList.toggle("is-active", on);
+    t.setAttribute("aria-selected", on);
+    document.getElementById(t.getAttribute("aria-controls")).hidden = !on;
+  }
+});
+</script>
+</body></html>

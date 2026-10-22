@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Search · Travel</title>
+<link rel="stylesheet" href="fonts.css">
+<style>
+body { margin: 0; font-family: "Source Sans 3", sans-serif; background: #f9fafb; color: #101828; }
+main { padding: 56px; }
+h1 { margin: 0 0 20px; font-size: 36px; }
+.search { position: relative; width: 420px; height: 300px; }
+.search label { display: block; font-weight: 600; margin-bottom: 6px; }
+.search input { width: 100%; box-sizing: border-box; padding: 12px 14px; border: 1px solid #d0d5dd; border-radius: 10px; font: 17px "Source Sans 3", sans-serif; background: #fff; }
+.search input:focus { outline: none; border-color: #4f46e5; box-shadow: 0 0 0 4px rgba(79, 70, 229, .15); }
+[role="listbox"] { position: absolute; left: 0; right: 0; top: 78px; margin: 0; padding: 6px; list-style: none; background: #fff; border: 1px solid #eaecf0; border-radius: 12px; box-shadow: 0 12px 32px rgba(16, 24, 40, .12); }
+[role="option"] { padding: 8px 10px; border-radius: 8px; }
+[role="option"][aria-selected="true"] { background: #eef2ff; color: #3730a3; }
+.city { margin-top: 24px; width: 420px; }
+.city input { width: 100%; box-sizing: border-box; padding: 12px 14px; border: 1px solid #d0d5dd; border-radius: 10px; font: 17px "Source Sans 3", sans-serif; }
+</style></head>
+<body><main>
+<h1>Where to?</h1>
+<div class="search">
+  <label for="country">Country</label>
+  <input id="country" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="countries" placeholder="Start typing a country" autocomplete="off">
+  <ul id="countries" role="listbox" hidden>
+    <li role="option">Germany</li><li role="option">Georgia</li><li role="option">Ghana</li><li role="option">Greece</li><li role="option">Portugal</li><li role="option">Spain</li><li role="option">Sweden</li>
+  </ul>
+</div>
+<label class="city">City <input list="cities" placeholder="A city"></label>
+<datalist id="cities"><option value="Berlin"><option value="Lisbon"><option value="Madrid"><option value="Stockholm"></datalist>
+</main>
+<script>
+const input = document.getElementById("country");
+const list = document.getElementById("countries");
+input.addEventListener("input", () => {
+  const q = input.value.toLowerCase();
+  let any = false;
+  for (const o of list.children) { const hit = o.textContent.toLowerCase().includes(q); o.hidden = !hit; any ||= hit; }
+  list.hidden = !(q && any);
+});
+</script>
+</body></html>

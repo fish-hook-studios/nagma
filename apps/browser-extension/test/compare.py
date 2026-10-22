@@ -14,13 +14,21 @@ from PIL import Image, ImageChops
 
 out = Path(sys.argv[1])
 names = sys.argv[2:] or sorted(p.name[: -len(".source.png")] for p in out.glob("*.source.png"))
+
+
+def flat(path):
+    """The picture on white (exports of variants and frames can be transparent)."""
+    img = Image.open(path).convert("RGBA")
+    bg = Image.new("RGBA", img.size, "white")
+    return Image.alpha_composite(bg, img).convert("RGB")
+
 results = {}
 for name in names:
     src_path, dst_path = out / f"{name}.source.png", out / f"{name}.nagma.png"
     if not src_path.exists() or not dst_path.exists():
         continue
-    src = Image.open(src_path).convert("RGB")
-    dst = Image.open(dst_path).convert("RGB")
+    src = flat(src_path)
+    dst = flat(dst_path)
     # The page shot's area (a long page shot only to its first screen compares that screen).
     w, h = src.width, src.height
     a = Image.new("RGB", (w, h), "white")
@@ -40,5 +48,5 @@ for name in names:
     sheet.paste(ImageChops.invert(diff), (w * 2, 0))
     sheet = sheet.resize((sheet.width // 2, sheet.height // 2))
     sheet.save(out / f"{name}.compare.png")
-    print(f"{name:12} differing {results[name]['differing']:6.2f}%  mean {results[name]['mean']:5.2f}  page {src.width}x{src.height}  import {dst.width}x{dst.height}")
+    print(f"{name:24} differing {results[name]['differing']:6.2f}%  mean {results[name]['mean']:5.2f}  page {src.width}x{src.height}  import {dst.width}x{dst.height}")
 (out / "compare.json").write_text(json.dumps(results, indent=2))

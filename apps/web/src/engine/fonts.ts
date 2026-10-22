@@ -138,6 +138,12 @@ export function ensureFont(family: string, onReady: () => void) {
     document.head.appendChild(link);
 }
 
+// Families whose faces were added to the document's fonts by hand (a captured page's own fonts,
+// engine/capture-fonts.ts): ready, and text set in them is measured again.
+export function markFontsInstalled(families: string[]) {
+    for (const family of families) settle(family, "ready");
+}
+
 // Starts loading a family and resolves when it's settled.
 export function loadFont(family: string): Promise<FontStatus> {
     if (family === DEFAULT_FAMILY) return Promise.resolve("ready");

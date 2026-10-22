@@ -2,8 +2,9 @@
 import "./inspect-settings";
 import { describe, expect, it } from "vitest";
 import { NotACapture, parseCapture, type Capture, type CaptureBox, type CaptureNode, type CaptureStyle, type CaptureTextStyle } from "./capture-format";
-import { captureToDocument, cssColor, gradientPaint } from "./capture-import";
-import type { NagmaDocument, SceneNode } from "./types";
+import { captureToDocument, cssColor, easingOf, gradientPaint, transitionOf } from "./capture-import";
+import { displayDoc, initialState, runInteraction } from "./prototype-runtime";
+import type { Interaction, NagmaDocument, SceneNode } from "./types";
 
 // Page captures (Nagma Capture's format) into Design layers: the page frame, auto layout read
 // back from flex, grid and stacked blocks when it reproduces the page, text with its fonts and
@@ -273,5 +274,158 @@ describe("components from repeated cards", () => {
         odd.style.backgroundColor = "rgb(255, 0, 0)";
         const page = capture([el("div", box(0, 0, 700, 300), {}, [card(0, "Ember mug", "a1"), card(1, "Tide bowl", "a2"), odd], { name: "List" })], { assets: { a1: { url: "1", data: PNG }, a2: { url: "2", data: PNG }, a3: { url: "3", data: PNG } } });
         expect(captureToDocument(page).components).toBe(0);
+    });
+});
+
+describe("interaction states", () => {
+    // A button whose background darkens on hover and darker still when pressed, over 200 ms.
+    const button = (x: number, label: string, bg = "rgb(79, 70, 229)") =>
+        el("button", box(x, 100, 120, 40), { backgroundColor: bg, radii: [8, 8, 8, 8], display: "flex", justifyContent: "center", alignItems: "center" }, [text(label, box(x + 30, 110, 60, 20), { color: "rgb(255, 255, 255)", lineHeight: 20 })], { name: `Button “${label}”`, path: `body>button:${x}` });
+    const stateful = (x: number, label: string) => ({
+        ...button(x, label),
+        states: {
+            hover: button(x, label, "rgb(67, 56, 202)"),
+            active: button(x, label, "rgb(55, 48, 163)"),
+            changes: { hover: { "background-color": ["rgb(79, 70, 229)", "rgb(67, 56, 202)"] as [string, string] } },
+            transition: { property: "background-color", duration: 200, easing: "ease", delay: 0 },
+        },
+    });
+
+    it("makes a component set with Default, Hover and Pressed, and an instance where the element was", () => {
+        const { doc, frameId, stateSets } = captureToDocument(capture([stateful(40, "Save")]));
+        expect(stateSets).toBe(1);
+        const set = Object.values(doc.nodes).find((n) => n.type === "componentSet") as SceneNode;
+        expect(set.name).toBe("Button “Save”");
+        expect(set.parentId).toBe(doc.nodes[frameId]?.parentId);
+        const variants = set.children.map((id) => doc.nodes[id] as SceneNode);
+        expect(variants.map((v) => [v.type, v.name])).toEqual([
+            ["component", "State=Default"],
+            ["component", "State=Hover"],
+            ["component", "State=Pressed"],
+        ]);
+        expect(variants.map((v) => (v.fills[0] as { color: string }).color)).toEqual(["#4F46E5", "#4338CA", "#3730A3"]);
+        // Side by side beside the page frame.
+        expect(set.x).toBeGreaterThan(1000);
+        expect(variants[1]?.x).toBeGreaterThan((variants[0]?.x ?? 0) + 119);
+        const instance = all(doc, frameId).find((n) => n.type === "instance") as SceneNode;
+        expect(instance.componentId).toBe(variants[0]?.id);
+        expect([instance.x, instance.y, instance.w, instance.h]).toEqual([40, 100, 120, 40]);
+        expect(doc.nodes[instance.children[0] as string]?.text).toBe("Save");
+    });
+
+    it("links the variants with While hovering and While pressing, with the page's duration and easing", () => {
+        const { doc } = captureToDocument(capture([stateful(40, "Save")]));
+        const [main, hover, pressed] = (Object.values(doc.nodes).find((n) => n.type === "componentSet") as SceneNode).children.map((id) => doc.nodes[id] as SceneNode);
+        const transition = { type: "smart", duration: 200, easing: "custom-bezier", bezier: [0.25, 0.1, 0.25, 1] };
+        expect(main?.interactions).toEqual([
+            { trigger: "hover", delay: 0, actions: [{ type: "change-to", target: hover?.id, transition: { ...transition, direction: "left" } }] },
+            { trigger: "press", delay: 0, actions: [{ type: "change-to", target: pressed?.id, transition: { ...transition, direction: "left" } }] },
+        ]);
+        expect(hover?.interactions?.[0]).toMatchObject({ trigger: "press", actions: [{ type: "change-to", target: pressed?.id }] });
+        // The instance takes the interactions from its component.
+        const instance = Object.values(doc.nodes).find((n) => n.type === "instance" && !n.sourceId) as SceneNode;
+        expect(instance.interactions).toEqual(main?.interactions);
+        expect(instance.overrides ?? []).not.toContain("interactions");
+    });
+
+    it("shares one set between elements that are the same but for their place, and not otherwise", () => {
+        const twins = captureToDocument(capture([stateful(40, "Save"), stateful(200, "Save")]));
+        expect(twins.stateSets).toBe(1);
+        const instances = Object.values(twins.doc.nodes).filter((n) => n.type === "instance" && !n.sourceId);
+        expect(instances.map((i) => i.x)).toEqual([40, 200]);
+        expect(new Set(instances.map((i) => i.componentId)).size).toBe(1);
+        expect(captureToDocument(capture([stateful(40, "Save"), stateful(200, "Open")])).stateSets).toBe(2);
+    });
+
+    it("plays in the prototype: hovering the instance shows the Hover variant, with its own text", () => {
+        const { doc, frameId } = captureToDocument(capture([stateful(40, "Save"), stateful(200, "Open")]));
+        const instance = all(doc, frameId).find((n) => n.type === "instance" && doc.nodes[n.children[0] as string]?.text === "Open") as SceneNode;
+        expect(instance).toBeDefined();
+        const hover = instance.interactions?.find((i) => i.trigger === "hover") as Interaction;
+        const { state } = runInteraction(initialState(frameId), hover, { doc, source: instance.children[0] as string, now: 0 });
+        const shown = displayDoc(doc, state);
+        const swapped = shown.nodes[instance.id] as SceneNode;
+        expect((swapped.fills[0] as { color: string }).color).toBe("#4338CA");
+        expect(shown.nodes[swapped.children[0] as string]?.text).toBe("Open");
+    });
+
+    it("maps CSS timing functions to prototype easing", () => {
+        expect(transitionOf(null)).toMatchObject({ type: "instant", duration: 0 });
+        expect(transitionOf({ property: "all", duration: 150, easing: "ease-in-out", delay: 0 })).toMatchObject({ type: "smart", duration: 150, easing: "ease-in-out" });
+        expect(easingOf("cubic-bezier(0.2, 0.8, 0.2, 1)")).toEqual({ easing: "custom-bezier", bezier: [0.2, 0.8, 0.2, 1] });
+        expect(easingOf("steps(4, end)")).toEqual({ easing: "linear" });
+    });
+
+    it("leaves states out when asked to", () => {
+        const { doc, stateSets } = captureToDocument(capture([stateful(40, "Save")]), { states: false });
+        expect(stateSets).toBe(0);
+        expect(Object.values(doc.nodes).some((n) => n.type === "componentSet")).toBe(false);
+    });
+});
+
+describe("what a re-capture is matched by", () => {
+    it("keeps the page's address on the top frame and each layer's DOM path and picture source", () => {
+        const page = capture([el("img", box(0, 0, 400, 200), {}, [], { name: "Hero", image: { asset: "a1", fit: "cover" }, path: "body>img:0" })], { assets: { a1: { url: "http://127.0.0.1/hero.png", data: PNG } } });
+        const { doc, frameId } = captureToDocument(page);
+        expect(doc.nodes[frameId]?.pluginData).toEqual({ "capture:url": "http://127.0.0.1/fixture.html", "capture:at": "2026-10-23T00:00:00.000Z", "capture:width": "1000" });
+        expect(named(doc, "Hero").pluginData).toEqual({ "capture:path": "body>img:0", "capture:src": "http://127.0.0.1/hero.png" });
+    });
+});
+
+describe("outlined text", () => {
+    const stroke = { width: 2, color: "rgb(31, 26, 23)" };
+
+    it("gives text drawn as an outline a stroke and no fill", () => {
+        const { doc } = captureToDocument(capture([text("ANY", box(100, 100, 300, 120), { size: 120, lineHeight: 120, color: "rgba(0, 0, 0, 0)", stroke })]));
+        const t = named(doc, "ANY");
+        expect(t.fills[0]).toMatchObject({ type: "solid", opacity: 0 });
+        expect(t.strokes[0]).toMatchObject({ type: "solid", color: "#1F1A17" });
+        expect([t.strokeWidth, t.strokeAlign]).toEqual([2, "center"]);
+    });
+
+    it("sets an outlined word inside filled text over it as its own layer, the block leaving it clear", () => {
+        const block = text("ANYTHING.", box(100, 100, 900, 120), { size: 120, lineHeight: 120 }, {
+            runs: [{ start: 0, end: 3, style: { color: "rgba(0, 0, 0, 0)", stroke }, rects: [box(100, 112, 330, 96)] }],
+        });
+        const { doc } = captureToDocument(capture([block]));
+        const main = named(doc, "ANYTHING.");
+        expect(main.spans?.[0]).toMatchObject({ start: 0, end: 3, fills: [{ opacity: 0 }] });
+        expect(main.strokes).toEqual([]);
+        const outline = named(doc, "ANY (outline)");
+        expect(outline.text).toBe("ANY");
+        expect([outline.x, outline.y, outline.fontSize]).toEqual([100, 100, 120]);
+        expect(outline.fills).toEqual([]);
+        expect(outline.strokes[0]).toMatchObject({ color: "#1F1A17" });
+        expect(outline.parentId).toBe(main.parentId);
+    });
+
+    it("draws an outlined run that wraps across lines filled in the outline's colour", () => {
+        const block = text("ANY THING", box(100, 100, 300, 240), { size: 120, lineHeight: 120 }, {
+            lines: 2,
+            runs: [{ start: 0, end: 9, style: { color: "rgba(0, 0, 0, 0)", stroke }, rects: [box(100, 112, 250, 96), box(100, 232, 280, 96)] }],
+        });
+        const { doc } = captureToDocument(capture([block]));
+        expect(named(doc, "ANY THING").spans?.[0]?.fills?.[0]).toMatchObject({ color: "#1F1A17", opacity: 1 });
+        expect(Object.values(doc.nodes).some((n) => n.name.endsWith("(outline)"))).toBe(false);
+    });
+});
+
+describe("font files in a capture", () => {
+    it("never become pictures in the document", () => {
+        const page = capture([], { assets: { f1: { url: "https://example.test/a.woff2", data: "data:font/woff2;base64,d09GMg==" }, a1: { url: "x.png", data: PNG } }, fonts: [{ family: "Absans", weights: [400], styles: ["normal"], faces: [{ weight: "400", style: "normal", url: "https://example.test/a.woff2", asset: "f1" }] }] });
+        expect(Object.values(captureToDocument(page).doc.images)).toEqual([PNG]);
+    });
+});
+
+describe("interactive parts", () => {
+    it("makes a Live frame at the part's box with its HTML, CSS and shim, and no props", () => {
+        const live = { html: '<div role="tablist"></div>', css: "[data-nl-root]{margin:0}", js: "/* shim */", pattern: "tabs" };
+        const { doc, frameId } = captureToDocument(capture([el("div", box(48, 200, 600, 320), {}, [], { name: "Live: Tabs", live, path: "body>div:0" })]));
+        const node = all(doc, frameId).find((n) => n.type === "live") as SceneNode;
+        expect(node.name).toBe("Live: Tabs");
+        expect([node.x, node.y, node.w, node.h]).toEqual([48, 200, 600, 320]);
+        expect(node.live).toEqual({ kind: "html", source: { html: live.html, css: live.css, js: live.js }, props: {} });
+        expect(node.children).toEqual([]);
+        expect(node.pluginData?.["capture:path"]).toBe("body>div:0");
     });
 });

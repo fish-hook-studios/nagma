@@ -13,7 +13,7 @@ await import("../app");
 const { editor } = await import("./store");
 const { listFiles, fileMeta } = await import("./files");
 const { importAsNewFiles } = await import("./images");
-const { listenForCaptures } = await import("./capture-open");
+const { listenForCaptures, openCapture } = await import("./capture-open");
 
 // Opening page captures in the app: a .nagma-capture.json from Import… (or a drop on Home), and
 // the extension's hand-over on the window. Each becomes a new Design draft named after the page,
@@ -80,5 +80,60 @@ describe("opening a page capture", () => {
         expect(listFiles().length).toBe(before + 1);
         expect(fileMeta(editor.get().fileId as string)?.name).toBe("Docs");
         spy.mockRestore();
+    });
+
+    it("asks how a capture at several widths opens: frames side by side, or a site", async () => {
+        const wide = page("Lumen");
+        const capture = { ...wide, label: "Desktop", breakpoints: [{ label: "Phone", width: 375, viewport: { w: 375, h: 600 }, scroll: { w: 375, h: 900 }, background: "rgb(255, 255, 255)", root: { ...wide.root, box: { x: 0, y: 0, w: 375, h: 900 }, children: [{ ...wide.root.children[0], box: { x: 0, y: 0, w: 375, h: 200 } }] } }] };
+        const pick = async (id: string) => {
+            for (let i = 0; i < 50 && !document.querySelector("[data-choice]"); i++) await new Promise((r) => setTimeout(r, 10));
+            expect(document.querySelector("#capture-choice-title")?.textContent).toBe("Open Lumen");
+            (document.querySelector(`[data-choice="${id}"]`) as HTMLButtonElement).click();
+        };
+        const before = listFiles().length;
+        const asFrames = openCapture(capture);
+        await pick("frames");
+        await asFrames;
+        let state = editor.get();
+        expect(fileMeta(state.fileId as string)?.kind).toBe("design");
+        expect(Object.values(state.doc.nodes).filter((n) => n.type === "frame" && /^Lumen \d+$/.test(n.name)).map((n) => n.name).sort()).toEqual(["Lumen 375", "Lumen 800"]);
+        const asSite = openCapture(capture);
+        await pick("site");
+        await asSite;
+        state = editor.get();
+        expect(fileMeta(state.fileId as string)?.kind).toBe("site");
+        expect(state.doc.site).toBe(true);
+        // Cancelled: nothing opens.
+        const none = openCapture(capture);
+        await pick("");
+        expect(await none).toBeNull();
+        expect(listFiles().length).toBe(before + 2);
+    });
+
+    it("offers to compare a page captured before with the file it opened as, and adds a Changes page there", async () => {
+        const first = page("Changelog", "2026-10-01T09:00:00.000Z");
+        await openCapture(first);
+        const fileId = editor.get().fileId as string;
+        const before = listFiles().length;
+        // Captured again: the hero picture is wider and there's a new heading.
+        const second = page("Changelog", "2026-10-23T09:00:00.000Z");
+        const heading = { tag: "#text", name: "New", path: "body>h1:0>#text:0", box: { x: 20, y: 320, w: 200, h: 30 }, style, text: { content: "New", style: { family: "Inter", stack: "Inter", size: 24, weight: 700, italic: false, lineHeight: 30, letterSpacing: 0, color: "rgb(0, 0, 0)", align: "left", decoration: "none", transform: "none", whiteSpace: "normal", direction: "ltr" }, runs: [], lines: 1 }, children: [] };
+        second.root = { ...second.root, children: [{ ...second.root.children[0], box: { x: 0, y: 0, w: 800, h: 280 } }, heading] } as unknown as typeof second.root;
+        const opening = openCapture(second);
+        for (let i = 0; i < 50 && !document.querySelector("[data-choice]"); i++) await new Promise((r) => setTimeout(r, 10));
+        expect([...document.querySelectorAll("[data-choice]")].map((b) => b.textContent)).toEqual(["Open as a new file", "Compare with ChangelogA new page in that file showing what changed", "Cancel"]);
+        (document.querySelector('[data-choice="compare"]') as HTMLButtonElement).click();
+        expect(await opening).toMatchObject({ id: fileId });
+        expect(listFiles().length).toBe(before);
+        const state = editor.get();
+        expect(state.fileId).toBe(fileId);
+        const pageNode = state.doc.nodes[state.pageId];
+        expect(pageNode?.name).toMatch(/^Changes /);
+        const names = pageNode?.children.map((id) => state.doc.nodes[id]?.name);
+        expect(names).toEqual(["Changelog", "What changed"]);
+        const list = state.doc.nodes[pageNode?.children[1] as string];
+        expect(list?.children.map((id) => state.doc.nodes[id]?.text)).toEqual(expect.arrayContaining(["Added: New"]));
+        expect(state.doc.roots.length).toBe(2);
+        expect(state.toast).toMatch(/changes? since the last capture of Changelog/);
     });
 });

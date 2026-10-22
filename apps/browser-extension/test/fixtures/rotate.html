@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Turned · Studio</title>
+<link rel="stylesheet" href="fonts.css">
+<style>
+body { margin: 0; font-family: "Source Sans 3", sans-serif; background: #f4efe6; }
+.card { position: absolute; width: 220px; height: 140px; border-radius: 16px; display: grid; place-items: center; font-size: 22px; font-weight: 700; color: #fff; }
+.a { left: 120px; top: 120px; background: #e4572e; transform: rotate(-8deg); }
+.b { left: 460px; top: 120px; background: #4f46e5; rotate: 12deg; }
+.c { left: 800px; top: 120px; background: #12b76a; rotate: -20deg; scale: 1.15; }
+svg.star { position: absolute; left: 520px; top: 420px; width: 200px; height: 200px; rotate: 30deg; }
+</style></head>
+<body><div class="card a">transform</div><div class="card b">rotate</div><div class="card c">rotate + scale</div>
+<svg class="star" viewBox="0 0 100 100"><path d="M45 0h10v38l33-19 5 9-33 19 33 19-5 9-33-19v38H45V62L12 81l-5-9 33-19L7 34l5-9 33 19z" fill="#8fc1f0"/></svg></body></html>

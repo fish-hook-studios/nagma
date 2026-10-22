@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Release notes · Lumen</title>
+<link rel="stylesheet" href="fonts.css">
+<style>
+body { margin: 0; font-family: "Source Sans 3", sans-serif; background: #fff; color: #101828; }
+main { padding: 48px; width: 720px; }
+h1 { font-size: 40px; margin: 0 0 8px; }
+.lead { color: #475467; font-size: 18px; margin: 0 0 24px; }
+.hero { width: 720px; height: 240px; border-radius: 16px; background-size: cover; background-position: center; }
+ul { padding-left: 20px; line-height: 1.8; }
+.new { display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 999px; background: #ecfdf3; color: #027a48; font-size: 13px; font-weight: 700; }
+</style></head>
+<body><main>
+<!-- Each load is the next release: a re-capture of this page has something to compare. -->
+<h1 id="title"></h1><p class="lead" id="lead"></p>
+<div class="hero" id="hero"></div>
+<ul id="list"></ul>
+</main>
+<script>
+const n = Number(localStorage.getItem("release") || 0) + 1;
+localStorage.setItem("release", n);
+document.getElementById("title").textContent = `Release ${n}`;
+document.getElementById("lead").textContent = n > 1 ? "Faster sync and a new export." : "The first release of Lumen.";
+document.getElementById("hero").style.backgroundImage = `url(img/product-${(n % 8) + 1}.jpg)`;
+const items = ["Notebooks", "Spaces", "History"].concat(n > 1 ? ["Export to PDF"] : []);
+document.getElementById("list").innerHTML = items.map((t, i) => `<li>${t}${n > 1 && i === 3 ? '<span class="new">New</span>' : ""}</li>`).join("");
+</script>
+</body></html>
