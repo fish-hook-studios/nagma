@@ -358,6 +358,7 @@ function page({ url, title, description, body, single = false, extraClass = "" }
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#F6F1E7">
 <title>${esc(title)} | Nagma</title>
 <meta name="description" content="${esc(description)}">
 <link rel="canonical" href="${SITE}${url}">

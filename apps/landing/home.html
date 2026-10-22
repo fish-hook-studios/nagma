@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#F6F1E7">
 <title>Nagma: make anything, free</title>
 <meta name="description" content="Nagma is a free, open source creative suite: design, whiteboards, slides, campaigns, sites, apps, video and documents. Runs on your computer, works with your team on any server.">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
@@ -44,7 +45,7 @@ p { margin: 0; }
 .on-dark .hl .hlm path, [data-bg="#141413"] .hl .hlm path { opacity: .9; }
 h1 .hl .hlm, h2 .hl .hlm { mix-blend-mode: multiply; }
 .on-dark h2 .hl .hlm { mix-blend-mode: normal; }
-.outline { color: transparent; -webkit-text-stroke: 3px var(--fg); }
+.outline { color: transparent; -webkit-text-stroke: clamp(1px, .02em, 3px) var(--fg); }
 .eyebrow { display: inline-flex; align-items: center; gap: 10px; font-weight: 400; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; }
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 60px; padding: 0 30px; border-radius: 999px; font-family: var(--display); font-weight: 400; font-size: 19px; letter-spacing: -0.01em; text-decoration: none; border: 2.5px solid var(--ink); background: var(--cream); color: var(--ink); cursor: none; transition: transform .25s cubic-bezier(.2,.8,.2,1), box-shadow .25s, background .2s, color .2s; }
 .btn:hover { transform: translate(-3px, -3px); box-shadow: 6px 6px 0 var(--ink); }
@@ -309,7 +310,7 @@ h1 .hl .hlm, h2 .hl .hlm { mix-blend-mode: multiply; }
 .claim { padding: 26vh 0; text-align: center; }
 .claim h2 { font-size: clamp(44px, 9vw, 150px); line-height: .9; }
 .claim h2 .w { display: inline-block; transition: transform .35s cubic-bezier(.2,.8,.2,1), color .3s; }
-.claim h2 .w:hover { transform: translateY(-14px) rotate(-4deg) scale(1.08); color: transparent; -webkit-text-stroke: 2.5px var(--fg); }
+@media (hover: hover) { .claim h2 .w:hover { transform: translateY(-14px) rotate(-4deg) scale(1.08); color: transparent; -webkit-text-stroke: clamp(1px, .025em, 2.5px) var(--fg); } }
 
 /* Usually paid: a compact table of the gates that are open here. */
 .paid { padding: 18vh 0; }
@@ -383,7 +384,7 @@ h1 .hl .hlm, h2 .hl .hlm { mix-blend-mode: multiply; }
 .wall .st[data-c="yellow"] { background: var(--yellow); } .wall .st[data-c="pink"] { background: var(--pink); } .wall .st[data-c="lime"] { background: var(--lime); } .wall .st[data-c="orange"] { background: var(--orange); } .wall .st[data-c="lilac"] { background: var(--lilac); }
 .wall-box.live .st { left: 0; top: 0; transition: none; }
 /* Open source stats */
-.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
 .stat { border: 2.5px solid var(--ink); border-radius: 28px; padding: 28px 32px; background: var(--cream); box-shadow: 8px 8px 0 var(--ink); display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
 .stat b { font-family: var(--display); font-weight: 400; font-size: clamp(40px, 4.6vw, 72px); display: block; line-height: 1; letter-spacing: -0.03em; }
 .stat em { font-style: normal; font-family: var(--display); font-size: clamp(22px, 2vw, 30px); line-height: 1; margin-top: -2px; }
@@ -413,25 +414,40 @@ h1 .hl .hlm, h2 .hl .hlm { mix-blend-mode: multiply; }
 
 @media (max-width: 960px) {
   .nav-links { display: none; }
-  .nav { padding: 10px 16px; } .brand .wm { height: 22px; } .nav .cta { min-height: 44px; padding: 0 16px; font-size: 13px; }
+  .nav { padding: 10px 16px; gap: 10px; } .brand .wm { height: 22px; } .nav .cta { min-height: 44px; padding: 0 16px; font-size: 13px; margin-left: auto; }
   .scard, .foot-top { grid-template-columns: minmax(0, 1fr); }
   .hero { padding-top: 140px; }
-  .rail { height: 300vh; }
   .rail-head { flex-direction: column; align-items: flex-start; gap: 12px; }
   .rail-head .lead { font-size: 16px; max-width: none; }
-  .pcard { width: min(84vw, max(260px, calc((100vh - 480px) * 1.6 + 64px))); width: min(84vw, max(260px, calc((100svh - 480px) * 1.6 + 64px))); }
   .tiles { flex-direction: column; height: auto; }
-  .tile { min-height: 260px; } .tile p { opacity: 1; transform: none; }
-  .scard { min-height: auto; top: 80px; }
+  /* Tiles stack, the picture in flow above the words, nothing waits for a hover. */
+  .tile { min-height: 0; justify-content: flex-start; padding: 24px; } .tile p { opacity: 1; transform: none; }
+  .tile .illo { position: static; width: 100%; height: 120px; margin: 0 0 6px; }
+  .hint-hover { display: none; }
+  /* The cards no longer pin: a pinned card taller than the screen hides its bottom (the loop) for ever. They stack in flow, each sized to its content. */
+  .scard { position: static; height: auto; min-height: 0; gap: 24px; padding: 24px; margin-bottom: 20px; transform: none !important; filter: none !important; box-shadow: 8px 8px 0 var(--ink); }
+  .scard .loop { max-height: none; }
+  .stack-space { display: none; }
+  .stack-sec { padding-bottom: 10vh; }
   .scard .ph { min-height: 300px; }
   .wrap { padding: 0 16px; }
   .wall { height: 150vh; }
   .wall-box { min-height: 0; }
-  .stats { grid-template-columns: minmax(0, 1fr); }
 }
-@media (max-width: 960px) and (max-height: 720px) { .rail-head .lead { display: none; } }
 @media (max-width: 600px) {
   .toy.fun.aside { display: none; }
+  /* The glance window: a lighter shadow and corner, and room for the shadow inside the gutter. */
+  .stage-wrap { width: calc(100% - 6px); margin-top: 12px; }
+  .stage { border-radius: 20px; box-shadow: 6px 6px 0 var(--ink); border-width: 2px; }
+  /* The cat looks over the first band with its whole head, and the bands sit closer to what follows. */
+  .bands { padding: 9vh 0 3vh; }
+  .cat-peek { width: 120px; top: calc(9vh - 84px); right: 6vw; }
+  /* The decorative shapes are big enough to read as shapes on a small screen. */
+  .claim > .fun:first-of-type { width: 46vw !important; left: -16vw !important; }
+  .claim > .fun:last-of-type { width: 36vw !important; right: -12vw !important; }
+  #server > .fun:first-of-type { width: 48vw !important; right: -16vw !important; }
+  #server > .fun:last-of-type { width: 34vw !important; left: -12vw !important; }
+  .free > .fun:first-of-type { width: 50vw !important; left: -18vw !important; }
   .wall .st { padding: 8px 14px; font-size: 13px; box-shadow: 3px 3px 0 var(--ink); }
   .wall h2 { font-size: 40px; }
 }
@@ -440,7 +456,52 @@ h1 .hl .hlm, h2 .hl .hlm { mix-blend-mode: multiply; }
   .toy.shape, .toy.sticker, .hero-pills li, .band .t, .cat-peek, .free .blob, .hint i { animation: none !important; }
   .reveal { opacity: 1; transform: none; transition: none; }
   body { transition: none; }
+  html { scroll-behavior: auto; }
 }
+/* Phones and tablets. */
+/* The menu button: three lines, an X while the links are open. Hidden where the links fit in the bar. */
+.nav-toggle { display: none; flex: none; width: 44px; height: 44px; padding: 0; border: 2px solid currentColor; border-radius: 999px; background: none; color: inherit; cursor: none; flex-direction: column; align-items: center; justify-content: center; gap: 5px; }
+.nav-toggle i { display: block; width: 18px; height: 2px; border-radius: 2px; background: currentColor; transition: transform .25s cubic-bezier(.2,.8,.2,1), opacity .2s; }
+.nav-wrap.open .nav-toggle i:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+.nav-wrap.open .nav-toggle i:nth-child(2) { opacity: 0; }
+.nav-wrap.open .nav-toggle i:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+@media (max-width: 960px) {
+  .nav-toggle { display: flex; }
+  .nav .cta { white-space: nowrap; }
+  .nav-wrap.open .nav { flex-wrap: wrap; }
+  /* Open, the links are a sheet under the bar: each dropdown becomes a group with its heading, and the sheet scrolls on a short screen. */
+  .nav-wrap.open .nav-links { display: flex; flex-direction: column; flex: 1 1 100%; order: 10; gap: 6px; padding: 8px 0 16px; max-height: calc(100vh - 90px); max-height: calc(100svh - 90px); overflow-y: auto; overscroll-behavior: contain; }
+  .nav-wrap.open .nav-links > a { justify-content: space-between; padding: 12px 14px; border: 2px solid currentColor; border-radius: 14px; }
+  .nav-wrap.open .menu > button { display: block; width: 100%; padding: 14px 2px 6px; font-size: 12px; letter-spacing: .14em; pointer-events: none; background: none; color: inherit; opacity: .75; }
+  .nav-wrap.open .menu > button .ar { display: none; }
+  .nav-wrap.open .menu-panel, .nav-wrap.open #menu-products { display: grid; position: static; min-width: 0; grid-template-columns: 1fr 1fr; box-shadow: none; }
+  .nav-wrap.open .menu-panel a { padding: 9px 10px; align-items: flex-start; }
+  .nav-wrap.open .menu-panel a::after { display: none; }
+  .nav-wrap.open .menu-panel b { font-size: 16px; }
+  .nav-wrap.open .menu-panel span { font-size: 12px; }
+}
+@media (max-width: 480px) { .nav .cta .ar { display: none; } .nav .cta { padding: 0 14px; } }
+@media (max-width: 420px) { .nav-wrap.open .menu-panel, .nav-wrap.open #menu-products { grid-template-columns: 1fr; } .nav-wrap.open .menu-panel span { display: none; } }
+/* The product rail is a swipe where there is no mouse or no room: a horizontal scroller that snaps to each card, in the page's own flow (no sticky stretch, no scroll-driven transform). */
+.hint-swipe { display: none; }
+@media (max-width: 960px), (hover: none) and (pointer: coarse) {
+  .rail { height: auto; padding: 12vh 0 6vh; scroll-margin-top: 72px; }
+  .rail-sticky { position: static; height: auto; overflow: visible; display: block; padding: 0; }
+  .rail-head { margin-bottom: 28px; }
+  .rail-track { overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scroll-padding: 0 32px; padding: 0 32px 20px; gap: 16px; transform: none !important; will-change: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .rail-track::-webkit-scrollbar { display: none; }
+  .pcard { scroll-snap-align: start; width: min(84vw, 480px); padding: 24px; gap: 14px; }
+  .pcard:hover { transform: none; }
+  .pcard .loop { height: auto; }
+  .rail-end { width: 16px; }
+  .hint-scroll { display: none; } .hint-swipe { display: inline; }
+}
+@media (max-width: 960px) { .rail-track { padding-left: 16px; padding-right: 16px; scroll-padding: 0 16px; } }
+@media (max-width: 600px) { .rail { padding-top: 4vh; } }
+/* Fingers scroll past the hero shapes; only a mouse or pen drags them. */
+@media (hover: none) { .toy { touch-action: pan-y pinch-zoom; } }
+/* Tablets: the footer's four link columns in two rows. */
+@media (min-width: 601px) and (max-width: 960px) { .foot-top { grid-template-columns: repeat(2, minmax(0, 1fr)); } .foot-top > div:first-child { grid-column: 1 / -1; } }
 /* Page loader: the insignia builds itself while the page arrives. Orange box pops in, the cat climbs up inside it, the wordmark wipes in. Gone on load (never before 1.6 s, never after 7 s). */
 .loader { position: fixed; inset: 0; z-index: 1100; display: flex; align-items: center; justify-content: center; gap: 18px; background: var(--cream); color: var(--ink); transition: opacity .45s ease, visibility 0s .45s; }
 .loader.done { opacity: 0; visibility: hidden; pointer-events: none; }
@@ -483,7 +544,7 @@ html.loading .hero .fun, html.loading .toy.sticker, html.loading .hero-pills li,
 <div class="nav-wrap">
   <nav class="nav" aria-label="Main">
     <a class="brand" href="#top" aria-label="Nagma home"><img src="insignia.svg" alt=""><svg class="wm" viewBox="150 21 290 96" aria-hidden="true"><path d="M152.743 96V24H164.88L204.171 89.52V24H211.886V96H199.749L160.457 31.3029V96H152.743ZM240.355 57.1714C234.183 57.1714 227.326 61.4571 228.955 70.4571L222.783 64.8C224.069 57.5143 231.098 52.1143 240.441 52.1143C251.669 52.1143 259.126 57.8571 259.126 69.8571C259.126 78.4286 256.983 90.8571 264.698 96H256.726C253.983 93.6 252.955 89.8286 252.612 85.6286C250.298 93.0857 245.155 96.8571 237.012 96.8571C227.841 96.8571 222.955 91.4571 222.955 84.7714C222.955 75.6 230.583 70.5429 240.269 70.4571L252.869 70.3714C252.869 61.3714 247.983 57.1714 240.355 57.1714ZM229.126 84.1714C229.126 88.5429 232.555 91.8 237.869 91.8C248.926 91.8 252.612 81.4286 252.612 77.3143L252.698 75.5143L240.269 75.6857C233.583 75.7714 229.126 78.2571 229.126 84.1714ZM279.838 67.2C279.838 72.8571 284.296 77.0571 291.324 77.0571C298.353 77.0571 302.81 72.8571 302.81 67.2C302.81 61.6286 298.353 57.5143 291.324 57.5143C284.638 57.5143 279.838 61.6286 279.838 67.2ZM267.324 99.4286L272.81 94.2C270.581 92.8286 269.038 90.6857 269.038 87.2571C269.038 81.2571 274.181 78.3429 279.238 78.4286C275.896 75.7714 273.924 71.8286 273.924 67.2C273.924 58.7143 280.781 52.5429 291.324 52.5429C294.496 52.5429 297.238 53.0571 299.638 54C298.867 45.9429 303.41 40.9714 309.41 40.0286L315.067 45.7714C314.467 45.6857 313.867 45.6857 313.267 45.6857C306.496 45.6857 303.238 50.2286 303.238 55.8857H303.067C306.753 58.5429 308.724 62.4857 308.724 67.2C308.724 75.7714 302.21 81.9429 291.238 81.9429C287.553 81.9429 285.581 81.2571 282.238 81.2571C278.124 81.2571 275.038 82.9714 275.038 86.3143C275.038 91.3714 281.381 90.8571 284.724 90.3429L295.953 88.7143C304.524 87.4286 315.153 88.5429 315.153 98.8286C315.153 109.114 303.41 113.914 291.153 113.914C277.01 113.914 268.01 107.743 267.324 99.4286ZM273.238 94.4571C271.696 104.314 280.696 108.771 291.153 108.771C300.238 108.771 309.238 105.686 309.238 99.3429C309.238 93.2571 302.038 93.5143 295.696 94.4571L285.324 96C281.896 96.5143 276.838 96.4286 273.238 94.4571ZM339.356 56.9143C332.671 56.9143 328.213 61.5429 327.613 70.0286V96H321.442V53.1429H327.613V60.2571C330.099 55.2 334.556 52.1143 341.413 52.1143C347.928 52.1143 352.556 55.0286 354.699 60.0857C357.442 55.0286 362.328 52.1143 369.271 52.1143C379.213 52.1143 384.528 58.0286 384.528 67.7143V96H378.271V68.8286C378.271 60.9429 373.899 56.9143 367.813 56.9143C361.128 56.9143 356.671 61.5429 356.071 70.0286V96H349.813V68.8286C349.813 60.9429 345.442 56.9143 339.356 56.9143ZM410.491 57.1714C404.32 57.1714 397.463 61.4571 399.091 70.4571L392.92 64.8C394.205 57.5143 401.234 52.1143 410.577 52.1143C421.805 52.1143 429.263 57.8571 429.263 69.8571C429.263 78.4286 427.12 90.8571 434.834 96H426.863C424.12 93.6 423.091 89.8286 422.748 85.6286C420.434 93.0857 415.291 96.8571 407.148 96.8571C397.977 96.8571 393.091 91.4571 393.091 84.7714C393.091 75.6 400.72 70.5429 410.405 70.4571L423.005 70.3714C423.005 61.3714 418.12 57.1714 410.491 57.1714ZM399.263 84.1714C399.263 88.5429 402.691 91.8 408.005 91.8C419.063 91.8 422.748 81.4286 422.748 77.3143L422.834 75.5143L410.405 75.6857C403.72 75.7714 399.263 78.2571 399.263 84.1714Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></a>
-    <div class="nav-links">
+    <div class="nav-links" id="nav-links">
       <div class="menu">
         <button type="button" aria-expanded="false" aria-controls="menu-products">Products <span class="ar">↓</span></button>
         <div class="menu-panel" id="menu-products">
@@ -513,6 +574,7 @@ html.loading .hero .fun, html.loading .toy.sticker, html.loading .hero-pills li,
       </div>
     </div>
     <a class="btn cta" href="#download">Download free <span class="ar">→</span></a>
+    <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="nav-links" aria-label="Menu"><i></i><i></i><i></i></button>
   </nav>
 </div>
 
@@ -536,8 +598,8 @@ html.loading .hero .fun, html.loading .toy.sticker, html.loading .hero-pills li,
     </h1>
     <p class="lead">Design, whiteboards, slides, campaigns, websites, apps, video and documents. One app that runs on your computer, works with your team on any server, and never sends a bill.</p>
     <div class="hero-ctas">
-      <a class="btn ink" href="#download">Download for macOS</a>
-      <a class="btn" href="https://api.nagma.app">Open in browser</a>
+      <a class="btn ink" href="#download" id="cta-dl">Download for macOS</a>
+      <a class="btn" href="https://api.nagma.app" id="cta-web">Open in browser</a>
     </div>
 
     <!-- The glance: a Nagma window cycling through five products. -->
@@ -580,7 +642,7 @@ html.loading .hero .fun, html.loading .toy.sticker, html.loading .hero-pills li,
   <div class="rail-sticky on-dark">
     <div class="rail-head">
       <h2 class="reveal">Eight products.<br><span class="hl green">One file browser.</span></h2>
-      <p class="lead reveal" style="max-width: 380px;">Every product opens the same files, shares the same components and brand kits, and works with the same people. Keep scrolling: the rail moves sideways.</p>
+      <p class="lead reveal" style="max-width: 380px;">Every product opens the same files, shares the same components and brand kits, and works with the same people. <span class="hint-scroll">Keep scrolling: the rail moves sideways.</span><span class="hint-swipe">Swipe sideways to see them all.</span></p>
     </div>
     <div class="rail-track" id="track">
       <a class="pcard" href="https://api.nagma.app/?new=design" style="background: var(--orange);"><span class="n">01</span><h3>Design</h3><div class="loop fill"><video muted playsinline preload="metadata" poster="img/loop-design.jpg?v=d480426c"><source src="img/loop-design.mp4?v=14240a6b" type="video/mp4"><source src="img/loop-design.webm?v=37adb942" type="video/webm"></video></div><p>Vectors, auto layout, components, prototypes, motion, inspect. Opens .fig and .sketch.</p><span class="go">Explore Design →</span></a>
@@ -677,7 +739,7 @@ html.loading .hero .fun, html.loading .toy.sticker, html.loading .hero-pills li,
   <div class="wrap" style="position: relative;">
     <div style="display: flex; justify-content: space-between; align-items: end; gap: 24px; flex-wrap: wrap; margin-bottom: 64px;">
       <h2 class="reveal" style="max-width: 900px;">Your files. <span class="hl pink">Your server.</span></h2>
-      <p class="lead reveal" style="max-width: 420px;">Nothing leaves your computer until you say so. Hover a tile. Pick one later.</p>
+      <p class="lead reveal" style="max-width: 420px;">Nothing leaves your computer until you say so. <span class="hint-hover">Hover a tile. </span>Pick one later.</p>
     </div>
     <div class="tiles">
       <div class="tile t1"><svg class="illo" viewBox="0 0 200 120" aria-hidden="true"><rect x="28" y="14" width="144" height="86" rx="10" fill="#fff" stroke="#141413" stroke-width="3"/><rect x="38" y="24" width="124" height="66" rx="4" fill="#F6F1E7" stroke="#141413" stroke-width="2"/><rect x="46" y="32" width="40" height="24" rx="4" fill="#F5C842" stroke="#141413" stroke-width="2"/><rect x="92" y="32" width="62" height="10" rx="3" fill="#8FC1F0" stroke="#141413" stroke-width="2"/><rect x="92" y="46" width="44" height="10" rx="3" fill="#FC829A" stroke="#141413" stroke-width="2"/><rect x="46" y="62" width="108" height="20" rx="4" fill="#BFE6C8" stroke="#141413" stroke-width="2"/><path d="M14 102h172l-10 10H24z" fill="#141413"/><circle cx="100" cy="19" r="2" fill="#141413"/></svg><div class="big">This computer</div><p>Free, no account. Files stay on this device as drafts. The desktop app has a server built in.</p></div>
@@ -765,6 +827,8 @@ html.loading .hero .fun, html.loading .toy.sticker, html.loading .hero-pills li,
 <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.20.0/matter.min.js"></script>
 <script>
 const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+// Narrow screens, and touch screens of any size, get the rail as a swipe (see the stylesheet) and no pinned cards.
+const narrow = matchMedia("(max-width: 960px)"), railNative = matchMedia("(max-width: 960px), (hover: none) and (pointer: coarse)");
 
 // Page loader: shown until the page has loaded, held long enough for the insignia to finish building, and never kept past 7 s.
 (function () {
@@ -804,6 +868,7 @@ addEventListener("scroll", paint, { passive: true }); paint();
 const play = document.getElementById("play");
 let drag = null;
 play.addEventListener("pointerdown", (e) => {
+  if (e.pointerType === "touch") return;
   const t = e.target.closest(".toy"); if (!t) return;
   const r = t.getBoundingClientRect(); const pr = play.getBoundingClientRect();
   drag = { t, dx: e.clientX - r.left, dy: e.clientY - r.top, pr };
@@ -828,6 +893,7 @@ if (!reduce) addEventListener("pointermove", (e) => {
 // Product rail: vertical scroll moves the track sideways.
 const rail = document.querySelector(".rail"), track = document.getElementById("track");
 function moveRail() {
+  if (railNative.matches) { track.style.transform = ""; return; }
   const r = rail.getBoundingClientRect();
   const total = rail.offsetHeight - innerHeight;
   const p = Math.min(1, Math.max(0, -r.top / total));
@@ -863,6 +929,7 @@ tabs.forEach((t, k) => t.addEventListener("click", () => { scene = k; showScene(
 // Stacking cards: a card that the next one has started to cover shrinks a little, so the stack reads as a stack.
 const scards = [...document.querySelectorAll(".scard")];
 function stackCards() {
+  if (narrow.matches) return;
   scards.forEach((c, i) => {
     const next = scards[i + 1];
     if (!next) { c.classList.remove("behind"); return; }
@@ -981,12 +1048,24 @@ document.querySelectorAll(".hl").forEach((el) => hio.observe(el));
 const navWrap = document.querySelector(".nav-wrap");
 let lastY = scrollY;
 addEventListener("scroll", () => {
+  if (navWrap.classList.contains("open")) return;
   const y = scrollY;
   if (y < 12) navWrap.classList.remove("hide");
   else if (y > lastY + 2) navWrap.classList.add("hide");
   else if (y < lastY - 2) navWrap.classList.remove("hide");
   lastY = y;
 }, { passive: true });
+
+// Phones and tablets: the menu button opens the links as a sheet under the bar. A link, Escape or a wider window closes it.
+const navToggle = document.querySelector(".nav-toggle");
+if (navToggle) {
+  const setOpen = (on) => { navWrap.classList.toggle("open", on); navToggle.setAttribute("aria-expanded", String(on)); if (on) navWrap.classList.remove("hide"); };
+  navToggle.addEventListener("click", () => setOpen(!navWrap.classList.contains("open")));
+  navWrap.addEventListener("click", (e) => { if (e.target.closest("a") && navWrap.classList.contains("open")) setOpen(false); });
+  addEventListener("keydown", (e) => { if (e.key === "Escape" && navWrap.classList.contains("open")) { setOpen(false); navToggle.focus(); } });
+  const wide = matchMedia("(min-width: 961px)"), onWide = (e) => { if (e.matches) setOpen(false); };
+  if (wide.addEventListener) wide.addEventListener("change", onWide); else wide.addListener(onWide);
+}
 
 // Usually-paid table: five rows first, the rest on request.
 const paidToggle = document.getElementById("paid-toggle");
@@ -1012,6 +1091,15 @@ document.querySelectorAll(".loop video").forEach((v) => vio.observe(v));
 
 document.getElementById("year").textContent = String(new Date().getFullYear());
 
+// The first hero button names the visitor's system. On a phone or tablet the browser comes first: the desktop app can't install there.
+(function () {
+  const dl = document.getElementById("cta-dl"), web = document.getElementById("cta-web"); if (!dl || !web) return;
+  const ua = navigator.userAgent, touchMac = navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
+  if (/Android|iPhone|iPad|iPod/i.test(ua) || touchMac) { dl.textContent = "Get the desktop app"; dl.classList.remove("ink"); web.classList.add("ink"); web.parentNode.insertBefore(web, dl); }
+  else if (/Windows/i.test(ua)) dl.textContent = "Download for Windows";
+  else if (/Linux|X11|CrOS/i.test(ua)) dl.textContent = "Download for Linux";
+})();
+
 // Hovering "company." calls the crowd in; leaving it sends them off again.
 const claim = document.querySelector(".claim"), company = document.getElementById("company");
 let leaveTimer = null;
@@ -1025,8 +1113,9 @@ document.querySelectorAll(".menu").forEach((m) => {
   let closeTimer = null;
   const open = () => { clearTimeout(closeTimer); document.querySelectorAll(".menu.open").forEach((o) => { if (o !== m) { o.classList.remove("open"); o.querySelector("button").setAttribute("aria-expanded", "false"); } }); m.classList.add("open"); btn.setAttribute("aria-expanded", "true"); };
   const close = () => { m.classList.remove("open"); btn.setAttribute("aria-expanded", "false"); };
-  m.addEventListener("pointerenter", open);
-  m.addEventListener("pointerleave", () => { closeTimer = setTimeout(close, 180); });
+  // Hover opens only for a mouse or pen: on a touch screen a tap would open and close in one go.
+  m.addEventListener("pointerenter", (e) => { if (e.pointerType !== "touch") open(); });
+  m.addEventListener("pointerleave", (e) => { if (e.pointerType !== "touch") closeTimer = setTimeout(close, 180); });
   btn.addEventListener("click", () => (m.classList.contains("open") ? close() : open()));
   m.addEventListener("keydown", (e) => { if (e.key === "Escape") { close(); btn.focus(); } });
 });
@@ -1036,7 +1125,12 @@ document.querySelectorAll("[data-product]").forEach((a) => a.addEventListener("c
   const railEl = document.querySelector(".rail"); if (!railEl) return;
   e.preventDefault();
   const i = Number(a.dataset.product), total = railEl.offsetHeight - innerHeight;
-  window.scrollTo({ top: railEl.offsetTop + (i / 7) * total, behavior: "smooth" });
+  if (railNative.matches) {
+    // The swipe version: the page scrolls to the rail and the rail to the card.
+    const card = track.children[i], pad = parseFloat(getComputedStyle(track).paddingLeft) || 0;
+    railEl.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (card) track.scrollTo({ left: card.offsetLeft - pad, behavior: "smooth" });
+  } else window.scrollTo({ top: railEl.offsetTop + (i / 7) * total, behavior: "smooth" });
   a.closest(".menu")?.classList.remove("open");
 }));
 

@@ -127,20 +127,30 @@ p { margin: 0; }
 .prose .asset-group li { display: flex; justify-content: space-between; gap: 10px; margin: 4px 0; font-size: 14px; }
 .asset-group li span { flex: none; color: var(--mute); }
 
+.side-toggle { display: none; }
 @media (max-width: 360px) { .brand .wm { display: none; } .nav .cta { padding: 0 14px; } .nav .cta .ar { display: none; } }
 @media (max-width: 960px) {
   .nav-links { display: none; }
-  .nav { padding: 10px 16px; } .brand .wm { height: 22px; } .nav .cta { min-height: 44px; padding: 0 16px; font-size: 13px; }
+  .nav { padding: 10px 16px; gap: 10px; } .brand .wm { height: 22px; } .nav .cta { min-height: 44px; padding: 0 16px; font-size: 13px; margin-left: auto; }
   .foot-top { grid-template-columns: minmax(0, 1fr); }
   .wrap { padding: 0 16px; }
   .page-main { padding-top: 104px; }
   .doc { grid-template-columns: minmax(0, 1fr); gap: 28px; }
-  .side { position: static; max-height: none; overflow: visible; padding-bottom: 8px; border-bottom: 2.5px solid var(--ink); font-size: 14px; }
+  /* The page list folds behind a button that names the current page, so the article starts near the top. */
+  .side { position: static; max-height: none; overflow: visible; padding-bottom: 0; font-size: 14px; }
+  .side.open { padding-bottom: 8px; border-bottom: 2.5px solid var(--ink); }
+  .side > b, .side > ul { display: none; }
+  .side.open > b { display: block; margin-top: 18px; }
+  .side.open > ul { display: flex; }
   .side b { margin-left: 0; }
   .side ul { flex-direction: row; flex-wrap: wrap; gap: 6px; margin-bottom: 18px; }
   .side a { padding: 5px 12px; border-color: var(--ink); }
+  .side-toggle { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 18px; border: 2.5px solid var(--ink); border-radius: 999px; background: #fff; color: var(--ink); font: inherit; font-family: var(--display); font-size: 17px; cursor: none; box-shadow: 4px 4px 0 var(--ink); }
+  .side-toggle i { flex: none; width: 10px; height: 10px; border-right: 2.5px solid currentColor; border-bottom: 2.5px solid currentColor; transform: translateY(-3px) rotate(45deg); transition: transform .2s; }
+  .side.open .side-toggle i { transform: translateY(3px) rotate(-135deg); }
 }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .nav-wrap { transition: none; } }
+@media (min-width: 601px) and (max-width: 960px) { .foot-top { grid-template-columns: repeat(2, minmax(0, 1fr)); } .foot-top > div:first-child { grid-column: 1 / -1; } }
 
 /* Nav dropdowns (shared with home.html) */
 .menu { position: relative; }
@@ -158,6 +168,28 @@ p { margin: 0; }
 .menu-panel a { position: relative; }
 .menu-panel a::after { content: ""; position: absolute; left: 12px; right: 12px; bottom: -1px; border-bottom: 2px dotted rgba(20, 20, 19, .35); }
 .menu-panel a:last-child::after, #menu-products a:nth-last-child(-n+2)::after { display: none; }
+/* The menu button (home.html keeps the same rules): three lines, an X while the links are open. */
+.nav-toggle { display: none; flex: none; width: 44px; height: 44px; padding: 0; border: 2px solid currentColor; border-radius: 999px; background: none; color: inherit; cursor: none; flex-direction: column; align-items: center; justify-content: center; gap: 5px; }
+.nav-toggle i { display: block; width: 18px; height: 2px; border-radius: 2px; background: currentColor; transition: transform .25s cubic-bezier(.2,.8,.2,1), opacity .2s; }
+.nav-wrap.open .nav-toggle i:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+.nav-wrap.open .nav-toggle i:nth-child(2) { opacity: 0; }
+.nav-wrap.open .nav-toggle i:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+@media (max-width: 960px) {
+  .nav-toggle { display: flex; }
+  .nav .cta { white-space: nowrap; }
+  .nav-wrap.open .nav { flex-wrap: wrap; }
+  .nav-wrap.open .nav-links { display: flex; flex-direction: column; flex: 1 1 100%; order: 10; gap: 6px; padding: 8px 0 16px; max-height: calc(100vh - 90px); max-height: calc(100svh - 90px); overflow-y: auto; overscroll-behavior: contain; }
+  .nav-wrap.open .nav-links > a { justify-content: space-between; padding: 12px 14px; border: 2px solid currentColor; border-radius: 14px; }
+  .nav-wrap.open .menu > button { display: block; width: 100%; padding: 14px 2px 6px; font-size: 12px; letter-spacing: .14em; pointer-events: none; background: none; color: inherit; opacity: .75; }
+  .nav-wrap.open .menu > button .ar { display: none; }
+  .nav-wrap.open .menu-panel, .nav-wrap.open #menu-products { display: grid; position: static; min-width: 0; grid-template-columns: 1fr 1fr; box-shadow: none; }
+  .nav-wrap.open .menu-panel a { padding: 9px 10px; align-items: flex-start; }
+  .nav-wrap.open .menu-panel a::after { display: none; }
+  .nav-wrap.open .menu-panel b { font-size: 16px; }
+  .nav-wrap.open .menu-panel span { font-size: 12px; }
+}
+@media (max-width: 480px) { .nav .cta .ar { display: none; } .nav .cta { padding: 0 14px; } }
+@media (max-width: 420px) { .nav-wrap.open .menu-panel, .nav-wrap.open #menu-products { grid-template-columns: 1fr; } .nav-wrap.open .menu-panel span { display: none; } }
 
 /* About: a small photo, not a hero. The cut-out sits on the logo orange inside the picture itself, head centred. */
 .about-photo { margin: 0 0 28px; display: flex; align-items: center; gap: 16px; }
