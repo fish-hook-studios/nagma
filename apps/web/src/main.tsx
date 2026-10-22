@@ -73,6 +73,36 @@ if (sitePreview) {
     void resumePendingShare().then((resumed) => (resumed ? undefined : openLastFile(rejoinShared)));
 }
 
+// ?settings=<tab> opens Settings on that tab (for example ?settings=stats, a server admin's usage
+// page) once the signed-in account is known, so the tabs that need an account are there.
+{
+    const wanted = startParams.get("settings");
+    const tabs = ["account", "notifications", "security", "community", "tokens", "ai", "stats"] as const;
+    const tab = tabs.find((t) => t === wanted);
+    if (tab) {
+        const url = new URL(location.href);
+        url.searchParams.delete("settings");
+        history.replaceState(null, "", url);
+        void import("./engine/account").then(({ openAccountSettings }) => {
+            const open = () => openAccountSettings(tab);
+            if (tab === "ai" || authModule.auth.get().user) return open();
+            let done = false;
+            const stop = authModule.auth.subscribe(() => {
+                if (done || !authModule.auth.get().user) return;
+                done = true;
+                stop();
+                open();
+            });
+            setTimeout(() => {
+                if (done) return;
+                done = true;
+                stop();
+                open();
+            }, 4000);
+        });
+    }
+}
+
 // Preferences › Open links in desktop app: hand a file link to the desktop app.
 openLinkInDesktopApp();
 
