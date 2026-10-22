@@ -2,7 +2,7 @@
 title: About
 ---
 
-<figure class="about-photo"><span class="pic"><img src="/img/ashwath-2.webp" alt="Ashwath" width="480" height="480"></span><figcaption>Ashwath, the one typing this.</figcaption></figure>
+<figure class="about-photo"><span class="pic"><img src="/img/ashwath-3.webp" alt="Ashwath" width="480" height="480"></span><figcaption>Ashwath, the one typing this.</figcaption></figure>
 
 ## Who made this?
 
