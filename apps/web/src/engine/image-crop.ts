@@ -186,6 +186,18 @@ export function cropFramePatch(node: SceneNode, index: number, paint: ImagePaint
     return { x: box.x, y: box.y, w: box.w, h: box.h, ...withPaint(node, index, { ...paint, mode: "crop", crop: cropFor(box, place) }) };
 }
 
+// ⌘ drag on a resize handle of an image layer crops instead of scaling: the picture stays exactly
+// where it is on the canvas and the layer becomes the crop frame at `box` (so pulling the bottom
+// edge up crops from the bottom). Null when the layer has no still image fill, or a tiled one.
+export function cropResizePatch(doc: NagmaDocument, node: SceneNode, box: { x: number; y: number; w: number; h: number }): NodePatch | null {
+    const index = firstImagePaint(node);
+    const paint = node.fills[index];
+    if (!paint || paint.type !== "image" || paint.mode === "tile" || paint.video) return null;
+    const place = placement(doc, node, paint);
+    if (Math.abs(place.a * place.d - place.b * place.c) < 1e-12) return null;
+    return cropFramePatch(node, index, paint, box, place);
+}
+
 // The paint of the layer being cropped.
 export function croppedPaint(doc: NagmaDocument): { node: SceneNode; paint: ImagePaint; index: number } | null {
     const c = vectorUi.get().crop;

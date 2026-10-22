@@ -2,7 +2,7 @@
 import "./inspect-settings";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { viewport } from "./camera";
-import { FRAME_HANDLES, cancelCrop, cropFor, cropFramePatch, cropMatrix, endCrop, frameHandleAt, placement, resizeCropFrame, startCrop } from "./image-crop";
+import { FRAME_HANDLES, cancelCrop, cropFor, cropFramePatch, cropMatrix, cropResizePatch, endCrop, frameHandleAt, placement, resizeCropFrame, startCrop } from "./image-crop";
 import { editor } from "./store";
 import type { ImagePaint, NagmaDocument, SceneNode } from "./types";
 import { vectorUi } from "./vector-ui";
@@ -171,5 +171,51 @@ describe("entering and leaving crop mode", () => {
         expect([restored.x, restored.y, restored.w, restored.h]).toEqual([100, 50, 200, 100]);
         expect(restored.fills).toEqual(before.fills);
         expect(vectorUi.get().crop).toBeNull();
+    });
+});
+
+describe("⌘ drag on a resize handle crops", () => {
+    // The picture's corner in parent space, from the crop the patch stores.
+    const corner = (doc: NagmaDocument, patch: ReturnType<typeof cropResizePatch>, u: number, v: number) => {
+        const node = { ...(doc.nodes["IMG"] as SceneNode), ...patch } as SceneNode;
+        const p = placement(doc, node, node.fills[0] as ImagePaint).transformPoint(new DOMPoint(u, v));
+        return { x: Math.round(p.x * 100) / 100, y: Math.round(p.y * 100) / 100 };
+    };
+
+    it("pulling the bottom edge up crops from the bottom: the picture stays put", () => {
+        // A 400×200 picture filling a 400×200 layer exactly.
+        const doc = withImage({ x: 100, y: 100, w: 400, h: 200 }, image());
+        const patch = cropResizePatch(doc, doc.nodes["IMG"] as SceneNode, { x: 100, y: 100, w: 400, h: 120 });
+        expect(patch).not.toBeNull();
+        expect(patch).toMatchObject({ x: 100, y: 100, w: 400, h: 120 });
+        expect((patch!.fills![0] as ImagePaint).mode).toBe("crop");
+        expect(corner(doc, patch, 0, 0)).toEqual({ x: 100, y: 100 });
+        expect(corner(doc, patch, 1, 1)).toEqual({ x: 500, y: 300 });
+    });
+
+    it("pulling the top edge down crops from the top", () => {
+        const doc = withImage({ x: 100, y: 100, w: 400, h: 200 }, image());
+        const patch = cropResizePatch(doc, doc.nodes["IMG"] as SceneNode, { x: 100, y: 180, w: 400, h: 120 });
+        expect(patch).toMatchObject({ x: 100, y: 180, w: 400, h: 120 });
+        expect(corner(doc, patch, 0, 0)).toEqual({ x: 100, y: 100 });
+        expect(corner(doc, patch, 1, 1)).toEqual({ x: 500, y: 300 });
+    });
+
+    it("keeps a fill-mode picture where it covered the layer, and a later ⌘ drag keeps the same picture", () => {
+        // 400×200 picture covering a 200×200 layer: it shows its middle 200 px.
+        const doc = withImage({ x: 0, y: 0, w: 200, h: 200 }, image());
+        const first = cropResizePatch(doc, doc.nodes["IMG"] as SceneNode, { x: 0, y: 0, w: 200, h: 100 })!;
+        expect(corner(doc, first, 0, 0)).toEqual({ x: -100, y: 0 });
+        const cropped = { ...doc, nodes: { ...doc.nodes, IMG: { ...(doc.nodes["IMG"] as SceneNode), ...first } as SceneNode } };
+        const second = cropResizePatch(cropped, cropped.nodes["IMG"] as SceneNode, { x: 50, y: 0, w: 150, h: 100 })!;
+        expect(corner(cropped, second, 0, 0)).toEqual({ x: -100, y: 0 });
+        expect(corner(cropped, second, 1, 1)).toEqual({ x: 300, y: 200 });
+    });
+
+    it("is nothing for a layer without a still image fill", () => {
+        const doc = withImage({ x: 0, y: 0, w: 200, h: 200 }, image({ mode: "tile" }));
+        expect(cropResizePatch(doc, doc.nodes["IMG"] as SceneNode, { x: 0, y: 0, w: 100, h: 100 })).toBeNull();
+        const plain = add(emptyDoc(), "rect", "R", { x: 0, y: 0, w: 10, h: 10 }, PAGE, { fills: [] });
+        expect(cropResizePatch(plain, plain.nodes["R"] as SceneNode, { x: 0, y: 0, w: 5, h: 5 })).toBeNull();
     });
 });

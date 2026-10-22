@@ -110,7 +110,7 @@ const SECTIONS: Section[] = [
         id: "transform",
         label: "Transform",
         groups: [
-            { title: "Move and size", rows: [["Nudge", "Arrow keys"], ["Big nudge", "⇧ arrow keys"], ["Resize", "⌘ arrow keys"], ["Big resize", "⇧ ⌘ arrow keys"], ["Resize from the center", "⌥ drag a handle"], ["Keep proportions", "⇧ drag a handle"], ["Scale contents", "K, then drag a handle"]] },
+            { title: "Move and size", rows: [["Nudge", "Arrow keys"], ["Big nudge", "⇧ arrow keys"], ["Resize", "⌘ arrow keys"], ["Big resize", "⇧ ⌘ arrow keys"], ["Resize from the center", "⌥ drag a handle"], ["Keep proportions", "⇧ drag a handle"], ["Crop an image instead of scaling it", "⌘ drag a handle"], ["Scale contents", "K, then drag a handle"]] },
             { title: "Rotate and flip", rows: [["Rotate in 15° steps", "⇧ rotate"], ["Rotate", "Drag outside a corner"], ["Flip horizontal", "⇧ H"], ["Flip vertical", "⇧ V"]] },
             { title: "Structure", rows: [["Group", "⌘ G"], ["Ungroup", "⇧ ⌘ G"], ["Frame selection", "⌥ ⌘ G"], ["Wrap in section", "⌘ S"], ["Use as mask", "⌃ ⌘ M"], ["Resize to fit", "⌥ ⇧ ⌘ R"], ["Add auto layout", "⇧ A"], ["Remove auto layout", "⌥ ⇧ A"], ["Suggest auto layout", "⌃ ⇧ A"]] },
         ],

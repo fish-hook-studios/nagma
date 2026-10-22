@@ -52,6 +52,7 @@ import {
 import { paintPreview } from "./plugins/paint-preview";
 import { duplicateInPlace, enterVectorEdit, isLastDuplicate, leaveVectorEdit, recordDuplicateMove, rehome } from "../engine/actions";
 import { decodeAssetDrag, placeAsset, swapTo } from "../components/asset-sources";
+import { cropResizePatch } from "../engine/image-crop";
 import { firstImagePaint, openPhotoEditor } from "../engine/photo";
 import { collab, setCursor as setCollabCursor } from "../engine/collab";
 import { beginCommentDraft } from "../engine/comments";
@@ -1700,18 +1701,19 @@ function resizeCommand(gesture: Extract<Gesture, { kind: "resize" }>, world: Poi
         const r = { x: Math.min(raw.x, raw.x + raw.w), y: Math.min(raw.y, raw.y + raw.h), w: Math.abs(raw.w), h: Math.abs(raw.h) };
         const centerWorld = apply(m, r.x + r.w / 2, r.y + r.h / 2);
         const c = toSpace(gesture.base, single.parentId, centerWorld);
+        const box = { x: snapPx(c.x - r.w / 2), y: snapPx(c.y - r.h / 2), w: Math.max(1, snapPx(r.w)), h: Math.max(1, snapPx(r.h)) };
+        // ⌘ on an image layer crops: the picture holds still and the frame moves from the dragged side.
+        const crop = ignoreConstraints && !flipX && !flipY ? cropResizePatch(gesture.base, single, box) : null;
         return {
             type: "node.update",
             id: single.id,
             ...(ignoreConstraints ? { ignoreConstraints } : {}),
             patch: {
-                x: snapPx(c.x - r.w / 2),
-                y: snapPx(c.y - r.h / 2),
-                w: Math.max(1, snapPx(r.w)),
-                h: Math.max(1, snapPx(r.h)),
+                ...box,
                 sizing: fixedOn(single, gesture.handle),
                 ...(flipX ? { flipX: !single.flipX } : {}),
                 ...(flipY ? { flipY: !single.flipY } : {}),
+                ...(crop ?? {}),
             },
         };
     }
