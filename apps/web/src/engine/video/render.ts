@@ -6,6 +6,7 @@ import {
     type VBlend,
     type VClip,
     type VComp,
+    type VMask,
     type VMedia,
     type VProject,
     type VTitle,
@@ -15,11 +16,15 @@ import {
     clipsOn,
     compById,
     effectParamsAt,
+    keysValue,
     mediaById,
+    parentMatrix,
     propAt,
+    transformAnimated,
     videoTracks,
 } from "./model";
 import { LOOKS } from "./presets";
+import { shapeOutlines } from "./shapes";
 import { clipPlayer, exactFrame, stillImage } from "./sources";
 
 // Draws a composition at a time: each video track bottom to top, each clip through its source,
@@ -111,8 +116,14 @@ export function trackShot(comp: VComp, track: VTrack, t: number): TrackShot | nu
 // Time into the source at `lt` seconds into the clip, running past its edges into the source's
 // handles (transitions show a little more of each side).
 export function sourceAt(clip: VClip, lt: number, length: number): number {
-    const t = clip.reverse ? clip.in + clip.duration * clip.speed - lt * clip.speed : clip.in + lt * clip.speed;
+    // Time remapping: the keyframes say where in the source each moment of the clip is.
+    const remap = clip.anim.time;
+    const t = remap?.length ? keysValue(remap, lt) : clip.reverse ? clip.in + clip.duration * clip.speed - lt * clip.speed : clip.in + lt * clip.speed;
     return Math.max(0, Math.min(Number.isFinite(length) ? length : t, t));
+}
+
+export function timeRemapped(clip: VClip): boolean {
+    return (clip.anim.time?.length ?? 0) > 0;
 }
 
 // ---- Layer size: media fit inside the frame ----
@@ -128,7 +139,7 @@ export function layerSize(project: VProject, comp: VComp, clip: VClip): { w: num
         const nested = compById(project, clip.comp);
         mw = nested.width;
         mh = nested.height;
-    } else if (clip.kind === "shape" && clip.shape) {
+    } else if (clip.kind === "shape") {
         return { w: comp.width, h: comp.height };
     }
     const fit = Math.min(comp.width / mw, comp.height / mh);
@@ -152,16 +163,28 @@ export async function renderComp(out: CanvasRenderingContext2D, comp: VComp, t: 
     } else out.clearRect(0, 0, W, H);
     out.restore();
     if (c.depth > 6) return;
-    for (const track of videoTracks(comp)) {
-        if (track.hidden) continue;
-        const shot = trackShot(comp, track, t);
+    const tracks = videoTracks(comp);
+    const shots = tracks.map((track) => (track.hidden ? null : trackShot(comp, track, t)));
+    for (let i = 0; i < tracks.length; i++) {
+        const shot = shots[i];
         if (!shot) continue;
+        // A matte source (the clip above a matted clip) is used by that clip, not drawn itself.
+        const below = shots[i - 1];
+        if (below?.kind === "clip" && below.clip.matte && matteSource(shot)) continue;
         if (shot.kind === "clip") {
             if (shot.clip.kind === "audio") continue;
+            const matte = shot.clip.matte ? matteSource(shots[i + 1]) : null;
             if (shot.clip.kind === "adjustment") await adjust(out, comp, shot.clip, shot.lt, c, 1);
+            else if (matte) await drawMatted(out, comp, shot.clip, shot.lt, matte.clip, matte.lt, c);
             else await drawClip(out, comp, shot.clip, shot.lt, c, { alpha: 1, dx: 0, dy: 0, zoom: 1 });
         } else await drawTransition(out, comp, shot, c);
     }
+}
+
+// The shot on the track above a matted clip, when it's a picture that can be a matte.
+export function matteSource(shot: TrackShot | null | undefined): Extract<TrackShot, { kind: "clip" }> | null {
+    if (!shot || shot.kind !== "clip" || shot.clip.kind === "audio" || shot.clip.kind === "adjustment") return null;
+    return shot;
 }
 
 interface Mod {
@@ -172,10 +195,43 @@ interface Mod {
     blur?: number;
 }
 
+// Sub-frame samples a motion-blurred clip averages, over a 180 degree shutter (half a frame).
+const BLUR_SAMPLES = 8;
+
 async function drawClip(out: CanvasRenderingContext2D, comp: VComp, clip: VClip, lt: number, c: Ctx, mod: Mod) {
     const layer = await renderLayer(comp, clip, lt, c);
     if (!layer) return;
     const s = c.scale;
+    const opacity = Math.max(0, Math.min(1, propAt(comp, clip, "opacity", lt) / 100));
+    const blurred = Boolean(clip.motionBlur) && !c.draft && transformAnimated(clip);
+    let picture: HTMLCanvasElement = layer.canvas;
+    let place = (g: CanvasRenderingContext2D) => placeLayer(g, comp, clip, layer, lt, s, mod);
+    if (blurred) {
+        // The samples average into their own frame (alpha 1/(i+1) keeps a running mean), then
+        // that frame goes on with the clip's blend mode and opacity.
+        const frame = canvas(`${c.tag ?? ""}B${c.depth}:${clip.id}`, out.canvas.width, out.canvas.height);
+        const fg = ctx2d(frame);
+        const shutter = 0.5 / Math.max(1, comp.fps);
+        for (let i = 0; i < BLUR_SAMPLES; i++) {
+            const st = lt - shutter / 2 + (shutter * (i + 0.5)) / BLUR_SAMPLES;
+            fg.save();
+            fg.globalAlpha = 1 / (i + 1);
+            placeLayer(fg, comp, clip, layer, st, s, mod);
+            fg.restore();
+        }
+        picture = frame;
+        place = (g) => g.drawImage(picture, 0, 0);
+    }
+    out.save();
+    out.globalAlpha = opacity * mod.alpha;
+    out.globalCompositeOperation = blendOp(clip.blend);
+    if (mod.blur) out.filter = `blur(${mod.blur * s}px)`;
+    place(out);
+    out.restore();
+}
+
+// Draws a rendered layer where the clip's transform (and its parents') puts it at `lt`.
+function placeLayer(out: CanvasRenderingContext2D, comp: VComp, clip: VClip, layer: Layer, lt: number, s: number, mod: Mod) {
     const x = propAt(comp, clip, "x", lt);
     const y = propAt(comp, clip, "y", lt);
     const sx = propAt(comp, clip, "scaleX", lt) / 100;
@@ -183,17 +239,17 @@ async function drawClip(out: CanvasRenderingContext2D, comp: VComp, clip: VClip,
     const rot = (propAt(comp, clip, "rotation", lt) * Math.PI) / 180;
     const ax = propAt(comp, clip, "anchorX", lt);
     const ay = propAt(comp, clip, "anchorY", lt);
-    const opacity = Math.max(0, Math.min(1, propAt(comp, clip, "opacity", lt) / 100));
-    out.save();
-    out.globalAlpha = opacity * mod.alpha;
-    out.globalCompositeOperation = blendOp(clip.blend);
-    if (mod.blur) out.filter = `blur(${mod.blur * s}px)`;
     const cx = comp.width / 2;
     const cy = comp.height / 2;
+    out.save();
     // Transition zooms scale about the frame's centre.
     out.translate((cx + mod.dx) * s, (cy + mod.dy) * s);
     out.scale(mod.zoom, mod.zoom);
     out.translate(-cx * s, -cy * s);
+    if (clip.parent) {
+        const p = parentMatrix(comp, clip, lt);
+        out.transform(p[0], p[1], p[2], p[3], p[4] * s, p[5] * s);
+    }
     out.translate(x * s, y * s);
     out.rotate(rot);
     out.scale(sx, sy);
@@ -271,8 +327,8 @@ async function drawSource(g: CanvasRenderingContext2D, _comp: VComp, clip: VClip
             return true;
         }
         case "shape": {
-            if (!clip.shape) return false;
-            drawShape(g, clip, W, H, c.scale);
+            if (!clip.shapes && !clip.shape) return false;
+            drawShape(g, _comp, clip, lt, W, H, c.scale);
             return true;
         }
         case "comp": {
@@ -471,42 +527,36 @@ function strokeText(g: CanvasRenderingContext2D, title: VTitle, text: string, x:
 
 // ---- Shapes ----
 
-function drawShape(g: CanvasRenderingContext2D, clip: VClip, W: number, H: number, s: number) {
-    const shape = clip.shape;
-    if (!shape) return;
-    const w = shape.w * s;
-    const h = shape.h * s;
+// Each item of a shape layer in order: its outlines (trimmed when Trim Paths is on) filled,
+// then stroked with its caps, joins and dashes.
+function drawShape(g: CanvasRenderingContext2D, comp: VComp, clip: VClip, lt: number, W: number, H: number, s: number) {
     g.save();
     g.translate(W / 2, H / 2);
-    g.beginPath();
-    if (shape.kind === "rect") g.roundRect(-w / 2, -h / 2, w, h, Math.min(shape.radius * s, w / 2, h / 2));
-    else if (shape.kind === "ellipse") g.ellipse(0, 0, w / 2, h / 2, 0, 0, Math.PI * 2);
-    else if (shape.kind === "line") {
-        g.moveTo(-w / 2, 0);
-        g.lineTo(w / 2, 0);
-    } else {
-        const n = Math.max(3, Math.round(shape.sides));
-        const points = shape.kind === "star" ? n * 2 : n;
-        for (let i = 0; i < points; i++) {
-            const a = -Math.PI / 2 + (i / points) * Math.PI * 2;
-            const r = shape.kind === "star" && i % 2 ? 0.45 : 1;
-            const px = Math.cos(a) * (w / 2) * r;
-            const py = Math.sin(a) * (h / 2) * r;
-            if (i) g.lineTo(px, py);
-            else g.moveTo(px, py);
+    for (const o of shapeOutlines(comp, clip, lt)) {
+        if (!o.lines.length || o.opacity <= 0) continue;
+        g.save();
+        g.globalAlpha = o.opacity;
+        g.beginPath();
+        for (const line of o.lines) {
+            line.points.forEach((p, i) => (i ? g.lineTo(p.x * s, p.y * s) : g.moveTo(p.x * s, p.y * s)));
+            if (line.closed) g.closePath();
         }
-        g.closePath();
-    }
-    if (shape.fill && shape.kind !== "line") {
-        g.fillStyle = shape.fill;
-        g.fill();
-    }
-    if (shape.stroke && shape.strokeWidth > 0) {
-        g.strokeStyle = shape.stroke;
-        g.lineWidth = shape.strokeWidth * s;
-        g.lineCap = "round";
-        g.lineJoin = "round";
-        g.stroke();
+        if (o.item.fill) {
+            g.fillStyle = o.item.fill;
+            g.fill();
+        }
+        if (o.item.stroke && o.strokeWidth > 0) {
+            g.strokeStyle = o.item.stroke;
+            g.lineWidth = o.strokeWidth * s;
+            g.lineCap = o.item.cap;
+            g.lineJoin = o.item.join;
+            if (o.item.dash.length && o.item.dash.some((d) => d > 0)) {
+                g.setLineDash(o.item.dash.map((d) => Math.max(0, d) * s));
+                g.lineDashOffset = o.dashOffset * s;
+            }
+            g.stroke();
+        }
+        g.restore();
     }
     g.restore();
 }
@@ -533,28 +583,93 @@ function masks(g: CanvasRenderingContext2D, comp: VComp, clip: VClip, lt: number
         mg.fillStyle = "#000";
         mg.fillRect(0, 0, W, H);
     }
-    for (const mask of clip.masks) {
+    clip.masks.forEach((mask, i) => {
         const p = (k: string) => propAt(comp, clip, `mask.${mask.id}.${k}`, lt);
-        const x = p("x") * W;
-        const y = p("y") * H;
-        const w = p("w") * W;
-        const h = p("h") * H;
         const feather = Math.max(0, p("feather")) * s;
+        const expand = p("expand") * s;
+        // The first mask starts from nothing, so an intersect there means add.
+        const mode = i === 0 && mask.mode === "intersect" ? "add" : mask.mode;
         mg.save();
         mg.globalAlpha = Math.max(0, Math.min(1, p("opacity") / 100));
-        mg.globalCompositeOperation = mask.mode === "subtract" ? "destination-out" : "source-over";
+        mg.globalCompositeOperation = mode === "subtract" ? "destination-out" : mode === "intersect" ? "destination-in" : "source-over";
         if (feather > 0.5) mg.filter = `blur(${feather}px)`;
         mg.fillStyle = "#000";
-        mg.beginPath();
-        if (mask.shape === "ellipse") mg.ellipse(x + w / 2, y + h / 2, Math.abs(w / 2), Math.abs(h / 2), 0, 0, Math.PI * 2);
-        else mg.rect(x, y, w, h);
+        mg.strokeStyle = "#000";
+        mg.lineJoin = "round";
+        maskPath(mg, mask, p, W, H);
         mg.fill();
+        // Expansion grows the shape by stroking its edge; shrinking cuts the edge back off.
+        if (expand > 0.5) {
+            mg.lineWidth = expand * 2;
+            mg.stroke();
+        } else if (expand < -0.5 && mode === "add") {
+            mg.globalCompositeOperation = "destination-out";
+            mg.lineWidth = -expand * 2;
+            mg.stroke();
+        }
         mg.restore();
-    }
+    });
     g.save();
     g.globalCompositeOperation = "destination-in";
     g.drawImage(m, 0, 0);
     g.restore();
+}
+
+// A mask's outline on a W × H layer: its rectangle, ellipse or path (fractions of the layer).
+export function maskPath(g: CanvasRenderingContext2D, mask: VMask, p: (k: string) => number, W: number, H: number) {
+    g.beginPath();
+    if (mask.shape === "path") {
+        const pts = mask.points ?? [];
+        pts.forEach((pt, i) => (i ? g.lineTo(pt.x * W, pt.y * H) : g.moveTo(pt.x * W, pt.y * H)));
+        g.closePath();
+        return;
+    }
+    const x = p("x") * W;
+    const y = p("y") * H;
+    const w = p("w") * W;
+    const h = p("h") * H;
+    if (mask.shape === "ellipse") g.ellipse(x + w / 2, y + h / 2, Math.abs(w / 2), Math.abs(h / 2), 0, 0, Math.PI * 2);
+    else g.rect(x, y, w, h);
+}
+
+// ---- Track mattes: the clip on the track above cuts this clip out ----
+
+async function drawMatted(out: CanvasRenderingContext2D, comp: VComp, clip: VClip, lt: number, matte: VClip, mlt: number, c: Ctx) {
+    const W = out.canvas.width;
+    const H = out.canvas.height;
+    const kind = clip.matte ?? "alpha";
+    const key = `${c.tag ?? ""}TM${c.depth}:${clip.id}`;
+    // Both sides drawn alone (normal blend, full opacity on the matte), then combined.
+    const fill = canvas(key, W, H);
+    await drawClip(ctx2d(fill), comp, { ...clip, blend: "normal", matte: null }, lt, c, { alpha: 1, dx: 0, dy: 0, zoom: 1 });
+    const cut = canvas(`${key}:m`, W, H);
+    const cg = ctx2d(cut);
+    await drawClip(cg, comp, { ...matte, blend: "normal", matte: null }, mlt, c, { alpha: 1, dx: 0, dy: 0, zoom: 1 });
+    if (kind === "luma" || kind === "luma-inverted") {
+        // Brightness becomes coverage.
+        const img = cg.getImageData(0, 0, W, H);
+        const d = img.data;
+        for (let i = 0; i < d.length; i += 4) {
+            const l = (0.2126 * (d[i] ?? 0) + 0.7152 * (d[i + 1] ?? 0) + 0.0722 * (d[i + 2] ?? 0)) * ((d[i + 3] ?? 0) / 255);
+            d[i + 3] = kind === "luma" ? l : 255 - l;
+        }
+        cg.putImageData(img, 0, 0);
+    } else if (kind === "alpha-inverted") {
+        cg.save();
+        cg.globalCompositeOperation = "source-out";
+        cg.fillStyle = "#000";
+        cg.fillRect(0, 0, W, H);
+        cg.restore();
+    }
+    const fg = ctx2d(fill);
+    fg.save();
+    fg.globalCompositeOperation = "destination-in";
+    fg.drawImage(cut, 0, 0);
+    fg.restore();
+    out.save();
+    out.globalCompositeOperation = blendOp(clip.blend);
+    out.drawImage(fill, 0, 0);
+    out.restore();
 }
 
 // ---- Colour ----

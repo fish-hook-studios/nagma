@@ -7,8 +7,8 @@ import {
     type VClip,
     type VComp,
     type VEffect,
+    type ShapeItemKind,
     type VMedia,
-    type VShape,
     type VTrack,
     ROOT,
     clipEnd,
@@ -20,6 +20,7 @@ import {
 } from "./model";
 import {
     addMarker,
+    addShapeItem,
     addTrack,
     clipAfter,
     clipBefore,
@@ -39,7 +40,8 @@ import {
     withLinked,
 } from "./edit";
 import { importMediaFile, MEDIA_ACCEPT, pickFiles } from "./import";
-import { MOTION_PRESETS, TITLE_PRESETS, newShape, scaledTitle, titleClipProps } from "./presets";
+import { MOTION_PRESETS, TITLE_PRESETS, scaledTitle, titleClipProps } from "./presets";
+import { newShapeItem, newShapeItemProps } from "./shapes";
 import { activeComp, clipboard, commitComp, commitProject, currentProject, openComp, seek, setClipboard, vui } from "./state";
 
 // What the editor's buttons, menus and keys do.
@@ -153,13 +155,30 @@ export function addTitle(presetId = "headline", t = at()) {
     vui.set({ selection: [placed.id] });
 }
 
-export function addShape(kind: VShape["kind"], t = at()) {
+// A shape layer holding one item of `kind` ("line" from older menus is a two-point path).
+export function addShape(kind: ShapeItemKind | "line", t = at()) {
     const project = currentProject();
     const comp = activeComp(project);
-    const clip = newClip("shape", "", t, 5, kind === "rect" ? "Rectangle" : kind === "ellipse" ? "Ellipse" : kind === "star" ? "Star" : kind === "line" ? "Line" : "Polygon", { shape: newShape(kind, comp) });
+    const item = newShapeItem(kind === "line" ? "path" : kind, comp);
+    if (kind === "line") {
+        const w = Math.round(comp.height * 0.35 * 0.8);
+        item.points = [{ x: -w, y: 0 }, { x: w, y: 0 }];
+        item.name = "Line";
+    }
+    const clip = newClip("shape", "", t, 5, item.name, { shapes: [item], props: newShapeItemProps(item, comp) });
     const placed = placeGenerated(comp, clip);
     commitComp(placed.comp, project);
     vui.set({ selection: [placed.id] });
+}
+
+// Another item on the selected shape layer (or a new shape layer when none is selected).
+export function addShapeItemToSelection(kind: ShapeItemKind, t = at()) {
+    const project = currentProject();
+    const comp = activeComp(project);
+    const target = selectedClips(comp).find((c) => c.kind === "shape");
+    if (!target) return addShape(kind, t);
+    const item = newShapeItem(kind, comp);
+    commitComp({ ...comp, clips: comp.clips.map((c) => (c.id === target.id ? addShapeItem(comp, c, item) : c)) }, project);
 }
 
 export function addSolid(color = "#1E1E24", t = at()) {

@@ -336,6 +336,19 @@ export function CanvasView() {
         editor.set({ contextMenu: { x: clientX, y: clientY } });
     };
 
+    // Adds a point on a segment of the vector being edited and selects it; the gesture that follows
+    // drags it (a release without moving leaves it where it was added).
+    const insertOnSegment = (node: SceneNode, seg: NonNullable<ReturnType<typeof hitSegment>>, world: Point): Gesture | null => {
+        const added = insertPoint(node, seg);
+        if (!added) return null;
+        editor.execute({ type: "node.update", id: node.id, patch: added.patch });
+        editor.set({ vertices: [added.ref] });
+        const base = editor.get().doc;
+        const next = base.nodes[node.id];
+        if (!next) return null;
+        return { kind: "vertex", nodeId: next.id, refs: [added.ref], base, start: toVectorSpace(base, next, world), moved: false };
+    };
+
     const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
         const s = editor.get();
         if (s.editingTextId || s.presentingId) return;
@@ -481,12 +494,8 @@ export function CanvasView() {
                 return;
             }
             if (seg && (event.metaKey || event.ctrlKey)) {
-                // ⌘click on the outline adds a point there.
-                const added = insertPoint(node, seg);
-                if (added) {
-                    editor.execute({ type: "node.update", id: node.id, patch: added.patch });
-                    editor.set({ vertices: [added.ref] });
-                }
+                // ⌘click on the outline adds a point there; it can be dragged straight away.
+                gestureRef.current = insertOnSegment(node, seg, world);
                 return;
             }
             // Drag on empty space selects points in a rectangle; a plain click inside clears, outside leaves.
@@ -544,11 +553,9 @@ export function CanvasView() {
                     return;
                 }
                 if (seg) {
-                    const added = insertPoint(edited, seg);
-                    if (added) {
-                        editor.execute({ type: "node.update", id: edited.id, patch: added.patch });
-                        editor.set({ vertices: [added.ref] });
-                    }
+                    // A click on a segment splits it there, keeping the curve's shape; dragging on
+                    // moves the new point.
+                    gestureRef.current = insertOnSegment(edited, seg, world);
                     return;
                 }
                 // A point in the middle of a path: a new segment branches out of it (a junction).

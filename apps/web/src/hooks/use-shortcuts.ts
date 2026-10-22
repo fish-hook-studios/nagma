@@ -58,7 +58,7 @@ import { toggleCommentsHidden } from "../engine/comments";
 import { openSaveVersion } from "../engine/collab";
 import { openCursorChat } from "../engine/follow";
 import type { BooleanOp, Tool } from "../engine/types";
-import type { VectorTool } from "../canvas/vector-edit";
+import { type VectorTool, removeLastPoint } from "../canvas/vector-edit";
 import { createLink, hasTextSelection, setTextAlign, toggleList, stepFontSize, stepFontWeight, stepLetterSpacing, stepLineHeight, toggleBold, toggleDecoration, toggleItalic } from "../engine/text-actions";
 import { slotSelection } from "../engine/component-actions";
 import { alignSelection, copyAs, copyProperties, distributeSelection, opacityFromDigit, pasteProperties, renameSelection, selectInverse, selectMatching, tidyUp, zoomToFrame, resizeBy, stepPage } from "../engine/arrange";
@@ -159,12 +159,21 @@ export function useShortcuts() {
 
             // ⌃⇧? (Ctrl+Shift+? elsewhere): the keyboard shortcuts panel.
             if (event.ctrlKey && event.shiftKey && !event.altKey && (code === "Slash" || key === "?")) return run(toggleShortcuts);
-            // The pen's path in progress: Enter or Escape finishes it.
+            // The pen's path in progress: Enter or Escape finishes it; Backspace takes the last point off again.
             if (s.penNodeId && (key === "enter" || key === "escape")) {
                 event.preventDefault();
                 editor.finishPen();
                 editor.set({ tool: "move" });
                 return;
+            }
+            if (s.penNodeId && (key === "backspace" || key === "delete") && !mod) {
+                const pen = s.doc.nodes[s.penNodeId];
+                const patch = pen ? removeLastPoint(pen) : null;
+                if (patch) return run(() => editor.execute({ type: "node.update", id: pen!.id, patch }));
+                return run(() => {
+                    editor.finishPen();
+                    editor.set({ tool: "move" });
+                });
             }
             // Point editing: Escape leaves (first clearing the point selection), Delete removes points,
             // ⇧⌫ deletes and heals, ⌘J joins, ⇧⌘J smooth joins, ⌘A selects every point, V/L/B/C/E pick tools.

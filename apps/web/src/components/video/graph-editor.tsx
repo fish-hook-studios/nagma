@@ -1,21 +1,12 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { editor, useEditor } from "../../engine/store";
 import type { NagmaDocument } from "../../engine/types";
-import { type Ease, type VClip, type VKey, PROPS, compById, keysValue, projectOf } from "../../engine/video/model";
+import { type VClip, type VKey, EASES, PROPS, SHAPE_PROPS, compById, keysValue, projectOf } from "../../engine/video/model";
 import { moveKey, removeKey, setKeyEase } from "../../engine/video/edit";
 import { activeComp, commitComp, currentProject, previewComp, seek, useVideoUi, vui } from "../../engine/video/state";
 
 // The graph editor: one keyframed property's value over the clip, its keyframes dragged in time
 // and value, and the selected segment's easing as a curve with two handles.
-
-const EASES: { id: Ease; label: string }[] = [
-    { id: "linear", label: "Linear" },
-    { id: "ease-in", label: "Ease in" },
-    { id: "ease-out", label: "Ease out" },
-    { id: "ease-in-out", label: "Ease in and out" },
-    { id: "spring", label: "Spring" },
-    { id: "hold", label: "Hold" },
-];
 
 const PRESET_BEZIER: Record<string, [number, number, number, number]> = {
     linear: [0, 0, 1, 1],
@@ -152,7 +143,7 @@ function GraphView() {
     return (
         <div className="flex min-h-0 flex-1">
             <div className="flex w-44 shrink-0 flex-col gap-1 overflow-y-auto border-r border-panel-border p-2">
-                <div className="truncate font-semibold">{PROPS[path]?.label ?? path.replace(/^fx\.[^.]+\./, "")}</div>
+                <div className="truncate font-semibold">{PROPS[path]?.label ?? SHAPE_PROPS[path.replace(/^shape\.[^.]+\./, "") as "x"]?.label ?? path.replace(/^(fx|mask|shape)\.[^.]+\./, "")}</div>
                 <div className="truncate text-ink-muted">{clip.name}</div>
                 <div className="mt-1 text-ink-subtle">Keyframe {sel + 1} of {keys.length}</div>
                 <div className="grid grid-cols-1 gap-0.5">

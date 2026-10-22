@@ -1,5 +1,5 @@
 import type { NagmaDocument } from "../types";
-import { type VClip, type VComp, type VProject, clipEnd, clipsOn, propAt, videoTracks } from "./model";
+import { type VClip, type VComp, type VProject, clipEnd, clipsOn, propAt, shapeItems, shapePropAt, videoTracks } from "./model";
 import { renderComp } from "./render";
 
 // Lottie and animated SVG from the video editor. Every clip on a visible video track becomes a
@@ -53,7 +53,12 @@ function isVector(clip: VClip): boolean {
     if (Object.entries(clip.props).some(([k, v]) => (k.startsWith("color.") && k !== "color.look" && v !== 0 && k !== "color.saturation") || (k === "color.saturation" && v !== 100) || (k.startsWith("crop.") && v !== 0))) return false;
     if (clip.blend !== "normal") return false;
     if (clip.kind === "solid") return true;
-    return clip.kind === "shape" && Boolean(clip.shape) && (clip.shape?.kind === "rect" || clip.shape?.kind === "ellipse");
+    if (clip.kind !== "shape") return false;
+    // One plain rectangle or ellipse: no trim, dashes, rotation or keyframed geometry.
+    const items = shapeItems(clip);
+    const item = items[0];
+    if (items.length !== 1 || !item || (item.kind !== "rect" && item.kind !== "ellipse") || item.trim || item.dash.length) return false;
+    return !Object.keys(clip.anim).some((k) => k.startsWith("shape.")) && !clip.props[`shape.${item.id}.rotation`] && !clip.props[`shape.${item.id}.x`] && !clip.props[`shape.${item.id}.y`];
 }
 
 // The clip with its transform reset (centred, full size, opaque), to draw its picture alone.
@@ -114,8 +119,9 @@ async function plan(project: VProject, doc: NagmaDocument, comp: VComp, range: [
         const samples = sampleClip(comp, clip, a, b, Math.min(comp.fps, 30));
         let content: Content;
         if (isVector(clip)) {
-            const shape = clip.shape;
-            content = shape ? { kind: shape.kind as "rect", w: shape.w, h: shape.h, radius: shape.radius, fill: shape.fill, stroke: shape.stroke, strokeWidth: shape.strokeWidth } : { kind: "rect", w: comp.width, h: comp.height, radius: 0, fill: clip.color ?? "#000000", stroke: null, strokeWidth: 0 };
+            const item = clip.kind === "shape" ? shapeItems(clip)[0] : undefined;
+            const sp = (key: "w" | "h" | "radius" | "strokeWidth") => (item ? shapePropAt(comp, clip, item, key, 0) : 0);
+            content = item ? { kind: item.kind as "rect", w: sp("w"), h: sp("h"), radius: sp("radius"), fill: item.fill, stroke: item.stroke, strokeWidth: sp("strokeWidth") } : { kind: "rect", w: comp.width, h: comp.height, radius: 0, fill: clip.color ?? "#000000", stroke: null, strokeWidth: 0 };
         } else if (!changesOverTime(clip)) {
             content = { kind: "still", image: await picture(bare(comp, clip), Math.max(0, a - clip.start)) };
             onProgress({ done: ++done, total });

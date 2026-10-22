@@ -21,7 +21,7 @@ export interface VTrack {
 }
 
 export type VClipKind = "video" | "audio" | "image" | "title" | "shape" | "solid" | "adjustment" | "comp" | "frame";
-export type Ease = "linear" | "ease-in" | "ease-out" | "ease-in-out" | "hold" | "bezier" | "spring";
+export type Ease = "linear" | "ease-in" | "ease-out" | "ease-in-out" | "hold" | "bezier" | "spring" | "back-in" | "back-out" | "bounce" | "elastic";
 
 export interface VKey {
     t: number;
@@ -61,12 +61,69 @@ export interface VEffect {
     params: Record<string, EffectValue>;
 }
 
+export type MaskMode = "add" | "subtract" | "intersect";
+
 export interface VMask {
     id: string;
-    shape: "rect" | "ellipse";
-    mode: "add" | "subtract";
-    // Geometry (fractions of the layer) and feather live in props: mask.<id>.x/y/w/h/feather/opacity.
+    shape: "rect" | "ellipse" | "path";
+    mode: MaskMode;
+    // A path mask's vertices, as fractions of the layer (straight segments, always closed).
+    points?: { x: number; y: number }[];
+    // Geometry (fractions of the layer), feather, expansion and opacity live in props:
+    // mask.<id>.x/y/w/h/feather/expand/opacity.
 }
+
+// How the clip on the video track above cuts this clip out.
+export type MatteKind = "alpha" | "alpha-inverted" | "luma" | "luma-inverted";
+
+export const MATTES: [MatteKind, string][] = [
+    ["alpha", "Alpha matte"],
+    ["alpha-inverted", "Alpha inverted matte"],
+    ["luma", "Luma matte"],
+    ["luma-inverted", "Luma inverted matte"],
+];
+
+export type ShapeItemKind = "rect" | "ellipse" | "polygon" | "star" | "path";
+
+// One item of a shape layer. Its geometry, stroke width, dash offset, opacity and trim live in
+// props and keyframes as shape.<id>.<key> (see SHAPE_KEYS); sizes are composition pixels and the
+// item sits at (x, y) from the layer's centre.
+export interface VShapeItem {
+    id: string;
+    kind: ShapeItemKind;
+    name: string;
+    fill: string | null;
+    stroke: string | null;
+    cap: CanvasLineCap;
+    join: CanvasLineJoin;
+    // Dash and gap lengths in pixels; empty for a solid line.
+    dash: number[];
+    // A free path's vertices, in pixels from the item's centre.
+    points?: { x: number; y: number }[];
+    closed?: boolean;
+    // The Trim Paths modifier (start, end and offset in props).
+    trim?: boolean;
+}
+
+export const SHAPE_KEYS = ["x", "y", "w", "h", "radius", "sides", "inner", "rotation", "strokeWidth", "dashOffset", "opacity", "trimStart", "trimEnd", "trimOffset"] as const;
+export type ShapeKey = (typeof SHAPE_KEYS)[number];
+
+export const SHAPE_PROPS: Record<ShapeKey, PropSpec> = {
+    x: { label: "Position X", step: 1, unit: "px" },
+    y: { label: "Position Y", step: 1, unit: "px" },
+    w: { label: "Width", min: 0, step: 1, unit: "px" },
+    h: { label: "Height", min: 0, step: 1, unit: "px" },
+    radius: { label: "Corner radius", min: 0, step: 1, unit: "px" },
+    sides: { label: "Points", min: 3, max: 64, step: 1 },
+    inner: { label: "Inner radius", min: 0, max: 100, step: 1, unit: "%" },
+    rotation: { label: "Rotation", step: 1, unit: "°" },
+    strokeWidth: { label: "Stroke width", min: 0, step: 1, unit: "px" },
+    dashOffset: { label: "Dash offset", step: 1, unit: "px" },
+    opacity: { label: "Opacity", min: 0, max: 100, step: 1, unit: "%" },
+    trimStart: { label: "Trim start", min: 0, max: 100, step: 1, unit: "%" },
+    trimEnd: { label: "Trim end", min: 0, max: 100, step: 1, unit: "%" },
+    trimOffset: { label: "Trim offset", step: 1, unit: "°" },
+};
 
 export type TitleAnim =
     | "none"
@@ -162,9 +219,19 @@ export interface VClip {
     effects: VEffect[];
     masks: VMask[];
     title?: VTitle;
+    // A shape layer's items, drawn in order. Files from before shape layers held one primitive
+    // in `shape`; shapeItems() reads either.
+    shapes?: VShapeItem[];
     shape?: VShape;
     // Solids and shapes without a fill colour.
     color?: string;
+    // The clip whose transform this one follows (its position, rotation and scale are measured
+    // in the parent's space, with the parent's anchor at the composition's centre).
+    parent?: string | null;
+    // The clip on the video track above cuts this one out, and isn't drawn itself.
+    matte?: MatteKind | null;
+    // Drawn as the average of sub-frame samples while its transform is keyframed.
+    motionBlur?: boolean;
     // A colour look (presets in looks.ts).
     look?: string;
     // The transition into this clip (from the clip that ends where it starts, or from nothing),
@@ -267,6 +334,8 @@ export const PROPS: Record<string, PropSpec> = {
     pan: { label: "Pan", min: -100, max: 100, step: 1 },
     fadeIn: { label: "Fade in", min: 0, step: 0.1, unit: "s" },
     fadeOut: { label: "Fade out", min: 0, step: 0.1, unit: "s" },
+    // Time remapping: seconds into the source at this point of the clip (only read when keyframed).
+    time: { label: "Source time", min: 0, step: 0.04, unit: "s" },
 };
 
 const STATIC_DEFAULTS: Record<string, number> = {
@@ -301,8 +370,20 @@ export function defaultProp(comp: Pick<VComp, "width" | "height">, clip: VClip, 
     if (path === "x") return comp.width / 2;
     if (path === "y") return comp.height / 2;
     if (path in STATIC_DEFAULTS) return STATIC_DEFAULTS[path] ?? 0;
+    if (path === "time") return clip.in;
     const mask = /^mask\.([^.]+)\.(\w+)$/.exec(path);
     if (mask) return { x: 0.25, y: 0.25, w: 0.5, h: 0.5, feather: 0, opacity: 100, expand: 0 }[mask[2] as "x"] ?? 0;
+    const shape = /^shape\.([^.]+)\.(\w+)$/.exec(path);
+    if (shape) {
+        const item = clip.shapes?.find((s) => s.id === shape[1]);
+        // A file from before shape items: the primitive's own fields.
+        if (!item && clip.shape && shape[1] === LEGACY_SHAPE) {
+            const legacy = { w: clip.shape.w, h: clip.shape.h, radius: clip.shape.radius, sides: clip.shape.sides, strokeWidth: clip.shape.strokeWidth, inner: 45 } as Record<string, number>;
+            if (shape[2] in legacy) return legacy[shape[2] as string] ?? 0;
+        }
+        const size = Math.round(comp.height * 0.35);
+        return { x: 0, y: 0, w: size, h: size, radius: 0, sides: 5, inner: 45, rotation: 0, strokeWidth: 0, dashOffset: 0, opacity: 100, trimStart: 0, trimEnd: 100, trimOffset: 0 }[shape[2] as "x"] ?? 0;
+    }
     const fx = /^fx\.([^.]+)\.(.+)$/.exec(path);
     if (fx) {
         const effect = clip.effects.find((e) => e.id === fx[1]);
@@ -326,9 +407,156 @@ export function ease(kind: Ease | undefined, p: number, bezier?: [number, number
         case "spring":
             // A gentle spring: overshoots a little and settles by the next key.
             return p >= 1 ? 1 : 1 - Math.exp(-7 * p) * Math.cos(2.2 * Math.PI * p);
+        case "back-in": {
+            // Pulls back a little before going.
+            const k = 1.70158;
+            return p * p * ((k + 1) * p - k);
+        }
+        case "back-out": {
+            const k = 1.70158;
+            const q = p - 1;
+            return 1 + q * q * ((k + 1) * q + k);
+        }
+        case "bounce":
+            return bounce(p);
+        case "elastic":
+            return p <= 0 ? 0 : p >= 1 ? 1 : Math.pow(2, -10 * p) * Math.sin(((p * 10 - 0.75) * 2 * Math.PI) / 3) + 1;
         default:
             return p;
     }
+}
+
+// Lands with three ever smaller bounces.
+function bounce(p: number): number {
+    const n = 7.5625;
+    const d = 2.75;
+    if (p < 1 / d) return n * p * p;
+    if (p < 2 / d) return n * (p -= 1.5 / d) * p + 0.75;
+    if (p < 2.5 / d) return n * (p -= 2.25 / d) * p + 0.9375;
+    return n * (p -= 2.625 / d) * p + 0.984375;
+}
+
+export const EASES: { id: Ease; label: string }[] = [
+    { id: "linear", label: "Linear" },
+    { id: "ease-in", label: "Ease in" },
+    { id: "ease-out", label: "Ease out" },
+    { id: "ease-in-out", label: "Ease in and out" },
+    { id: "back-in", label: "Back in" },
+    { id: "back-out", label: "Back out" },
+    { id: "spring", label: "Spring" },
+    { id: "elastic", label: "Elastic" },
+    { id: "bounce", label: "Bounce" },
+    { id: "hold", label: "Hold" },
+];
+
+// ---- Shape items ----
+
+// The id shapeItems() gives a file's single primitive from before shape items.
+export const LEGACY_SHAPE = "legacy";
+
+// A shape clip's items: the list, or the one primitive older files hold.
+export function shapeItems(clip: VClip): VShapeItem[] {
+    if (clip.shapes) return clip.shapes;
+    const s = clip.shape;
+    if (!s) return [];
+    const kind: ShapeItemKind = s.kind === "line" ? "path" : s.kind;
+    const item: VShapeItem = { id: LEGACY_SHAPE, kind, name: shapeName(kind), fill: s.kind === "line" ? null : s.fill, stroke: s.stroke, cap: "round", join: "round", dash: [] };
+    if (s.kind === "line") {
+        item.points = [{ x: -s.w / 2, y: 0 }, { x: s.w / 2, y: 0 }];
+        item.closed = false;
+    }
+    return [item];
+}
+
+export function shapeName(kind: ShapeItemKind): string {
+    return { rect: "Rectangle", ellipse: "Ellipse", polygon: "Polygon", star: "Star", path: "Path" }[kind];
+}
+
+// A shape item's property at `t` seconds into the clip.
+export function shapePropAt(comp: Pick<VComp, "width" | "height">, clip: VClip, item: VShapeItem, key: ShapeKey, t: number): number {
+    return propAt(comp, clip, `shape.${item.id}.${key}`, t);
+}
+
+// ---- Transforms and parenting ----
+
+// A 2D affine matrix [a, b, c, d, e, f]: x' = a x + c y + e, y' = b x + d y + f.
+export type Affine = [number, number, number, number, number, number];
+
+export const IDENTITY: Affine = [1, 0, 0, 1, 0, 0];
+
+export function multiply(m: Affine, n: Affine): Affine {
+    return [m[0] * n[0] + m[2] * n[1], m[1] * n[0] + m[3] * n[1], m[0] * n[2] + m[2] * n[3], m[1] * n[2] + m[3] * n[3], m[0] * n[4] + m[2] * n[5] + m[4], m[1] * n[4] + m[3] * n[5] + m[5]];
+}
+
+export function invert(m: Affine): Affine {
+    const det = m[0] * m[3] - m[1] * m[2];
+    if (Math.abs(det) < 1e-12) return IDENTITY;
+    const a = m[3] / det;
+    const b = -m[1] / det;
+    const c = -m[2] / det;
+    const d = m[0] / det;
+    return [a, b, c, d, -(a * m[4] + c * m[5]), -(b * m[4] + d * m[5])];
+}
+
+export function apply(m: Affine, x: number, y: number): { x: number; y: number } {
+    return { x: m[0] * x + m[2] * y + m[4], y: m[1] * x + m[3] * y + m[5] };
+}
+
+// The matrix a clip's own position, rotation and scale make, measured about the composition's
+// centre: a point at the centre lands at the clip's position. Children of this clip are drawn
+// through it.
+export function pivotMatrix(comp: Pick<VComp, "width" | "height">, clip: VClip, lt: number): Affine {
+    const x = propAt(comp, clip, "x", lt);
+    const y = propAt(comp, clip, "y", lt);
+    const sx = propAt(comp, clip, "scaleX", lt) / 100;
+    const sy = propAt(comp, clip, "scaleY", lt) / 100;
+    const r = (propAt(comp, clip, "rotation", lt) * Math.PI) / 180;
+    const cos = Math.cos(r);
+    const sin = Math.sin(r);
+    const cx = comp.width / 2;
+    const cy = comp.height / 2;
+    const lin: Affine = [cos * sx, sin * sx, -sin * sy, cos * sy, x, y];
+    return multiply(lin, [1, 0, 0, 1, -cx, -cy]);
+}
+
+// The chain of parents above a clip, nearest first, stopping at a loop.
+export function parentsOf(comp: VComp, clip: VClip): VClip[] {
+    const out: VClip[] = [];
+    const seen = new Set([clip.id]);
+    let cur = clip;
+    while (cur.parent) {
+        const p = comp.clips.find((c) => c.id === cur.parent);
+        if (!p || seen.has(p.id)) break;
+        seen.add(p.id);
+        out.push(p);
+        cur = p;
+    }
+    return out;
+}
+
+// What a clip's parents do to it at `lt` seconds into the clip: the matrix the clip's own
+// transform is drawn through (identity without a parent).
+export function parentMatrix(comp: VComp, clip: VClip, lt: number): Affine {
+    const at = clip.start + lt;
+    let m = IDENTITY;
+    for (const p of [...parentsOf(comp, clip)].reverse()) m = multiply(m, pivotMatrix(comp, p, at - p.start));
+    return m;
+}
+
+// Where a clip's anchor point (its position) sits in the composition at `lt`, parents included.
+export function anchorWorld(comp: VComp, clip: VClip, lt: number): { x: number; y: number } {
+    return apply(parentMatrix(comp, clip, lt), propAt(comp, clip, "x", lt), propAt(comp, clip, "y", lt));
+}
+
+// Clips that could be this clip's parent: pictures in the same composition that don't already
+// descend from it.
+export function parentChoices(comp: VComp, clip: VClip): VClip[] {
+    return comp.clips.filter((c) => c.id !== clip.id && c.kind !== "audio" && c.kind !== "adjustment" && !parentsOf(comp, c).some((p) => p.id === clip.id));
+}
+
+// Whether a clip's transform changes over time (motion blur has something to blur).
+export function transformAnimated(clip: VClip): boolean {
+    return ["x", "y", "scaleX", "scaleY", "rotation", "anchorX", "anchorY"].some((k) => (clip.anim[k]?.length ?? 0) > 1);
 }
 
 export function keysValue(keys: VKey[], t: number): number {

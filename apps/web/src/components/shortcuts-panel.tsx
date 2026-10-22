@@ -21,7 +21,7 @@ const VIDEO: Section = {
     label: "Video",
     groups: [
         { title: "Playback", rows: [["Play or pause", "Space"], ["Play backward, faster", "J"], ["Stop", "K"], ["Play forward, faster", "L"], ["Back or forward a frame", "← or →"], ["Ten frames", "⇧ ← or →"], ["Previous or next edit", "↑ or ↓"], ["Start or end", "Home or End"], ["Previous or next keyframe", "[ or ]"]] },
-        { title: "Edit", rows: [["Split at playhead", "S or ⌘ K"], ["Razor tool", "C"], ["Selection tool", "V"], ["Delete", "⌫"], ["Ripple delete", "⌥ ⌫"], ["Duplicate", "⌘ D"], ["Copy, cut, paste", "⌘ C, ⌘ X, ⌘ V"], ["Nudge a frame", "⌥ ← or →"], ["Ripple trim", "⌥ drag an edge"], ["Copy while dragging", "⌥ drag"], ["Enable or disable", "⇧ E"], ["Link or unlink", "⌘ L or ⇧ ⌘ L"]] },
+        { title: "Edit", rows: [["Split at playhead", "S or ⌘ K"], ["Razor tool", "C"], ["Comment", "⇧ C"], ["Selection tool", "V"], ["Delete", "⌫"], ["Ripple delete", "⌥ ⌫"], ["Duplicate", "⌘ D"], ["Copy, cut, paste", "⌘ C, ⌘ X, ⌘ V"], ["Nudge a frame", "⌥ ← or →"], ["Ripple trim", "⌥ drag an edge"], ["Copy while dragging", "⌥ drag"], ["Enable or disable", "⇧ E"], ["Link or unlink", "⌘ L or ⇧ ⌘ L"]] },
         { title: "Sequence", rows: [["Mark in", "I"], ["Mark out", "O"], ["Clear in and out", "⌥ X"], ["Add marker", "M"], ["Snapping", "⇧ S"], ["Add title", "T"], ["Nest selection", "⌘ G"], ["Open nested sequence", "↵"], ["Zoom timeline", "= or −"], ["Fit timeline", "\\"]] },
         { title: "File", rows: [["Import media", "⌘ I"], ["Export", "⌘ E"], ["Export frame as PNG", "⇧ ⌘ E"], ["Undo", "⌘ Z"], ["Redo", "⇧ ⌘ Z"], ["Left panel", "⌘ \\"], ["Keyboard shortcuts", "⌃ ⇧ ?"]] },
     ],

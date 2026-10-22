@@ -1,14 +1,16 @@
-import { ArrowDown, ArrowUp, Circle, Download01, Eye, EyeOff, Plus, Square, Trash01 } from "@untitledui/icons";
-import { nanoid } from "nanoid";
+import { ArrowDown, ArrowUp, Circle, Download01, Eye, EyeOff, PenTool01, Plus, Square, Trash01 } from "@untitledui/icons";
 import { useEffect, useState } from "react";
 import { type EffectParamSpec, type EffectSpecInfo, effectCatalog } from "../../engines/motion-engine";
 import { useCollab } from "../../engine/collab";
 import { editor, useEditor } from "../../engine/store";
 import { applyMotionPreset } from "../../engine/video/actions";
-import { setSpeed } from "../../engine/video/edit";
+import { addMask, addShapeItem, moveShapeItem, removeMask, removeShapeItem, setParent, setSpeed, toggleTimeRemap, updateMask, updateShapeItem } from "../../engine/video/edit";
 import { animated, clipCss, clipJson, clipReact } from "../../engine/video/handoff";
-import { type VBlend, type VClip, type VComp, type VEffect, type VTitle, BLENDS, ROOT, clipEnd, compById, compLength, mediaById, projectOf, replaceComp } from "../../engine/video/model";
-import { FONTS, LOOKS, MOTION_PRESETS, SHAPES, TITLE_ANIMS, TRANSITIONS, LABEL_COLORS } from "../../engine/video/presets";
+import { type MaskMode, type MatteKind, type ShapeItemKind, type VBlend, type VClip, type VComp, type VEffect, type VShapeItem, type VTitle, BLENDS, MATTES, ROOT, SHAPE_KEYS, SHAPE_PROPS, clipEnd, compById, compLength, mediaById, parentChoices, projectOf, replaceComp, shapeItems } from "../../engine/video/model";
+import { newShapeItem } from "../../engine/video/shapes";
+import { timeRemapped } from "../../engine/video/render";
+import { CommentsPanel } from "../comments-ui";
+import { FONTS, LOOKS, MOTION_PRESETS, TITLE_ANIMS, TRANSITIONS, LABEL_COLORS } from "../../engine/video/presets";
 import { activeComp, commitComp, commitProject, currentProject, useVideoUi, vui } from "../../engine/video/state";
 import { PresenceBar, ShareButton } from "../collab-ui";
 import { NumberField } from "../number-field";
@@ -27,6 +29,7 @@ export function Inspector() {
     const compId = useVideoUi((s) => s.compId);
     const selection = useVideoUi((s) => s.selection);
     const transition = useVideoUi((s) => s.transition);
+    const commenting = useVideoUi((s) => s.commenting);
     if (history) return <VersionHistoryPanel />;
     const project = projectOf(doc);
     const comp = compById(project, compId);
@@ -45,6 +48,13 @@ export function Inspector() {
                 </button>
                 <ShareButton />
             </header>
+            {commenting ? (
+                <div className="flex min-h-0 flex-1 flex-col">
+                    <div className="flex h-10 shrink-0 items-center border-b border-panel-border px-3 font-semibold">Comments</div>
+                    <CommentsPanel embedded />
+                </div>
+            ) : (
+            <>
             <div className="flex h-10 shrink-0 items-center gap-1 border-b border-panel-border px-3">
                 <span className="font-semibold">{transClip ? "Transition" : visual ? kindLabel(visual) : audio ? "Audio clip" : comp.id === ROOT ? "Sequence" : "Nested sequence"}</span>
                 {clips.length > 1 && <span className="text-ink-muted">· {clips.length} clips</span>}
@@ -65,6 +75,8 @@ export function Inspector() {
                     )}
                 </div>
             </fieldset>
+            </>
+            )}
         </aside>
     );
 }
@@ -195,6 +207,15 @@ function ClipSection({ comp, clip }: { comp: VComp; clip: VClip }) {
                     </label>
                 </div>
             )}
+            {(clip.kind === "video" || clip.kind === "comp") && (
+                <div className="space-y-1">
+                    <label className="flex items-center gap-1.5 text-ink-muted">
+                        <input type="checkbox" checked={timeRemapped(clip)} onChange={() => edit(clip.id, (c) => toggleTimeRemap(c))} className="accent-brand-500" />
+                        Time remapping
+                    </label>
+                    {timeRemapped(clip) && <PropRow clip={clip} comp={comp} path="time" label="Source time" decimals={2} />}
+                </div>
+            )}
             <div className="flex items-center justify-between text-ink-muted">
                 <span>
                     {timecode(clip.start, comp.fps)} → {timecode(clipEnd(clip), comp.fps)}
@@ -226,7 +247,7 @@ function VisualSections({ comp, clip }: { comp: VComp; clip: VClip }) {
     return (
         <>
             {clip.kind === "title" && clip.title && <TitleSection comp={comp} clip={clip} title={clip.title} />}
-            {clip.kind === "shape" && clip.shape && <ShapeSection clip={clip} />}
+            {clip.kind === "shape" && <ShapeSection comp={comp} clip={clip} />}
             {clip.kind === "frame" && clip.frame && (
                 <Section title="Design frame">
                     <button type="button" onClick={() => editor.set({ sequenceView: false, selection: [clip.frame as string], mode: "design" })} className="h-7 w-full rounded-md border border-panel-border hover:bg-panel-hover">
@@ -249,6 +270,16 @@ function VisualSections({ comp, clip }: { comp: VComp; clip: VClip }) {
                 <Select aria-label="Blend mode" value={clip.blend} onChange={(e) => edit(clip.id, (c) => ({ ...c, blend: e.target.value as VBlend }))} className="h-7 w-full">
                     {BLENDS.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
                 </Select>
+                {clip.kind !== "adjustment" && (
+                    <div className="flex items-center gap-1.5">
+                        <span className="w-[78px] shrink-0 text-ink-muted">Track matte</span>
+                        <Select aria-label="Track matte" value={clip.matte ?? ""} onChange={(e) => edit(clip.id, (c) => ({ ...c, matte: (e.target.value || null) as MatteKind | null }))} className="h-7 min-w-0 flex-1">
+                            <option value="">None</option>
+                            {MATTES.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+                        </Select>
+                    </div>
+                )}
+                {clip.matte && <p className="text-ink-subtle">The clip on the track above cuts this one out and isn't shown itself.</p>}
             </Section>
             {clip.kind !== "adjustment" && (
                 <Section title="Crop" open={false}>
@@ -308,6 +339,17 @@ function TransformSection({ comp, clip }: { comp: VComp; clip: VClip }) {
             <PropRow clip={clip} comp={comp} path="anchorX" decimals={1} />
             <PropRow clip={clip} comp={comp} path="anchorY" decimals={1} />
             <PropRow clip={clip} comp={comp} path="opacity" decimals={0} />
+            <div className="flex items-center gap-1.5">
+                <span className="w-[78px] shrink-0 pl-6 text-ink-muted">Parent</span>
+                <Select aria-label="Parent" value={clip.parent ?? ""} onChange={(e) => edit(clip.id, (c) => setParent(c, e.target.value || null))} className="h-7 min-w-0 flex-1">
+                    <option value="">None</option>
+                    {parentChoices(comp, clip).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </Select>
+            </div>
+            <label className="flex items-center gap-1.5 pl-6 text-ink-muted">
+                <input type="checkbox" checked={Boolean(clip.motionBlur)} onChange={(e) => edit(clip.id, (c) => ({ ...c, motionBlur: e.target.checked }))} className="accent-brand-500" />
+                Motion blur
+            </label>
         </Section>
     );
 }
@@ -426,42 +468,167 @@ function ColorFieldBare({ value, onChange }: { value: string; onChange: (v: stri
 
 // ---- Shapes ----
 
-function ShapeSection({ clip }: { clip: VClip }) {
-    const shape = clip.shape;
-    if (!shape) return null;
-    const set = (patch: Partial<typeof shape>) => edit(clip.id, (c) => ({ ...c, shape: { ...shape, ...patch } }));
+const SHAPE_KINDS: { id: ShapeItemKind; label: string }[] = [
+    { id: "rect", label: "Rectangle" },
+    { id: "ellipse", label: "Ellipse" },
+    { id: "polygon", label: "Polygon" },
+    { id: "star", label: "Star" },
+    { id: "path", label: "Path" },
+];
+
+// A shape layer's items, each with its geometry, fill, stroke and Trim Paths, every number
+// keyframeable.
+function ShapeSection({ comp, clip }: { comp: VComp; clip: VClip }) {
+    const items = shapeItems(clip);
+    const [open, setOpen] = useState<string | null>(items[0]?.id ?? null);
+    const add = (kind: ShapeItemKind) => {
+        const item = newShapeItem(kind, comp);
+        edit(clip.id, (c) => addShapeItem(comp, c, item));
+        setOpen(item.id);
+    };
     return (
-        <Section title="Shape">
-            <Select aria-label="Shape" value={shape.kind} onChange={(e) => set({ kind: e.target.value as typeof shape.kind })} className="h-7 w-full">
-                {SHAPES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-            </Select>
-            <div className="grid grid-cols-2 gap-1.5">
-                <NumberField label="W" min={0} value={shape.w} onCommit={(v) => set({ w: v })} />
-                <NumberField label="H" min={0} value={shape.h} onCommit={(v) => set({ h: v })} />
-                {shape.kind === "rect" && <NumberField label="Radius" min={0} value={shape.radius} onCommit={(v) => set({ radius: v })} />}
-                {(shape.kind === "polygon" || shape.kind === "star") && <NumberField label="Points" min={3} max={64} value={shape.sides} onCommit={(v) => set({ sides: Math.round(v) })} />}
-            </div>
-            <div className="flex items-center gap-2">
-                <label className="flex w-[78px] shrink-0 items-center gap-1.5 text-ink-muted"><input type="checkbox" checked={shape.fill !== null} onChange={(e) => set({ fill: e.target.checked ? "#4F7BFF" : null })} className="accent-brand-500" />Fill</label>
-                {shape.fill !== null && <ColorSwatchInline value={shape.fill} onChange={(v) => set({ fill: v })} />}
-            </div>
-            <div className="flex items-center gap-2">
-                <label className="flex w-[78px] shrink-0 items-center gap-1.5 text-ink-muted"><input type="checkbox" checked={shape.stroke !== null} onChange={(e) => set({ stroke: e.target.checked ? "#FFFFFF" : null, strokeWidth: shape.strokeWidth || 6 })} className="accent-brand-500" />Stroke</label>
-                {shape.stroke !== null && (
-                    <>
-                        <ColorSwatchInline value={shape.stroke} onChange={(v) => set({ stroke: v })} />
-                        <div className="flex-1"><NumberField label="W" min={0} max={400} value={shape.strokeWidth} onCommit={(v) => set({ strokeWidth: v })} /></div>
-                    </>
-                )}
-            </div>
+        <Section
+            title={`Shape${items.length > 1 ? ` (${items.length} items)` : ""}`}
+            action={
+                <Select aria-label="Add a shape item" value="" onChange={(e) => e.target.value && add(e.target.value as ShapeItemKind)} className="h-6 w-20">
+                    <option value="">Add…</option>
+                    {SHAPE_KINDS.map((k) => <option key={k.id} value={k.id}>{k.label}</option>)}
+                </Select>
+            }
+        >
+            {items.length === 0 && <p className="text-ink-muted">No items yet. Add a rectangle, ellipse, polygon, star or path.</p>}
+            {[...items].reverse().map((item, ri) => {
+                const i = items.length - 1 - ri;
+                return <ShapeItemRow key={item.id} comp={comp} clip={clip} item={item} index={i} count={items.length} open={open === item.id} onToggle={() => setOpen(open === item.id ? null : item.id)} />;
+            })}
         </Section>
+    );
+}
+
+function ShapeItemRow({ comp, clip, item, index, count, open, onToggle }: { comp: VComp; clip: VClip; item: VShapeItem; index: number; count: number; open: boolean; onToggle: () => void }) {
+    const set = (patch: Partial<VShapeItem>) => edit(clip.id, (c) => updateShapeItem(c, item.id, patch));
+    const prop = (key: (typeof SHAPE_KEYS)[number], extra: Partial<React.ComponentProps<typeof PropRow>> = {}) => {
+        const spec = SHAPE_PROPS[key];
+        return <PropRow key={key} clip={clip} comp={comp} path={`shape.${item.id}.${key}`} label={spec.label} min={spec.min} max={spec.max} step={spec.step} unit={spec.unit && spec.unit !== "px" ? spec.unit : ""} decimals={key === "sides" ? 0 : 1} {...extra} />;
+    };
+    return (
+        <div className="rounded-md border border-panel-border">
+            <div className="flex items-center gap-1 px-1.5 py-1">
+                <button type="button" onClick={onToggle} className="flex min-w-0 flex-1 items-center gap-1 text-left">
+                    <span className={`inline-block text-ink-subtle transition-transform ${open ? "rotate-90" : ""}`}>›</span>
+                    <span className="truncate font-medium">{item.name}</span>
+                </button>
+                <button type="button" aria-label="Bring forward" disabled={index === count - 1} onClick={() => edit(clip.id, (c) => moveShapeItem(c, item.id, 1))} className="flex size-5 items-center justify-center rounded text-ink-muted hover:text-ink disabled:opacity-30"><ArrowUp className="size-3" /></button>
+                <button type="button" aria-label="Send backward" disabled={index === 0} onClick={() => edit(clip.id, (c) => moveShapeItem(c, item.id, -1))} className="flex size-5 items-center justify-center rounded text-ink-muted hover:text-ink disabled:opacity-30"><ArrowDown className="size-3" /></button>
+                <button type="button" aria-label="Remove shape item" onClick={() => edit(clip.id, (c) => removeShapeItem(c, item.id))} className="flex size-5 items-center justify-center rounded text-ink-muted hover:text-ink"><Trash01 className="size-3" /></button>
+            </div>
+            {open && (
+                <div className="space-y-1 border-t border-panel-border px-1.5 py-1.5">
+                    <input aria-label="Shape item name" value={item.name} onChange={(e) => set({ name: e.target.value })} className={`${FIELD} w-full`} />
+                    {item.kind !== "path" && prop("w")}
+                    {item.kind !== "path" && prop("h")}
+                    {prop("x")}
+                    {prop("y")}
+                    {prop("rotation")}
+                    {item.kind === "rect" && prop("radius")}
+                    {(item.kind === "polygon" || item.kind === "star") && prop("sides")}
+                    {item.kind === "star" && prop("inner")}
+                    {item.kind === "path" && <PathPoints item={item} onChange={(points) => set({ points })} />}
+                    {item.kind === "path" && (
+                        <label className="flex items-center gap-1.5 pl-6 text-ink-muted">
+                            <input type="checkbox" checked={item.closed !== false} onChange={(e) => set({ closed: e.target.checked })} className="accent-brand-500" /> Closed
+                        </label>
+                    )}
+                    {prop("opacity", { decimals: 0 })}
+                    <div className="flex items-center gap-2">
+                        <label className="flex w-[78px] shrink-0 items-center gap-1.5 text-ink-muted"><input type="checkbox" checked={item.fill !== null} onChange={(e) => set({ fill: e.target.checked ? "#4F7BFF" : null })} className="accent-brand-500" />Fill</label>
+                        {item.fill !== null && <ColorSwatchInline value={item.fill} onChange={(v) => set({ fill: v })} />}
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <label className="flex w-[78px] shrink-0 items-center gap-1.5 text-ink-muted"><input type="checkbox" checked={item.stroke !== null} onChange={(e) => {
+                            set({ stroke: e.target.checked ? "#FFFFFF" : null });
+                            if (e.target.checked && !clip.props[`shape.${item.id}.strokeWidth`]) edit(clip.id, (c) => ({ ...c, props: { ...c.props, [`shape.${item.id}.strokeWidth`]: Math.max(2, Math.round(comp.height / 180)) } }));
+                        }} className="accent-brand-500" />Stroke</label>
+                        {item.stroke !== null && <ColorSwatchInline value={item.stroke} onChange={(v) => set({ stroke: v })} />}
+                    </div>
+                    {item.stroke !== null && (
+                        <>
+                            {prop("strokeWidth")}
+                            <div className="grid grid-cols-2 gap-1.5 pl-6">
+                                <Select aria-label="Line cap" value={item.cap} onChange={(e) => set({ cap: e.target.value as CanvasLineCap })} className="h-7">
+                                    <option value="butt">Flat caps</option>
+                                    <option value="round">Round caps</option>
+                                    <option value="square">Square caps</option>
+                                </Select>
+                                <Select aria-label="Line join" value={item.join} onChange={(e) => set({ join: e.target.value as CanvasLineJoin })} className="h-7">
+                                    <option value="miter">Miter joins</option>
+                                    <option value="round">Round joins</option>
+                                    <option value="bevel">Bevel joins</option>
+                                </Select>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                                <span className="w-[78px] shrink-0 pl-6 text-ink-muted" title="Dash and gap lengths, in pixels">Dashes</span>
+                                <input
+                                    aria-label="Dash pattern"
+                                    placeholder="Solid"
+                                    key={`${item.id}:${item.dash.join(",")}`}
+                                    defaultValue={item.dash.join(" ")}
+                                    onBlur={(e) => set({ dash: e.target.value.split(/[\s,]+/).map(Number).filter((n) => Number.isFinite(n) && n >= 0) })}
+                                    onKeyDown={(e) => {
+                                        e.stopPropagation();
+                                        if (e.key === "Enter") e.currentTarget.blur();
+                                    }}
+                                    className={`${FIELD} min-w-0 flex-1`}
+                                />
+                            </div>
+                            {item.dash.length > 0 && prop("dashOffset")}
+                        </>
+                    )}
+                    <label className="flex items-center gap-1.5 pl-6 text-ink-muted">
+                        <input type="checkbox" checked={Boolean(item.trim)} onChange={(e) => set({ trim: e.target.checked })} className="accent-brand-500" /> Trim paths
+                    </label>
+                    {item.trim && prop("trimStart", { decimals: 1 })}
+                    {item.trim && prop("trimEnd", { decimals: 1 })}
+                    {item.trim && prop("trimOffset", { decimals: 1 })}
+                </div>
+            )}
+        </div>
+    );
+}
+
+// A free path's vertices (pixels from the item's centre), one row each.
+function PathPoints({ item, onChange }: { item: VShapeItem; onChange: (points: { x: number; y: number }[]) => void }) {
+    const points = item.points ?? [];
+    return (
+        <div className="space-y-1 pl-6">
+            {points.map((p, i) => (
+                <div key={i} className="flex items-center gap-1">
+                    <span className="w-4 text-ink-subtle">{i + 1}</span>
+                    <NumberField label="X" value={Math.round(p.x)} onCommit={(v) => onChange(points.map((q, j) => (j === i ? { ...q, x: v } : q)))} />
+                    <NumberField label="Y" value={Math.round(p.y)} onCommit={(v) => onChange(points.map((q, j) => (j === i ? { ...q, y: v } : q)))} />
+                    <button type="button" aria-label={`Remove point ${i + 1}`} disabled={points.length <= 2} onClick={() => onChange(points.filter((_, j) => j !== i))} className="flex size-5 items-center justify-center rounded text-ink-muted hover:text-ink disabled:opacity-30"><Trash01 className="size-3" /></button>
+                </div>
+            ))}
+            <button type="button" onClick={() => {
+                const last = points[points.length - 1] ?? { x: 0, y: 0 };
+                onChange([...points, { x: last.x + 80, y: last.y }]);
+            }} className="flex h-6 items-center gap-1 rounded-md border border-panel-border px-2 hover:bg-panel-hover">
+                <Plus className="size-3" /> Add point
+            </button>
+        </div>
     );
 }
 
 // ---- Masks ----
 
 function MaskSection({ comp, clip }: { comp: VComp; clip: VClip }) {
-    const add = (shape: "rect" | "ellipse") => edit(clip.id, (c) => ({ ...c, masks: [...c.masks, { id: nanoid(6), shape, mode: "add" }] }));
+    const maskEdit = useVideoUi((s) => s.maskEdit);
+    const add = (shape: "rect" | "ellipse" | "path") =>
+        edit(clip.id, (c) => {
+            const { clip: next, id } = addMask(c, shape);
+            if (shape === "path") vui.set({ selection: [clip.id], maskEdit: { clip: clip.id, mask: id } });
+            return next;
+        });
     return (
         <Section
             title="Masks"
@@ -470,28 +637,46 @@ function MaskSection({ comp, clip }: { comp: VComp; clip: VClip }) {
                 <>
                     <button type="button" aria-label="Add rectangle mask" title="Add rectangle mask" onClick={() => add("rect")} className="flex size-6 items-center justify-center rounded-md text-ink-muted hover:bg-panel-hover hover:text-ink"><Square className="size-3.5" /></button>
                     <button type="button" aria-label="Add ellipse mask" title="Add ellipse mask" onClick={() => add("ellipse")} className="flex size-6 items-center justify-center rounded-md text-ink-muted hover:bg-panel-hover hover:text-ink"><Circle className="size-3.5" /></button>
+                    <button type="button" aria-label="Add path mask" title="Add path mask (edit its points on the monitor)" onClick={() => add("path")} className="flex size-6 items-center justify-center rounded-md text-ink-muted hover:bg-panel-hover hover:text-ink"><PenTool01 className="size-3.5" /></button>
                 </>
             }
         >
-            {clip.masks.length === 0 && <p className="text-ink-muted">Masks show part of the clip. Add a rectangle or an ellipse.</p>}
-            {clip.masks.map((m, i) => (
-                <div key={m.id} className="space-y-1 rounded-md border border-panel-border p-1.5">
-                    <div className="flex items-center gap-1.5">
-                        <span className="flex-1 font-medium">Mask {i + 1} · {m.shape === "rect" ? "Rectangle" : "Ellipse"}</span>
-                        <Select aria-label="Mask mode" value={m.mode} onChange={(e) => edit(clip.id, (c) => ({ ...c, masks: c.masks.map((x) => (x.id === m.id ? { ...x, mode: e.target.value as "add" } : x)) }))} className="h-6 w-24">
-                            <option value="add">Add</option>
-                            <option value="subtract">Subtract</option>
-                        </Select>
-                        <button type="button" aria-label="Delete mask" onClick={() => edit(clip.id, (c) => ({ ...c, masks: c.masks.filter((x) => x.id !== m.id) }))} className="flex size-6 items-center justify-center rounded text-ink-muted hover:bg-panel-hover hover:text-ink"><Trash01 className="size-3" /></button>
+            {clip.masks.length === 0 && <p className="text-ink-muted">Masks show part of the clip. Add a rectangle, an ellipse or a path you draw on the monitor.</p>}
+            {clip.masks.map((m, i) => {
+                const editing = maskEdit?.clip === clip.id && maskEdit.mask === m.id;
+                return (
+                    <div key={m.id} className="space-y-1 rounded-md border border-panel-border p-1.5">
+                        <div className="flex items-center gap-1.5">
+                            <span className="flex-1 font-medium">Mask {i + 1} · {m.shape === "rect" ? "Rectangle" : m.shape === "ellipse" ? "Ellipse" : "Path"}</span>
+                            <Select aria-label="Mask mode" value={m.mode} onChange={(e) => edit(clip.id, (c) => updateMask(c, m.id, { mode: e.target.value as MaskMode }))} className="h-6 w-24">
+                                <option value="add">Add</option>
+                                <option value="subtract">Subtract</option>
+                                <option value="intersect">Intersect</option>
+                            </Select>
+                            <button type="button" aria-label="Delete mask" onClick={() => edit(clip.id, (c) => removeMask(c, m.id))} className="flex size-6 items-center justify-center rounded text-ink-muted hover:bg-panel-hover hover:text-ink"><Trash01 className="size-3" /></button>
+                        </div>
+                        {m.shape === "path" ? (
+                            <div className="flex items-center gap-1.5">
+                                <button type="button" aria-pressed={editing} onClick={() => vui.set(editing ? { maskEdit: null } : { selection: [clip.id], maskEdit: { clip: clip.id, mask: m.id } })} className={`h-7 flex-1 rounded-md border px-2 ${editing ? "border-brand-500 bg-brand-500/10 text-ink" : "border-panel-border hover:bg-panel-hover"}`}>
+                                    {editing ? "Done editing points" : "Edit points on the monitor"}
+                                </button>
+                                <span className="text-ink-subtle">{m.points?.length ?? 0} points</span>
+                            </div>
+                        ) : (
+                            <>
+                                <PropRow clip={clip} comp={comp} path={`mask.${m.id}.x`} label="Left" scale={100} unit="%" decimals={1} />
+                                <PropRow clip={clip} comp={comp} path={`mask.${m.id}.y`} label="Top" scale={100} unit="%" decimals={1} />
+                                <PropRow clip={clip} comp={comp} path={`mask.${m.id}.w`} label="Width" scale={100} unit="%" decimals={1} />
+                                <PropRow clip={clip} comp={comp} path={`mask.${m.id}.h`} label="Height" scale={100} unit="%" decimals={1} />
+                            </>
+                        )}
+                        {editing && <p className="text-ink-subtle">Drag a vertex to move it, click the picture to add one, double-click a vertex to remove it. Esc finishes.</p>}
+                        <PropRow clip={clip} comp={comp} path={`mask.${m.id}.feather`} label="Feather" min={0} decimals={0} />
+                        <PropRow clip={clip} comp={comp} path={`mask.${m.id}.expand`} label="Expansion" decimals={0} />
+                        <PropRow clip={clip} comp={comp} path={`mask.${m.id}.opacity`} label="Opacity" min={0} max={100} unit="%" decimals={0} />
                     </div>
-                    <PropRow clip={clip} comp={comp} path={`mask.${m.id}.x`} label="Left" scale={100} unit="%" decimals={1} />
-                    <PropRow clip={clip} comp={comp} path={`mask.${m.id}.y`} label="Top" scale={100} unit="%" decimals={1} />
-                    <PropRow clip={clip} comp={comp} path={`mask.${m.id}.w`} label="Width" scale={100} unit="%" decimals={1} />
-                    <PropRow clip={clip} comp={comp} path={`mask.${m.id}.h`} label="Height" scale={100} unit="%" decimals={1} />
-                    <PropRow clip={clip} comp={comp} path={`mask.${m.id}.feather`} label="Feather" min={0} decimals={0} />
-                    <PropRow clip={clip} comp={comp} path={`mask.${m.id}.opacity`} label="Opacity" min={0} max={100} unit="%" decimals={0} />
-                </div>
-            ))}
+                );
+            })}
         </Section>
     );
 }

@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { onImageReady } from "../image-store";
+import { collab } from "../collab";
 import { applyCommand } from "../commands";
 import { editor } from "../store";
 import type { Command, NagmaDocument } from "../types";
@@ -41,6 +42,10 @@ export interface VideoUi {
     timelineView: "tracks" | "graph";
     mediaSelection: string[];
     importing: number;
+    // The Comment tool: clicks on the monitor leave comment pins; the Inspector lists the threads.
+    commenting: boolean;
+    // A path mask whose vertices are being edited on the monitor.
+    maskEdit: { clip: string; mask: string } | null;
 }
 
 let state: VideoUi = {
@@ -68,6 +73,8 @@ let state: VideoUi = {
     timelineView: "tracks",
     mediaSelection: [],
     importing: 0,
+    commenting: false,
+    maskEdit: null,
 };
 
 const listeners = new Set<() => void>();
@@ -79,6 +86,8 @@ export const vui = {
         // added after picking a transition left the transition in the inspector, and ⌫ then
         // removed the transition, not the title).
         if (patch.selection?.length) patch = { transition: null, marker: null, ...patch };
+        // Mask vertex editing belongs to one clip: picking another ends it.
+        if (patch.selection && state.maskEdit && !patch.selection.includes(state.maskEdit.clip)) patch = { maskEdit: null, ...patch };
         state = { ...state, ...patch };
         for (const l of listeners) l();
     },
@@ -143,6 +152,12 @@ export function editClip(id: string, fn: (clip: VClip, comp: VComp) => VClip) {
 export function openComp(id: string) {
     const trail = id === ROOT ? [] : [...state.trail.filter((c) => c !== id), state.compId].filter((c) => c !== id);
     vui.set({ compId: id, trail: id === ROOT ? [] : trail, selection: [], time: 0, playing: false, transition: null });
+}
+
+// The Comment tool on or off (off lets go of an unposted comment).
+export function toggleCommenting(on = !state.commenting) {
+    vui.set({ commenting: on });
+    if (!on) collab.set({ draft: null });
 }
 
 export function seek(t: number) {

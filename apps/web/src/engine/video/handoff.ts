@@ -6,15 +6,29 @@ import { type Ease, type VClip, type VComp, type VKey, ease, propAt } from "./mo
 
 const PATHS = ["x", "y", "scaleX", "scaleY", "rotation", "opacity"] as const;
 
-// The spring as CSS: the editor's own spring curve (model.ts, ease) sampled every 5%. A hand-written
-// curve here overshot twice as far and rose more slowly than what the editor shows and exports.
-const SPRING = `linear(${Array.from({ length: 21 }, (_, i) => {
-    const p = i / 20;
-    const v = Math.round(ease("spring", p) * 1000) / 1000;
-    return i === 0 || i === 20 ? String(v) : `${v} ${i * 5}%`;
-}).join(", ")})`;
+// The spring, back, bounce and elastic curves as CSS: the editor's own curves (model.ts, ease)
+// sampled every 2.5%. A hand-written spring here overshot twice as far and rose more slowly than
+// what the editor shows and exports.
+function sampled(kind: Ease): string {
+    const n = 40;
+    return `linear(${Array.from({ length: n + 1 }, (_, i) => {
+        const p = i / n;
+        const v = Math.round(ease(kind, p) * 1000) / 1000;
+        return i === 0 || i === n ? String(v) : `${v} ${Math.round(i * (100 / n) * 100) / 100}%`;
+    }).join(", ")})`;
+}
 
-const EASES: Record<Exclude<Ease, "bezier" | "hold">, string> = { spring: SPRING, linear: "linear", "ease-in": "cubic-bezier(0.42, 0, 1, 1)", "ease-out": "cubic-bezier(0, 0, 0.58, 1)", "ease-in-out": "cubic-bezier(0.42, 0, 0.58, 1)" };
+const EASES: Record<Exclude<Ease, "bezier" | "hold">, string> = {
+    spring: sampled("spring"),
+    "back-in": sampled("back-in"),
+    "back-out": sampled("back-out"),
+    bounce: sampled("bounce"),
+    elastic: sampled("elastic"),
+    linear: "linear",
+    "ease-in": "cubic-bezier(0.42, 0, 1, 1)",
+    "ease-out": "cubic-bezier(0, 0, 0.58, 1)",
+    "ease-in-out": "cubic-bezier(0.42, 0, 0.58, 1)",
+};
 
 function cssEase(key: VKey | undefined): string {
     if (!key) return "linear";

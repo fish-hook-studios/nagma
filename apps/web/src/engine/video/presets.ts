@@ -1,6 +1,6 @@
 import { nanoid } from "nanoid";
 import type { EffectSpecInfo } from "../../engines/motion-engine";
-import type { TitleAnim, TransitionKind, VClip, VComp, VKey, VShape, VTitle } from "./model";
+import type { ShapeItemKind, TitleAnim, TransitionKind, VClip, VComp, VKey, VTitle } from "./model";
 import { propAt } from "./model";
 
 // The libraries the editor offers: title styles and their in/out animations, transitions,
@@ -271,18 +271,14 @@ export const MOTION_PRESETS: MotionPreset[] = [
 
 // ---- Shapes ----
 
-export const SHAPES: { id: VShape["kind"]; label: string }[] = [
+export const SHAPES: { id: ShapeItemKind | "line"; label: string }[] = [
     { id: "rect", label: "Rectangle" },
     { id: "ellipse", label: "Ellipse" },
     { id: "polygon", label: "Polygon" },
     { id: "star", label: "Star" },
     { id: "line", label: "Line" },
+    { id: "path", label: "Path" },
 ];
-
-export function newShape(kind: VShape["kind"], comp: VComp): VShape {
-    const s = Math.round(comp.height * 0.35);
-    return { kind, fill: kind === "line" ? null : "#4F7BFF", stroke: kind === "line" ? "#FFFFFF" : null, strokeWidth: kind === "line" ? Math.max(2, Math.round(comp.height / 180)) : 0, w: kind === "line" ? s * 1.6 : s, h: kind === "line" ? 0 : s, radius: kind === "rect" ? Math.round(s * 0.08) : 0, sides: kind === "star" ? 5 : 6 };
-}
 
 export const LABEL_COLORS = ["#3B6FD8", "#2F8F6A", "#7A55C7", "#C4632F", "#B8892A", "#B04A79", "#4F9FB8", "#6B6B73"];
 

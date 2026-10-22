@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
-// Get started on Home (three cards, once per device), Help › Get started, and the once-only note in
+// Welcome on Home (three panels, once per device), Help › Get started, and the once-only note in
 // Share for a file that's only on this device. The test server address is on loopback, so the
 // server in use is This computer.
 localStorage.removeItem("nagma.auth.v1");
@@ -67,7 +67,7 @@ describe("seen flags", () => {
     });
 });
 
-describe("Get started", () => {
+describe("Welcome", () => {
     let root: Root;
     let host: HTMLDivElement;
     beforeAll(() => {
@@ -78,8 +78,8 @@ describe("Get started", () => {
     afterAll(() => act(() => root.unmount()));
     beforeEach(reset);
 
-    const dialog = () => document.querySelector('[aria-label="Get started with Nagma"]');
-    const card = (title: string) => [...document.querySelectorAll<HTMLButtonElement>('[aria-label="Ways to start"] button')].find((b) => b.textContent?.startsWith(title));
+    const dialog = () => document.querySelector('[aria-label="Welcome to Nagma"]');
+    const button = (label: string) => [...document.querySelectorAll<HTMLButtonElement>('[aria-label="Welcome to Nagma"] button')].find((b) => b.textContent === label);
     const mount = async () => {
         act(() => editor.set({ homeOpen: true }));
         await act(async () => root.render(createElement("div")));
@@ -90,53 +90,50 @@ describe("Get started", () => {
         await mount();
         expect(dialog()).toBeTruthy();
         expect(onboarding.hasSeen("welcome")).toBe(true);
-        expect([...document.querySelectorAll('[aria-label="Ways to start"] li')].map((li) => li.querySelector("button span span")?.textContent)).toEqual(["Use Nagma on this computerDefault", "Connect to a server", "Add an AI key"]);
-        await act(async () => card("Use Nagma on this computer")?.click());
+        await act(async () => button("Got it")?.click());
         expect(dialog()).toBeNull();
         expect(onboarding.showWelcomeOnce()).toBe(false);
         await mount();
         expect(dialog()).toBeNull();
     });
 
-    it("Use Nagma on this computer just closes", async () => {
+    it("says three things, each with a picture and a guide, and asks for no decision", async () => {
+        await mount();
+        const panels = [...document.querySelectorAll('[aria-label="How Nagma works"] li')];
+        expect(panels.map((li) => li.querySelector("h3")?.textContent)).toEqual(["It runs on your computer", "Work together on any server", "AI with your own key"]);
+        for (const li of panels) {
+            expect(li.querySelector("svg")).toBeTruthy();
+            expect([...li.querySelectorAll("button")].map((b) => b.textContent)).toEqual(["Learn more"]);
+        }
+        expect(dialog()?.textContent).not.toContain("Default");
+        expect(shown).toEqual({ picker: false, tab: null });
+    });
+
+    it("Got it just closes", async () => {
         await mount();
         expect(dialog()).toBeTruthy();
-        await act(async () => card("Use Nagma on this computer")?.click());
+        await act(async () => button("Got it")?.click());
         expect(dialog()).toBeNull();
         expect(shown).toEqual({ picker: false, tab: null });
     });
 
-    it("Connect to a server opens the server picker", async () => {
+    it("Choose a server now closes it and opens the server picker", async () => {
         await mount();
         expect(dialog()).toBeTruthy();
-        await act(async () => card("Connect to a server")?.click());
+        await act(async () => button("Choose a server now")?.click());
         expect(dialog()).toBeNull();
         expect(shown.picker).toBe(true);
         expect(shown.tab).toBeNull();
     });
 
-    it("Connect to a server offers Nagma hosted in one click, and your own server", async () => {
+    it("the no-key notice still opens Account settings › AI", async () => {
         await mount();
-        const li = [...document.querySelectorAll('[aria-label="Ways to start"] li')][1]!;
-        expect(li.textContent).toContain("Nagma's free hosted server");
-        const buttons = [...li.querySelectorAll("button")].map((b) => b.textContent);
-        expect(buttons.slice(1)).toEqual(["Use Nagma hosted", "Your own server…", "Learn more"]);
-        await act(async () => [...li.querySelectorAll("button")].find((b) => b.textContent === "Your own server…")?.click());
-        expect(dialog()).toBeNull();
-        expect(shown.picker).toBe(true);
-    });
-
-    it("Add an AI key opens Account settings › AI, the tab the no-key notice opens", async () => {
-        await mount();
-        expect(dialog()).toBeTruthy();
-        await act(async () => card("Add an AI key")?.click());
-        expect(dialog()).toBeNull();
-        expect(shown.tab).toBe("ai");
-        act(() => closeAccountSettings());
+        await act(async () => button("Got it")?.click());
         act(() => notifyKeyNeeded());
         expect(editor.get().toastAction?.label).toBe("Open AI settings");
         act(() => editor.get().toastAction?.run());
         expect(shown.tab).toBe("ai");
+        act(() => closeAccountSettings());
     });
 
     it("Help › Get started opens it again, any time", async () => {

@@ -200,8 +200,17 @@ function run(op: CommentOp): boolean {
     return true;
 }
 
+// Comments on a video composition's monitor live on a page of their own, "video:<comp>", with
+// the pin in the composition's pixels; there's no layer to attach to.
+export const VIDEO_PAGE = "video:";
+
+export function videoCommentPage(compId: string): string {
+    return `${VIDEO_PAGE}${compId}`;
+}
+
 // The layer a pin at a world point attaches to: the top-level frame under it, else the layer under it.
-export function anchorAt(doc: NagmaDocument, x: number, y: number): { nodeId: string | null; offset: { x: number; y: number } | null } {
+export function anchorAt(doc: NagmaDocument, x: number, y: number, pageId?: string): { nodeId: string | null; offset: { x: number; y: number } | null } {
+    if (pageId?.startsWith(VIDEO_PAGE)) return { nodeId: null, offset: null };
     const hit = hitTest(doc, x, y, true) ?? hitTest(doc, x, y);
     if (!hit) return { nodeId: null, offset: null };
     let top: SceneNode = hit;
@@ -226,6 +235,15 @@ export function pinPoint(doc: NagmaDocument, c: Comment): { x: number; y: number
         return { x: box.x + c.offset.x, y: box.y + c.offset.y };
     }
     return { x: c.x, y: c.y };
+}
+
+// The video editor listens for comments on its compositions (it opens the right one).
+const videoCommentListeners = new Set<(compId: string) => void>();
+export function onVideoComment(listener: (compId: string) => void) {
+    videoCommentListeners.add(listener);
+    return () => {
+        videoCommentListeners.delete(listener);
+    };
 }
 
 export function startDraft(pageId: string, x: number, y: number) {
@@ -264,7 +282,7 @@ export function regionBox(doc: NagmaDocument, c: Pick<Comment, "region" | "x" | 
 export function addComment(text: string, mentions: string[] = [], attachments: Attachment[] = []): string | null {
     const draft = collab.get().draft;
     if (!draft || (!text.trim() && !attachments.length)) return null;
-    const anchor = anchorAt(editor.get().doc, draft.x, draft.y);
+    const anchor = anchorAt(editor.get().doc, draft.x, draft.y, draft.pageId);
     const id = nanoid(10);
     const { dragging: _dragging, ...at } = draft;
     const ok = run({ op: "add", comment: { id, author: collab.get().me, text: text.trim(), createdAt: Date.now(), replies: [], resolved: false, ...at, ...anchor, mentions, attachments, reactions: {} } });
@@ -294,7 +312,7 @@ export function setResolved(threadId: string, resolved: boolean) {
 }
 
 export function moveComment(threadId: string, pageId: string, x: number, y: number) {
-    const anchor = anchorAt(editor.get().doc, x, y);
+    const anchor = anchorAt(editor.get().doc, x, y, pageId);
     run({ op: "move", threadId, pageId, x, y, ...anchor });
 }
 
@@ -499,6 +517,13 @@ export function timeAgo(ms: number) {
 // Shows a comment's pin on screen: moves to its page and centres it, then opens the thread.
 export function goToComment(c: Comment) {
     const page = commentPageId(editor.get().doc, c);
+    if (page.startsWith(VIDEO_PAGE)) {
+        // A video comment: its composition opens on the monitor, with the thread.
+        for (const l of videoCommentListeners) l(page.slice(VIDEO_PAGE.length));
+        collab.set({ openComment: c.id, draft: null });
+        markRead(c.id);
+        return;
+    }
     if (editor.get().pageId !== page) editor.setPage(page);
     const s = editor.get();
     const p = pinPoint(s.doc, c);

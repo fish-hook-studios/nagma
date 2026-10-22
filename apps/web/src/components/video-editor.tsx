@@ -34,7 +34,8 @@ import { VIDEO_ACTION_BY_ID, VIDEO_MENU, type VideoMenuNode, fitTimeline, runVid
 import { ROOT, compLength } from "../engine/video/model";
 import { renderStill } from "../engine/video/render";
 import { releasePlayers } from "../engine/video/sources";
-import { activeComp, currentProject, seek, useVideoUi, vui } from "../engine/video/state";
+import { activeComp, currentProject, openComp, seek, toggleCommenting, useVideoUi, vui } from "../engine/video/state";
+import { onVideoComment } from "../engine/comments";
 import { IconButton } from "./icon-button";
 import { MenuRow } from "./left-sidebar";
 import { NagmaLogo } from "./nagma-logo";
@@ -60,9 +61,15 @@ export function VideoEditor() {
     useVideoKeys();
     useThumbnail(fileId);
 
+    // A comment opened from the Comments list shows the composition it was left on.
+    useEffect(() => onVideoComment((compId) => {
+        if (vui.get().compId !== compId) openComp(compId);
+        toggleCommenting(true);
+    }), []);
+
     // A different file starts at its main sequence.
     useEffect(() => {
-        vui.set({ compId: ROOT, trail: [], selection: [], time: 0, playing: false, transition: null, marker: null, mediaSelection: [], graph: null });
+        vui.set({ compId: ROOT, trail: [], selection: [], time: 0, playing: false, transition: null, marker: null, mediaSelection: [], graph: null, commenting: false, maskEdit: null });
         return () => {
             stopPlayers();
             releasePlayers();
@@ -275,7 +282,11 @@ function useVideoKeys() {
                 case "Delete":
                     return run(() => deleteSelection(e.altKey || e.shiftKey));
                 case "Escape":
-                    return run(() => vui.set({ selection: [], transition: null, marker: null, tool: "select" }));
+                    return run(() => {
+                        if (s.maskEdit) return vui.set({ maskEdit: null });
+                        if (s.commenting) return toggleCommenting(false);
+                        vui.set({ selection: [], transition: null, marker: null, tool: "select" });
+                    });
                 case "Enter": {
                     const id = s.selection[0];
                     if (id) return run(() => openNested(id));
@@ -314,7 +325,7 @@ function useVideoKeys() {
                 case "v":
                     return run(() => vui.set({ tool: "select" }));
                 case "c":
-                    return run(() => vui.set({ tool: s.tool === "razor" ? "select" : "razor" }));
+                    return run(() => (e.shiftKey ? toggleCommenting() : vui.set({ tool: s.tool === "razor" ? "select" : "razor" })));
                 case "s":
                     return run(() => (e.shiftKey ? vui.set({ snapping: !s.snapping }) : splitAtPlayhead()));
                 case "t":

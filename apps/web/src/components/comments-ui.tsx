@@ -38,6 +38,7 @@ import { type Gif, STICKERS, gifFile, searchGifs, stickerFile, stickerUrl } from
 import { loadMedia } from "../engine/media";
 import { usePeople } from "../engine/people";
 import { editor, useEditor } from "../engine/store";
+import type { Camera } from "../engine/types";
 import { Avatar } from "./avatar";
 import { DarkMenu } from "./collab-menu";
 import { PresenceBar, PresentButton, ShareButton } from "./collab-ui";
@@ -632,8 +633,17 @@ function clusterPins(pins: { c: Comment; at: { x: number; y: number } }[], keep:
 }
 
 // Several pins in one place: clicking zooms in until they come apart.
-function Cluster({ items, at, unread }: { items: Comment[]; at: { x: number; y: number }; unread: boolean }) {
+function Cluster({ items, at, unread, zoomable = true }: { items: Comment[]; at: { x: number; y: number }; unread: boolean; zoomable?: boolean }) {
     const zoomIn = () => {
+        // Where the picture can't zoom (the video monitor), the first thread opens.
+        if (!zoomable) {
+            const first = items[0];
+            if (first) {
+                collab.set({ openComment: first.id, draft: null });
+                markRead(first.id);
+            }
+            return;
+        }
         const s = editor.get();
         const pts = items.map((c) => pinPoint(s.doc, c));
         const minX = Math.min(...pts.map((p) => p.x));
@@ -668,8 +678,7 @@ function Cluster({ items, at, unread }: { items: Comment[]; at: { x: number; y: 
     );
 }
 
-function Pin({ c, doc, unread, onHover }: { c: Comment; doc: ReturnType<typeof editor.get>["doc"]; unread: boolean; onHover?: (on: boolean) => void }) {
-    const camera = useEditor((s) => s.camera);
+function Pin({ c, doc, camera, pageId, unread, onHover }: { c: Comment; doc: ReturnType<typeof editor.get>["doc"]; camera: Camera; pageId: string; unread: boolean; onHover?: (on: boolean) => void }) {
     const open = useCollab((s) => s.openComment);
     const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
     const world = pinPoint(doc, c);
@@ -698,8 +707,8 @@ function Pin({ c, doc, unread, onHover }: { c: Comment; doc: ReturnType<typeof e
                     setDrag(null);
                     if (moved) {
                         // Re-anchored where it was dropped, to the layer under it.
-                        const w = screenToWorld(editor.get().camera, ev.clientX - host.left, ev.clientY - host.top);
-                        moveComment(c.id, editor.get().pageId, w.x, w.y);
+                        const w = screenToWorld(camera, ev.clientX - host.left, ev.clientY - host.top);
+                        moveComment(c.id, pageId, w.x, w.y);
                         return;
                     }
                     if (open === c.id) collab.set({ openComment: null });
@@ -726,16 +735,20 @@ function Pin({ c, doc, unread, onHover }: { c: Comment; doc: ReturnType<typeof e
     );
 }
 
-// Comment pins on the canvas, the composer for a new comment, and the open thread.
-export function CommentLayer() {
+// Comment pins on the canvas, the composer for a new comment, and the open thread. Other
+// editors with their own picture (the video monitor) pass the page their pins live on and the
+// camera that maps that page's units onto the layer.
+export function CommentLayer({ pageId: ownPage, camera: ownCamera }: { pageId?: string; camera?: Camera } = {}) {
     const comments = useCollab((s) => s.comments);
     const draft = useCollab((s) => s.draft);
     const open = useCollab((s) => s.openComment);
     const hidden = useCollab((s) => s.commentsHidden);
     const reads = useCollab((s) => s.reads);
     const showResolved = useCollab((s) => s.commentFilters.resolved);
-    const camera = useEditor((s) => s.camera);
-    const pageId = useEditor((s) => s.pageId);
+    const editorCamera = useEditor((s) => s.camera);
+    const editorPage = useEditor((s) => s.pageId);
+    const camera = ownCamera ?? editorCamera;
+    const pageId = ownPage ?? editorPage;
     const doc = useEditor((s) => s.doc);
     const presenting = useEditor((s) => s.presentingId !== null);
     const [hover, setHover] = useState<string | null>(null);
@@ -756,9 +769,9 @@ export function CommentLayer() {
             {shownRegion.map((box, i) => box && <RegionBox key={i} box={box} camera={camera} strong={i === 0} />)}
             {groups.map((g) =>
                 g.items.length > 1 ? (
-                    <Cluster key={g.items[0]?.id} items={g.items} at={g.at} unread={g.items.some((c) => isUnread(c, reads, me))} />
+                    <Cluster key={g.items[0]?.id} items={g.items} at={g.at} unread={g.items.some((c) => isUnread(c, reads, me))} zoomable={!ownCamera} />
                 ) : (
-                    g.items[0] && <Pin key={g.items[0].id} c={g.items[0]} doc={doc} unread={isUnread(g.items[0], reads, me)} onHover={(on) => setHover(on ? (g.items[0]?.id ?? null) : null)} />
+                    g.items[0] && <Pin key={g.items[0].id} c={g.items[0]} doc={doc} camera={camera} pageId={pageId} unread={isUnread(g.items[0], reads, me)} onHover={(on) => setHover(on ? (g.items[0]?.id ?? null) : null)} />
                 ),
             )}
             {draft && draft.pageId === pageId && (

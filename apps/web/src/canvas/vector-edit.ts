@@ -252,12 +252,14 @@ export function sharpen(node: SceneNode, ref: VertexRef): NodePatch {
     return withPath(subs);
 }
 
-// Removes the selected points. With `heal`, the neighbours' handles are re-aimed so the curve stays
-// smooth across the gap; without it, the path simply skips the removed points. Null when nothing is left.
+// Removes the selected points: each path skips them, so a point's two neighbours become joined by
+// one segment (their handles kept) and a closed path stays closed. A point of the network that
+// several paths pass through goes from all of them. With `heal`, the neighbours' handles are
+// re-aimed so the curve stays smooth across the gap. Null when nothing is left.
 export function deleteVertices(node: SceneNode, refs: VertexRef[], heal: boolean): NodePatch | null {
     const subs = placedSubpaths(node);
     const bySub = new Map<number, number[]>();
-    for (const r of refs) if (r.part === "anchor") bySub.set(r.sub, [...(bySub.get(r.sub) ?? []), r.index]);
+    for (const r of welded(subs, refs)) if (r.part === "anchor") bySub.set(r.sub, [...(bySub.get(r.sub) ?? []), r.index]);
     for (const [s, indices] of bySub) {
         const sub = subs[s];
         if (!sub) continue;
@@ -336,9 +338,13 @@ function insertAt(sub: Subpath, index: number, t: number): number {
     const p123 = lerp(p12, p23);
     const mid = lerp(p012, p123);
     const nextIndex = (index + 1) % sub.points.length;
-    sub.points[index] = { ...a, out: curved ? p01 : null };
-    sub.points[nextIndex] = { ...b, in: curved ? p23 : null };
-    const point: PathPoint = { x: mid.x, y: mid.y, in: curved ? p012 : null, out: curved ? p123 : null };
+    // A handle that lands on its own anchor (the straight side of a half-curved segment) is no
+    // handle: kept, it would sit on top of the anchor and take its clicks, and the point would
+    // count as smooth.
+    const handle = (h: Pt, at: Pt): Pt | null => (curved && Math.hypot(h.x - at.x, h.y - at.y) > 1e-9 ? h : null);
+    sub.points[index] = { ...a, out: handle(p01, a) };
+    sub.points[nextIndex] = { ...b, in: handle(p23, b) };
+    const point: PathPoint = { x: mid.x, y: mid.y, in: handle(p012, mid), out: handle(p123, mid) };
     sub.points.splice(index + 1, 0, point);
     return index + 1;
 }
@@ -466,6 +472,17 @@ export function shapeLastPoint(node: SceneNode, drag: Pt): NodePatch {
     if (!sub || !point) return {};
     sub.points[sub.points.length - 1] = { x: point.x, y: point.y, out: { ...drag }, in: { x: 2 * point.x - drag.x, y: 2 * point.y - drag.y } };
     return withPath(subs);
+}
+
+// Backspace while drawing: the last point placed comes off again (a path left with no points goes too).
+// Null when there is nothing to remove.
+export function removeLastPoint(node: SceneNode): NodePatch | null {
+    const subs = placedSubpaths(node);
+    const sub = subs[subs.length - 1];
+    if (!sub || !sub.points.length) return null;
+    sub.points.pop();
+    if (!sub.points.length) subs.pop();
+    return subs.length ? withPath(subs) : null;
 }
 
 export function closeLastSubpath(node: SceneNode): NodePatch {

@@ -1,6 +1,6 @@
 import { worldToScreen } from "../../engine/camera";
 import { applyCommand } from "../../engine/commands";
-import { cropFor, croppedPaint, endCrop, imageCorners, placement, startCrop, withPaint } from "../../engine/image-crop";
+import { type FrameHandle, cropFor, cropFramePatch, croppedPaint, endCrop, frameHandleAt, imageCorners, placement, resizeCropFrame, startCrop, withPaint } from "../../engine/image-crop";
 import { getImage } from "../../engine/images";
 import { firstImagePaint } from "../../engine/photo";
 import { editor } from "../../engine/store";
@@ -12,24 +12,14 @@ import { type PluginPointer, HANDLE_BLUE, drawDot, registerCanvasPlugin } from "
 import { nodeContains } from "../hit-test";
 import { toVectorSpace } from "../vector-edit";
 
-// Crop mode on the canvas: the frame's corner brackets and side bars resize the crop (the image
-// stays put), dragging inside moves the image under the frame, the image's corner handles scale it
-// (keeping its proportions), and the part of the image outside the frame shows dimmed. A click
-// outside, Enter or Escape keeps the crop; the crop bar's Cancel puts the layer back.
+// Crop mode on the canvas, as in the reference: the frame's corners and edges (anywhere along a
+// side) resize the crop while the image stays put, dragging inside moves the image under the
+// frame, the image's corner handles scale it (keeping its proportions), and the part of the image
+// outside the frame shows dimmed. A click outside, Enter or Escape keeps the crop; the crop bar's
+// Cancel puts the layer back.
 
 type Pt = { x: number; y: number };
 type Box = { x: number; y: number; w: number; h: number };
-
-const FRAME_HANDLES: { id: string; fx: number; fy: number }[] = [
-    { id: "nw", fx: 0, fy: 0 },
-    { id: "n", fx: 0.5, fy: 0 },
-    { id: "ne", fx: 1, fy: 0 },
-    { id: "e", fx: 1, fy: 0.5 },
-    { id: "se", fx: 1, fy: 1 },
-    { id: "s", fx: 0.5, fy: 1 },
-    { id: "sw", fx: 0, fy: 1 },
-    { id: "w", fx: 0, fy: 0.5 },
-];
 
 function active() {
     const s = editor.get();
@@ -47,7 +37,7 @@ function screen(doc: NagmaDocument, node: SceneNode, p: Pt): Pt {
 }
 
 type Drag =
-    | { kind: "frame"; handle: (typeof FRAME_HANDLES)[number] }
+    | { kind: "frame"; handle: FrameHandle }
     | { kind: "corner"; index: number }
     | { kind: "image" };
 
@@ -58,10 +48,14 @@ function hit(p: PluginPointer): Drag | null {
     if (!c) return null;
     const s = editor.get();
     const box = { x: c.node.x, y: c.node.y, w: c.node.w, h: c.node.h };
-    for (const h of FRAME_HANDLES) {
-        const at = screen(s.doc, c.node, { x: box.x + box.w * h.fx, y: box.y + box.h * h.fy });
-        if (Math.hypot(at.x - p.screen.x, at.y - p.screen.y) <= 6) return { kind: "frame", handle: h };
-    }
+    const frameCorners = [
+        [0, 0],
+        [1, 0],
+        [1, 1],
+        [0, 1],
+    ].map(([fx, fy]) => screen(s.doc, c.node, { x: box.x + box.w * (fx ?? 0), y: box.y + box.h * (fy ?? 0) }));
+    const handle = frameHandleAt(frameCorners, p.screen, 6);
+    if (handle) return { kind: "frame", handle };
     const corners = imageCorners(c.place).map((q) => screen(s.doc, c.node, q));
     for (let i = 0; i < 4; i++) {
         const at = corners[i] as Pt;
@@ -97,30 +91,8 @@ function result(p: PluginPointer): NodePatch | null {
         return withPaint(node, drag.index, { ...paint, mode: "crop", crop: cropFor(box, place) });
     }
     // Frame handle: the crop region changes, the image stays where it is.
-    const h = drag.handle;
-    const dx = q.x - s0.x;
-    const dy = q.y - s0.y;
-    let x0 = box.x;
-    let y0 = box.y;
-    let x1 = box.x + box.w;
-    let y1 = box.y + box.h;
-    if (h.fx === 0) x0 += dx;
-    if (h.fx === 1) x1 += dx;
-    if (h.fy === 0) y0 += dy;
-    if (h.fy === 1) y1 += dy;
-    if (p.shiftKey && h.fx !== 0.5 && h.fy !== 0.5) {
-        // Keep the frame's proportions from the opposite corner.
-        const ratio = box.w / box.h;
-        const w = Math.abs(x1 - x0);
-        const hh = Math.abs(y1 - y0);
-        if (w / ratio > hh) {
-            if (h.fy === 0) y0 = y1 - w / ratio;
-            else y1 = y0 + w / ratio;
-        } else if (h.fx === 0) x0 = x1 - hh * ratio;
-        else x1 = x0 + hh * ratio;
-    }
-    const next = { x: Math.min(x0, x1), y: Math.min(y0, y1), w: Math.max(1, Math.abs(x1 - x0)), h: Math.max(1, Math.abs(y1 - y0)) };
-    return { x: next.x, y: next.y, w: next.w, h: next.h, ...withPaint(node, drag.index, { ...paint, mode: "crop", crop: cropFor(next, drag.place) }) };
+    const next = resizeCropFrame(box, drag.handle, q.x - s0.x, q.y - s0.y, p.shiftKey);
+    return cropFramePatch(node, drag.index, paint, next, drag.place);
 }
 
 registerCanvasPlugin({

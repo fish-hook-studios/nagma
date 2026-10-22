@@ -102,6 +102,90 @@ export function cover(box: { x: number; y: number; w: number; h: number }, place
     return scaled.multiply(new DOMMatrix().translate(du, dv));
 }
 
+// The crop frame's handles: its corners and sides, as fractions of the frame.
+export const FRAME_HANDLES: { id: "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w"; fx: number; fy: number }[] = [
+    { id: "nw", fx: 0, fy: 0 },
+    { id: "n", fx: 0.5, fy: 0 },
+    { id: "ne", fx: 1, fy: 0 },
+    { id: "e", fx: 1, fy: 0.5 },
+    { id: "se", fx: 1, fy: 1 },
+    { id: "s", fx: 0.5, fy: 1 },
+    { id: "sw", fx: 0, fy: 1 },
+    { id: "w", fx: 0, fy: 0.5 },
+];
+
+export type FrameHandle = (typeof FRAME_HANDLES)[number];
+
+type Pt = { x: number; y: number };
+
+function distanceToSegment(p: Pt, a: Pt, b: Pt): number {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len2 = dx * dx + dy * dy || 1;
+    const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2));
+    return Math.hypot(p.x - (a.x + dx * t), p.y - (a.y + dy * t));
+}
+
+// The frame handle under a point, given the frame's four corners (top-left, top-right, bottom-right,
+// bottom-left, in the point's space): a corner within `tolerance`, else anywhere along a side, as
+// in the reference, where the whole edge of the crop frame can be dragged.
+export function frameHandleAt(corners: Pt[], p: Pt, tolerance = 6): FrameHandle | null {
+    const [tl, tr, br, bl] = corners as [Pt, Pt, Pt, Pt];
+    const cornerIds: FrameHandle["id"][] = ["nw", "ne", "se", "sw"];
+    for (let i = 0; i < 4; i++) {
+        const c = corners[i] as Pt;
+        if (Math.hypot(c.x - p.x, c.y - p.y) <= tolerance) return FRAME_HANDLES.find((h) => h.id === cornerIds[i]) ?? null;
+    }
+    const sides: [FrameHandle["id"], Pt, Pt][] = [
+        ["n", tl, tr],
+        ["e", tr, br],
+        ["s", br, bl],
+        ["w", bl, tl],
+    ];
+    let best: FrameHandle | null = null;
+    let bestD = tolerance;
+    for (const [id, a, b] of sides) {
+        const d = distanceToSegment(p, a, b);
+        if (d <= bestD) {
+            bestD = d;
+            best = FRAME_HANDLES.find((h) => h.id === id) ?? null;
+        }
+    }
+    return best;
+}
+
+// The crop frame after one of its handles moved by (dx, dy) in the layer's space. Only the dragged
+// sides move, so the picture behind stays where it is; with `keepRatio` a corner keeps the frame's
+// proportions from the opposite corner. The frame never gets thinner than a pixel.
+export function resizeCropFrame(box: { x: number; y: number; w: number; h: number }, handle: FrameHandle, dx: number, dy: number, keepRatio = false): { x: number; y: number; w: number; h: number } {
+    let x0 = box.x;
+    let y0 = box.y;
+    let x1 = box.x + box.w;
+    let y1 = box.y + box.h;
+    if (handle.fx === 0) x0 += dx;
+    if (handle.fx === 1) x1 += dx;
+    if (handle.fy === 0) y0 += dy;
+    if (handle.fy === 1) y1 += dy;
+    if (keepRatio && handle.fx !== 0.5 && handle.fy !== 0.5 && box.w > 0 && box.h > 0) {
+        // The side that changed more (in proportion) leads; the other follows it.
+        const ratio = box.w / box.h;
+        const w = Math.abs(x1 - x0);
+        const h = Math.abs(y1 - y0);
+        if (Math.abs(w - box.w) / box.w >= Math.abs(h - box.h) / box.h) {
+            if (handle.fy === 0) y0 = y1 - w / ratio;
+            else y1 = y0 + w / ratio;
+        } else if (handle.fx === 0) x0 = x1 - h * ratio;
+        else x1 = x0 + h * ratio;
+    }
+    return { x: Math.min(x0, x1), y: Math.min(y0, y1), w: Math.max(1, Math.abs(x1 - x0)), h: Math.max(1, Math.abs(y1 - y0)) };
+}
+
+// The layer patch for a crop frame moved to `box` with the image staying at `place`: the new box
+// and the crop that keeps every visible pixel where it was.
+export function cropFramePatch(node: SceneNode, index: number, paint: ImagePaint, box: { x: number; y: number; w: number; h: number }, place: DOMMatrix): NodePatch {
+    return { x: box.x, y: box.y, w: box.w, h: box.h, ...withPaint(node, index, { ...paint, mode: "crop", crop: cropFor(box, place) }) };
+}
+
 // The paint of the layer being cropped.
 export function croppedPaint(doc: NagmaDocument): { node: SceneNode; paint: ImagePaint; index: number } | null {
     const c = vectorUi.get().crop;

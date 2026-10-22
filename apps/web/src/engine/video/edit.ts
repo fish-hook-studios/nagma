@@ -1,13 +1,16 @@
 import { nanoid } from "nanoid";
 import {
     type Ease,
+    type MaskMode,
     type TrackKind,
     type VClip,
     type VComp,
     type VKey,
     type VMarker,
+    type VMask,
     type VMedia,
     type VProject,
+    type VShapeItem,
     type VTrack,
     type VTransition,
     clipEnd,
@@ -20,6 +23,7 @@ import {
     propAt,
     sourceLength,
 } from "./model";
+import { newShapeItemProps, withShapeItems } from "./shapes";
 
 // Edits on a composition: placing media, moving, trimming, cutting, ripple deletes, keyframes,
 // transitions and markers. Each takes and returns plain data; the editor runs the result as one
@@ -488,4 +492,114 @@ export function compDuration(comp: VComp): number {
 
 export function defaultOf(comp: VComp, clip: VClip, path: string): number {
     return defaultProp(comp, clip, path);
+}
+
+// ---- Time remapping ----
+
+// Turns time remapping on (keys at the clip's ends saying where the source is now, so nothing
+// moves until a key is changed) or off (speed and reverse take over again).
+export function toggleTimeRemap(clip: VClip): VClip {
+    if (clip.anim.time?.length) {
+        const { time: _time, ...anim } = clip.anim;
+        return { ...clip, anim };
+    }
+    const len = clip.duration * clip.speed;
+    const a = clip.reverse ? clip.in + len : clip.in;
+    const b = clip.reverse ? clip.in : clip.in + len;
+    return { ...clip, anim: { ...clip.anim, time: [{ t: 0, v: a, ease: "linear" }, { t: clip.duration, v: b, ease: "linear" }] } };
+}
+
+// ---- Parenting and the anchor point ----
+
+export function setParent(clip: VClip, parent: string | null): VClip {
+    return { ...clip, parent: parent ?? null };
+}
+
+// Moves the anchor point by (dx, dy) in the layer's own pixels and the position with it, so the
+// picture stays where it is while the point it rotates and scales about moves.
+export function moveAnchor(comp: VComp, clip: VClip, dx: number, dy: number, t: number): VClip {
+    const sx = propAt(comp, clip, "scaleX", t) / 100;
+    const sy = propAt(comp, clip, "scaleY", t) / 100;
+    const r = (propAt(comp, clip, "rotation", t) * Math.PI) / 180;
+    const cos = Math.cos(r);
+    const sin = Math.sin(r);
+    // The anchor's move, seen through the clip's own scale and rotation, is how far the picture
+    // would jump; the position follows by that much.
+    const px = dx * sx * cos - dy * sy * sin;
+    const py = dx * sx * sin + dy * sy * cos;
+    let next = setProp(clip, "anchorX", propAt(comp, clip, "anchorX", t) + dx, t);
+    next = setProp(next, "anchorY", propAt(comp, clip, "anchorY", t) + dy, t);
+    next = setProp(next, "x", propAt(comp, clip, "x", t) + px, t);
+    return setProp(next, "y", propAt(comp, clip, "y", t) + py, t);
+}
+
+// ---- Masks ----
+
+export function addMask(clip: VClip, shape: VMask["shape"], mode: MaskMode = "add"): { clip: VClip; id: string } {
+    const id = nanoid(6);
+    const mask: VMask = { id, shape, mode };
+    // A path starts as a diamond in the middle of the layer, ready to be reshaped.
+    if (shape === "path") mask.points = [{ x: 0.5, y: 0.2 }, { x: 0.8, y: 0.5 }, { x: 0.5, y: 0.8 }, { x: 0.2, y: 0.5 }];
+    return { clip: { ...clip, masks: [...clip.masks, mask] }, id };
+}
+
+export function updateMask(clip: VClip, id: string, patch: Partial<VMask>): VClip {
+    return { ...clip, masks: clip.masks.map((m) => (m.id === id ? { ...m, ...patch } : m)) };
+}
+
+export function removeMask(clip: VClip, id: string): VClip {
+    const prefix = `mask.${id}.`;
+    const props = Object.fromEntries(Object.entries(clip.props).filter(([k]) => !k.startsWith(prefix)));
+    const anim = Object.fromEntries(Object.entries(clip.anim).filter(([k]) => !k.startsWith(prefix)));
+    return { ...clip, masks: clip.masks.filter((m) => m.id !== id), props, anim };
+}
+
+// A path mask's vertex moved to (x, y), fractions of the layer.
+export function moveMaskPoint(clip: VClip, id: string, index: number, x: number, y: number): VClip {
+    return updateMask(clip, id, { points: (clip.masks.find((m) => m.id === id)?.points ?? []).map((p, i) => (i === index ? { x, y } : p)) });
+}
+
+// A vertex added after `after` (or at the end), fractions of the layer.
+export function addMaskPoint(clip: VClip, id: string, x: number, y: number, after?: number): VClip {
+    const points = [...(clip.masks.find((m) => m.id === id)?.points ?? [])];
+    const at = after === undefined ? points.length : Math.max(0, Math.min(points.length, after + 1));
+    points.splice(at, 0, { x, y });
+    return updateMask(clip, id, { points });
+}
+
+export function removeMaskPoint(clip: VClip, id: string, index: number): VClip {
+    const points = clip.masks.find((m) => m.id === id)?.points ?? [];
+    if (points.length <= 3) return clip;
+    return updateMask(clip, id, { points: points.filter((_, i) => i !== index) });
+}
+
+// ---- Shape items ----
+
+export function addShapeItem(comp: VComp, clip: VClip, item: VShapeItem): VClip {
+    const base = withShapeItems(clip);
+    return { ...base, shapes: [...(base.shapes ?? []), item], props: { ...base.props, ...newShapeItemProps(item, comp) } };
+}
+
+export function updateShapeItem(clip: VClip, id: string, patch: Partial<VShapeItem>): VClip {
+    const base = withShapeItems(clip);
+    return { ...base, shapes: (base.shapes ?? []).map((s) => (s.id === id ? { ...s, ...patch } : s)) };
+}
+
+export function removeShapeItem(clip: VClip, id: string): VClip {
+    const base = withShapeItems(clip);
+    const prefix = `shape.${id}.`;
+    const props = Object.fromEntries(Object.entries(base.props).filter(([k]) => !k.startsWith(prefix)));
+    const anim = Object.fromEntries(Object.entries(base.anim).filter(([k]) => !k.startsWith(prefix)));
+    return { ...base, shapes: (base.shapes ?? []).filter((s) => s.id !== id), props, anim };
+}
+
+// Moves an item up (towards the front, later in the list) or down by one.
+export function moveShapeItem(clip: VClip, id: string, dir: -1 | 1): VClip {
+    const base = withShapeItems(clip);
+    const list = [...(base.shapes ?? [])];
+    const i = list.findIndex((s) => s.id === id);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= list.length) return base;
+    [list[i], list[j]] = [list[j] as VShapeItem, list[i] as VShapeItem];
+    return { ...base, shapes: list };
 }

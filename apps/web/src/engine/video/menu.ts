@@ -31,7 +31,7 @@ import {
     zoomTimeline,
 } from "./actions";
 import { compLength } from "./model";
-import { activeComp, clipboard, seek, vui } from "./state";
+import { activeComp, clipboard, seek, toggleCommenting, vui } from "./state";
 
 // The selected clip when it's a nested sequence.
 function selectedNested(): string | null {
@@ -98,6 +98,8 @@ export const VIDEO_ACTIONS: VideoAction[] = [
     { id: "v:rect", label: "Rectangle", run: () => addShape("rect") },
     { id: "v:ellipse", label: "Ellipse", run: () => addShape("ellipse") },
     { id: "v:star", label: "Star", run: () => addShape("star") },
+    { id: "v:polygon", label: "Polygon", run: () => addShape("polygon") },
+    { id: "v:path", label: "Path", run: () => addShape("path") },
     { id: "v:solid", label: "Color matte", run: () => addSolid() },
     { id: "v:adjust", label: "Adjustment layer", run: () => addAdjustment() },
     { id: "v:vtrack", label: "Add video track", run: () => addTrackOf("video") },
@@ -113,6 +115,7 @@ export const VIDEO_ACTIONS: VideoAction[] = [
     { id: "v:marker", label: "Add marker", shortcut: "M", run: markerAtPlayhead },
     { id: "v:snap", label: "Snapping", shortcut: "⇧ S", checked: () => vui.get().snapping, run: () => vui.set({ snapping: !vui.get().snapping }) },
     { id: "v:safe", label: "Safe margins", checked: () => vui.get().safeArea, run: () => vui.set({ safeArea: !vui.get().safeArea }) },
+    { id: "v:comment", label: "Comment", shortcut: "⇧ C", checked: () => vui.get().commenting, run: () => toggleCommenting() },
     { id: "v:loop", label: "Loop playback", checked: () => vui.get().loop, run: () => vui.set({ loop: !vui.get().loop }) },
     { id: "v:zoomIn", label: "Zoom timeline in", shortcut: "=", run: () => zoomTimeline(1.5) },
     { id: "v:zoomOut", label: "Zoom timeline out", shortcut: "-", run: () => zoomTimeline(1 / 1.5) },
@@ -151,9 +154,10 @@ export const VIDEO_MENU: VideoMenuNode[] = [
     { sub: "file", label: "File", items: ["v:import", "-", "v:export", "v:frame", "-", "v:save", "v:version", "v:history"] },
     { sub: "edit", label: "Edit", items: ["v:undo", "v:redo", "-", "v:cut", "v:copy", "v:paste", "v:duplicate", "v:delete", "v:ripple", "-", "v:selectAll", "v:deselect"] },
     { sub: "clip", label: "Clip", items: ["v:split", "v:splitK", "v:razor", "v:select", "-", "v:nudgeLeft", "v:nudgeRight", "-", "v:link", "v:unlink", "v:enable", "v:nest", "v:openNested"] },
-    { sub: "graphics", label: "Graphics", items: ["v:title", "v:lower", "v:subtitle", "-", "v:rect", "v:ellipse", "v:star", "-", "v:solid", "v:adjust"] },
+    { sub: "graphics", label: "Graphics", items: ["v:title", "v:lower", "v:subtitle", "-", "v:rect", "v:ellipse", "v:polygon", "v:star", "v:path", "-", "v:solid", "v:adjust"] },
     { sub: "sequence", label: "Sequence", items: ["v:vtrack", "v:atrack", "-", "v:in", "v:out", "v:clearInOut", "v:marker", "-", "v:snap"] },
     { sub: "playback", label: "Playback", items: ["v:play", "v:shuttleBack", "v:shuttleStop", "v:shuttleForward", "-", "v:prevFrame", "v:nextFrame", "v:prevEdit", "v:nextEdit", "v:prevKey", "v:nextKey", "v:start", "v:end", "-", "v:loop", "v:safe", "-", "v:zoomIn", "v:zoomOut", "v:fit", "v:panel"] },
+    { sub: "review", label: "Review", items: ["v:comment", "v:version", "v:history"] },
     { sub: "library", label: "Library", items: ["v:effects", "v:transitions", "v:presets"] },
     "-",
     "v:shortcuts",
@@ -168,8 +172,8 @@ export const VIDEO_DESKTOP_SPEC: Record<string, (string | { sub: string; items: 
     view: [],
     object: ["v:split", "v:razor", "v:select", "-", "v:link", "v:unlink", "v:enable", "v:nest", "-", "v:vtrack", "v:atrack"],
     text: ["v:title", "v:lower", "v:subtitle"],
-    arrange: ["v:in", "v:out", "v:clearInOut", "v:marker", "-", "v:snap", "v:loop", "v:safe"],
-    vector: ["v:rect", "v:ellipse", "v:star", "-", "v:solid", "v:adjust"],
+    arrange: ["v:in", "v:out", "v:clearInOut", "v:marker", "-", "v:snap", "v:loop", "v:safe", "-", "v:comment"],
+    vector: ["v:rect", "v:ellipse", "v:polygon", "v:star", "v:path", "-", "v:solid", "v:adjust"],
     plugins: ["v:effects", "v:transitions"],
     widgets: ["v:presets"],
     help: ["v:shortcuts"],

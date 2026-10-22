@@ -3,8 +3,9 @@ import { frameAt, makeNode } from "./nodes";
 import { solid } from "./paint";
 import { editor } from "./store";
 import { apply as applyMatrix, spaceMatrix } from "./transform";
-import type { Command, GradientPaint, NagmaDocument, Paint, PathPoint, SceneNode, Subpath } from "./types";
-import { fitPath, mapSubpaths, pathBounds } from "./vector";
+import type { BlendMode, Command, GradientPaint, NagmaDocument, Paint, PathPoint, SceneNode, Subpath } from "./types";
+import { fitPath, mapSubpaths, pathBounds, samplePath } from "./vector";
+import { insidePoly } from "./vector-network";
 
 // SVG import (files, drops and pasted SVG text) into editable layers: a frame the size of the SVG
 // holding groups, vectors (paths and transformed shapes), rectangles, ellipses, text and images,
@@ -31,6 +32,7 @@ interface Style {
     textAnchor: string;
     display: boolean;
     color: string;
+    blend: BlendMode;
 }
 
 const DEFAULT_STYLE: Style = {
@@ -51,7 +53,11 @@ const DEFAULT_STYLE: Style = {
     textAnchor: "start",
     display: true,
     color: "#000000",
+    blend: "normal",
 };
+
+// CSS mix-blend-mode names the engine draws with (the rest stay normal).
+const BLENDS = new Set<BlendMode>(["multiply", "screen", "overlay", "darken", "lighten", "color-dodge", "color-burn", "hard-light", "soft-light", "difference", "exclusion", "hue", "saturation", "color", "luminosity", "plus-lighter", "plus-darker"]);
 
 const NAMED: Record<string, string> = {
     black: "#000000", white: "#FFFFFF", red: "#FF0000", green: "#008000", blue: "#0000FF", yellow: "#FFFF00", orange: "#FFA500", purple: "#800080",
@@ -168,6 +174,17 @@ export function parsePathData(d: string): Subpath[] {
     let lastQuad: Pt | null = null;
     const isCmd = (t: string | undefined) => t !== undefined && /^[a-zA-Z]$/.test(t);
     const next = () => parseFloat(tokens[i++] ?? "0");
+    // An arc's flags are single digits that may be written without separators ("a5 5 0 1012 0"
+    // is flags 1 and 0, then 12 0), so a longer token gives up its first digit.
+    const flag = () => {
+        const t = tokens[i] ?? "0";
+        if (t.length > 1 && /^[01]/.test(t)) {
+            tokens[i] = t.slice(1);
+            return Number(t[0]);
+        }
+        i++;
+        return parseFloat(t);
+    };
     const begin = (p: Pt) => {
         sub = { closed: false, points: [{ x: p.x, y: p.y, in: null, out: null }] };
         subs.push(sub);
@@ -255,8 +272,8 @@ export function parsePathData(d: string): Subpath[] {
                 const rx = Math.abs(next());
                 const ry = Math.abs(next());
                 const rot = next();
-                const large = next() !== 0;
-                const sweep = next() !== 0;
+                const large = flag() !== 0;
+                const sweep = flag() !== 0;
                 const p = off({ x: next(), y: next() });
                 for (const [c1, c2, q] of arcToCubics(cur, p, rx, ry, rot, large, sweep)) cubicTo(c1, c2, q);
                 if (!rx || !ry) lineTo(p);
@@ -400,7 +417,7 @@ function parseDecls(text: string): Record<string, string> {
     return out;
 }
 
-const STYLE_PROPS = ["fill", "fill-opacity", "fill-rule", "stroke", "stroke-opacity", "stroke-width", "stroke-linecap", "stroke-linejoin", "stroke-dasharray", "opacity", "font-size", "font-family", "font-weight", "font-style", "text-anchor", "display", "visibility", "color"];
+const STYLE_PROPS = ["fill", "fill-opacity", "fill-rule", "stroke", "stroke-opacity", "stroke-width", "stroke-linecap", "stroke-linejoin", "stroke-dasharray", "opacity", "font-size", "font-family", "font-weight", "font-style", "text-anchor", "display", "visibility", "color", "mix-blend-mode", "clip-path", "mask"];
 
 interface Ctx {
     css: { selector: string; decls: Record<string, string> }[];
@@ -410,6 +427,8 @@ interface Ctx {
     parentId: string;
     origin: Pt;
     viewport: { w: number; h: number };
+    // Embedded pictures already added, by their data URL.
+    images: Map<string, string>;
 }
 
 function declsOf(el: Element, ctx: Ctx): Record<string, string> {
@@ -430,8 +449,9 @@ function declsOf(el: Element, ctx: Ctx): Record<string, string> {
 
 function styleOf(el: Element, parent: Style, ctx: Ctx): Style {
     const d = declsOf(el, ctx);
-    const s: Style = { ...parent, opacity: 1 };
+    const s: Style = { ...parent, opacity: 1, blend: "normal" };
     if (d.color) s.color = d.color;
+    if (d["mix-blend-mode"]) s.blend = BLENDS.has(d["mix-blend-mode"] as BlendMode) ? (d["mix-blend-mode"] as BlendMode) : "normal";
     if (d.fill !== undefined) s.fill = d.fill;
     if (d["fill-opacity"] !== undefined) s.fillOpacity = num(d["fill-opacity"], 1);
     if (d["fill-rule"]) s.fillRule = d["fill-rule"] === "evenodd" ? "evenodd" : "nonzero";
@@ -459,14 +479,53 @@ function paintFor(value: string | null, opacity: number, style: Style, ctx: Ctx,
     if (!value) return null;
     const ref = value.match(/url\(\s*['"]?#([^'")]+)['"]?\s*\)/);
     if (ref) {
-        const grad = gradientFor(ctx.defs.get(ref[1] ?? ""), ctx, matrix, local, box, opacity, style);
+        const target = ctx.defs.get(ref[1] ?? "");
+        const grad = gradientFor(target, ctx, matrix, local, box, opacity, style);
         if (grad) return grad;
+        const image = target?.tagName === "pattern" ? patternImage(target, ctx) : null;
+        if (image) return { type: "image", id: image, mode: "fill", opacity, visible: true, blend: "normal" };
         const fallback = value.replace(/url\([^)]*\)/, "").trim();
-        return fallback ? paintFor(fallback, opacity, style, ctx, matrix, local, box) : null;
+        if (fallback) return paintFor(fallback, opacity, style, ctx, matrix, local, box);
+        // A paint that can't be read (a pattern of shapes, a missing id) still shows the layer.
+        return solid(patternColor(target, style) ?? FALLBACK_PAINT, opacity);
     }
     const c = parseColor(value, parseColor(style.color)?.hex ?? "#000000");
     if (!c) return null;
     return solid(c.hex, Math.max(0, Math.min(1, c.alpha * opacity)));
+}
+
+// The grey the reference shows for a paint it can't read.
+const FALLBACK_PAINT = "#D9D9D9";
+
+// A pattern made of a picture (the way image fills are exported): its image, added to the document.
+function patternImage(pattern: Element, ctx: Ctx): string | null {
+    let image: Element | null = pattern.querySelector("image");
+    if (!image) {
+        const use = pattern.querySelector("use");
+        const id = (use?.getAttribute("href") ?? use?.getAttribute("xlink:href") ?? "").replace(/^#/, "");
+        const target = id ? ctx.defs.get(id) : undefined;
+        image = target?.tagName === "image" ? target : null;
+    }
+    const href = image?.getAttribute("href") ?? image?.getAttribute("xlink:href") ?? "";
+    if (!href.startsWith("data:image/")) return null;
+    let id = ctx.images.get(href);
+    if (!id) {
+        id = `svgimg-${Math.random().toString(36).slice(2, 10)}`;
+        ctx.images.set(href, id);
+        ctx.commands.push({ type: "image.add", id, data: href });
+    }
+    return id;
+}
+
+// A pattern of shapes stands in as the first colour it paints with.
+function patternColor(pattern: Element | undefined, style: Style): string | null {
+    if (!pattern) return null;
+    for (const el of Array.from(pattern.querySelectorAll("*"))) {
+        const fill = el.getAttribute("fill") ?? parseDecls(el.getAttribute("style") ?? "").fill;
+        const c = fill && !fill.startsWith("url(") ? parseColor(fill, parseColor(style.color)?.hex) : null;
+        if (c && c.alpha > 0) return c.hex;
+    }
+    return null;
 }
 
 function gradientFor(el: Element | undefined, ctx: Ctx, matrix: M, local: { x: number; y: number; w: number; h: number }, box: { x: number; y: number; w: number; h: number }, opacity: number, style: Style): GradientPaint | null {
@@ -534,12 +593,73 @@ function strokeScale(m: M): number {
 }
 
 // Adds one layer for a shape with geometry `subs` in SVG user space under transform `m`.
-function addShape(el: Element, subs: Subpath[], style: Style, m: M, ctx: Ctx, parentId: string, name: string, local: { x: number; y: number; w: number; h: number }, kind?: { type: "rect"; rx: number } | { type: "ellipse" }) {
-    if (!subs.length || !style.display) return;
-    const placed = mapSubpaths(subs, (p) => {
+type Box = { x: number; y: number; w: number; h: number };
+
+function reversed(sub: Subpath): Subpath {
+    return { closed: sub.closed, points: [...sub.points].reverse().map((p) => ({ ...p, in: p.out, out: p.in })) };
+}
+
+function signedArea(poly: Pt[]): number {
+    let sum = 0;
+    for (let i = 0; i < poly.length; i++) {
+        const p = poly[i] as Pt;
+        const q = poly[(i + 1) % poly.length] as Pt;
+        sum += p.x * q.y - q.x * p.y;
+    }
+    return sum / 2;
+}
+
+// An even-odd path drawn with the default (non-zero) rule: contours inside an odd number of others
+// run the other way round, so holes stay holes and the points stay exactly as drawn. Contours
+// that cross one another at the same depth are the one case that needs a real boolean.
+export function evenOddToNonZero(subs: Subpath[]): Subpath[] {
+    const closed = subs.filter((s) => s.closed && s.points.length > 2);
+    if (closed.length < 2) return subs;
+    const polys = closed.map((s) => samplePath([s])[0] ?? []);
+    // A point on each contour that isn't a vertex (contours often share vertices).
+    const probe = (poly: Pt[]): Pt => ({ x: ((poly[0]?.x ?? 0) + (poly[1]?.x ?? 0)) / 2, y: ((poly[0]?.y ?? 0) + (poly[1]?.y ?? 0)) / 2 });
+    const within = (i: number, j: number) => insidePoly(polys[j] as Pt[], probe(polys[i] as Pt[]));
+    const depth = closed.map((_, i) => closed.filter((_, j) => j !== i && within(i, j)).length);
+    const boxes = polys.map((poly) => pathBounds([{ closed: true, points: poly.map((p) => ({ ...p, in: null, out: null })) }]) ?? { x: 0, y: 0, w: 0, h: 0 });
+    const overlap = (a: Box, b: Box) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+    let crossing = false;
+    for (let i = 0; i < closed.length && !crossing; i++) {
+        for (let j = i + 1; j < closed.length; j++) {
+            if (depth[i] !== depth[j] || !overlap(boxes[i] as Box, boxes[j] as Box)) continue;
+            const pi = polys[i] as Pt[];
+            const pj = polys[j] as Pt[];
+            if (pi.some((p) => insidePoly(pj, p)) || pj.some((p) => insidePoly(pi, p))) {
+                crossing = true;
+                break;
+            }
+        }
+    }
+    if (crossing) {
+        const merged = booleanPaths("exclude", closed.map((s) => [s]));
+        if (merged.length) return [...merged, ...subs.filter((s) => !closed.includes(s))];
+    }
+    return subs.map((s) => {
+        const i = closed.indexOf(s);
+        if (i < 0) return s;
+        const want = (depth[i] as number) % 2 === 0 ? 1 : -1;
+        const sign = Math.sign(signedArea(polys[i] as Pt[]));
+        return sign === 0 || sign === want ? s : reversed(s);
+    });
+}
+
+const urlId = (value: string | undefined | null): string | null => value?.match(/url\(\s*['"]?#([^'")]+)['"]?\s*\)/)?.[1] ?? null;
+
+function placeSubpaths(subs: Subpath[], m: M, ctx: Ctx): Subpath[] {
+    return mapSubpaths(subs, (p) => {
         const q = m.transformPoint(new DOMPoint(p.x, p.y));
         return { x: q.x + ctx.origin.x, y: q.y + ctx.origin.y };
     });
+}
+
+// Adds one layer for a shape with geometry `subs` in SVG user space under transform `m`.
+function addShape(el: Element, subs: Subpath[], style: Style, m: M, ctx: Ctx, parentId: string, name: string, local: Box, kind?: { type: "rect"; rx: number } | { type: "ellipse" }, extra: Partial<SceneNode> = {}): SceneNode | null {
+    if (!subs.length || !style.display) return null;
+    const placed = placeSubpaths(subs, m, ctx);
     const bounds = pathBounds(placed) ?? { x: ctx.origin.x, y: ctx.origin.y, w: 1, h: 1 };
     const box = { x: bounds.x, y: bounds.y, w: Math.max(bounds.w, 0.01), h: Math.max(bounds.h, 0.01) };
     const fill = paintFor(style.fill, style.fillOpacity, style, ctx, m, local, box);
@@ -555,6 +675,8 @@ function addShape(el: Element, subs: Subpath[], style: Style, m: M, ctx: Ctx, pa
         strokeJoin: style.strokeJoin,
         dash: style.dash ? [style.dash[0] * k, style.dash[1] * k] : null,
         opacity: style.opacity,
+        blendMode: style.blend,
+        ...extra,
     };
     let node: SceneNode;
     if (kind && isAxisAligned(m)) {
@@ -562,12 +684,12 @@ function addShape(el: Element, subs: Subpath[], style: Style, m: M, ctx: Ctx, pa
         node = makeNode(ctx.doc, kind.type, box, parentId, { ...common, radius: r });
         node = { ...node, ...box };
     } else {
-        // Even-odd fills become the same area under the default rule (holes keep their holes).
-        const geometry = style.fillRule === "evenodd" && placed.filter((s) => s.closed).length > 1 ? [...booleanPaths("exclude", placed.filter((s) => s.closed).map((s) => [s])), ...placed.filter((s) => !s.closed)] : placed;
+        const geometry = style.fillRule === "evenodd" && fill ? evenOddToNonZero(placed) : placed;
         const fitted = fitPath(geometry);
         node = { ...makeNode(ctx.doc, "vector", fitted, parentId, { ...common, path: fitted.path }), x: fitted.x, y: fitted.y, w: fitted.w, h: fitted.h };
     }
     ctx.commands.push({ type: "node.create", node });
+    return node;
 }
 
 function addText(el: Element, style: Style, m: M, ctx: Ctx, parentId: string) {
@@ -591,8 +713,9 @@ function addText(el: Element, style: Style, m: M, ctx: Ctx, parentId: string) {
         fontWeight: style.fontWeight,
         italic: style.fontStyle === "italic",
         textAlign: style.textAnchor === "middle" ? "center" : style.textAnchor === "end" ? "right" : "left",
-        fills: fill ? [solid(fill.hex, fill.alpha * style.fillOpacity)] : [],
+        fills: fill ? [solid(fill.hex, fill.alpha * style.fillOpacity)] : [solid(FALLBACK_PAINT, style.fillOpacity)],
         opacity: style.opacity,
+        blendMode: style.blend,
         sizing: { h: "hug", v: "hug" },
     });
     ctx.commands.push({ type: "node.create", node });
@@ -600,79 +723,62 @@ function addText(el: Element, style: Style, m: M, ctx: Ctx, parentId: string) {
 
 function addImage(el: Element, style: Style, m: M, ctx: Ctx, parentId: string) {
     const href = el.getAttribute("href") ?? el.getAttribute("xlink:href") ?? "";
-    if (!href.startsWith("data:image/")) return;
-    const x = num(el.getAttribute("x"));
-    const y = num(el.getAttribute("y"));
-    const w = num(el.getAttribute("width"));
-    const h = num(el.getAttribute("height"));
+    const vw = ctx.viewport.w;
+    const vh = ctx.viewport.h;
+    const x = len(el.getAttribute("x"), vw);
+    const y = len(el.getAttribute("y"), vh);
+    const w = len(el.getAttribute("width"), vw);
+    const h = len(el.getAttribute("height"), vh);
     if (!w || !h) return;
     const a = m.transformPoint(new DOMPoint(x, y));
     const b = m.transformPoint(new DOMPoint(x + w, y + h));
-    const id = `svgimg-${Math.random().toString(36).slice(2, 10)}`;
-    ctx.commands.push({ type: "image.add", id, data: href });
     const box = { x: Math.min(a.x, b.x) + ctx.origin.x, y: Math.min(a.y, b.y) + ctx.origin.y, w: Math.abs(b.x - a.x), h: Math.abs(b.y - a.y) };
-    const node = makeNode(ctx.doc, "rect", box, parentId, { name: el.getAttribute("id") || "Image", fills: [{ type: "image", id, mode: el.getAttribute("preserveAspectRatio") === "none" ? "fill" : "fit", opacity: 1, visible: true, blend: "normal" }], opacity: style.opacity });
+    // A picture that isn't embedded (a link) keeps its place as a grey rectangle.
+    let fill: Paint = solid(FALLBACK_PAINT, 1);
+    if (href.startsWith("data:image/")) {
+        let id = ctx.images.get(href);
+        if (!id) {
+            id = `svgimg-${Math.random().toString(36).slice(2, 10)}`;
+            ctx.images.set(href, id);
+            ctx.commands.push({ type: "image.add", id, data: href });
+        }
+        fill = { type: "image", id, mode: el.getAttribute("preserveAspectRatio") === "none" ? "fill" : "fit", opacity: 1, visible: true, blend: "normal" };
+    }
+    const node = makeNode(ctx.doc, "rect", box, parentId, { name: el.getAttribute("id") || "Image", fills: [fill], opacity: style.opacity, blendMode: style.blend });
     ctx.commands.push({ type: "node.create", node: { ...node, ...box } });
 }
 
-function walk(el: Element, parentStyle: Style, parentMatrix: M, ctx: Ctx, parentId: string) {
+interface Shape {
+    subs: Subpath[];
+    local: Box;
+    name: string;
+    kind?: { type: "rect"; rx: number } | { type: "ellipse" };
+    // A line never fills.
+    noFill?: boolean;
+}
+
+// The geometry of a basic shape or path in its own user space (before its transform attribute).
+function shapeOf(el: Element, ctx: Ctx): Shape | null {
     const tag = el.tagName.replace(/^svg:/, "");
-    if (["defs", "style", "title", "desc", "metadata", "clipPath", "mask", "linearGradient", "radialGradient", "pattern", "symbol", "marker", "filter"].includes(tag)) return;
-    const style = styleOf(el, parentStyle, ctx);
-    if (!style.display) return;
-    const m = parentMatrix.multiply(parseTransform(el.getAttribute("transform")));
     const a = (n: string) => el.getAttribute(n);
     const vw = ctx.viewport.w;
     const vh = ctx.viewport.h;
     switch (tag) {
-        case "g":
-        case "a":
-        case "switch": {
-            const kids = Array.from(el.children);
-            if (!kids.length) return;
-            // Groups keep their structure; their opacity stays on the group.
-            const group = makeNode(ctx.doc, "group", { x: 0, y: 0, w: 1, h: 1 }, parentId, { name: el.getAttribute("id") || el.getAttribute("inkscape:label") || "Group", opacity: style.opacity, fills: [] });
-            const before = ctx.commands.length;
-            ctx.commands.push({ type: "node.create", node: group });
-            const inner = { ...style, opacity: 1 };
-            for (const child of kids) walk(child, inner, m, ctx, group.id);
-            // An empty group is dropped.
-            if (ctx.commands.length === before + 1) ctx.commands.pop();
-            return;
-        }
-        case "svg": {
-            // A nested svg: its x/y offset and its viewBox.
-            const x = len(a("x"), vw);
-            const y = len(a("y"), vh);
-            for (const child of Array.from(el.children)) walk(child, style, m.translate(x, y), ctx, parentId);
-            return;
-        }
-        case "use": {
-            const ref = ctx.defs.get((a("href") ?? a("xlink:href") ?? "").replace(/^#/, ""));
-            if (!ref) return;
-            const moved = m.translate(len(a("x"), vw), len(a("y"), vh));
-            if (ref.tagName === "symbol") for (const child of Array.from(ref.children)) walk(child, style, moved, ctx, parentId);
-            else walk(ref, style, moved, ctx, parentId);
-            return;
-        }
         case "path": {
             const subs = parsePathData(a("d") ?? "");
-            const b = pathBounds(subs) ?? { x: 0, y: 0, w: 0, h: 0 };
-            addShape(el, subs, style, m, ctx, parentId, "Vector", b);
-            return;
+            return { subs, local: pathBounds(subs) ?? { x: 0, y: 0, w: 0, h: 0 }, name: "Vector" };
         }
         case "rect": {
             const x = len(a("x"), vw);
             const y = len(a("y"), vh);
             const w = len(a("width"), vw);
             const h = len(a("height"), vh);
-            if (w <= 0 || h <= 0) return;
-            let rx = a("rx") !== null ? len(a("rx"), vw) : a("ry") !== null ? len(a("ry"), vh) : 0;
-            let ry = a("ry") !== null ? len(a("ry"), vh) : rx;
+            if (w <= 0 || h <= 0) return null;
+            let rx = a("rx") !== null && a("rx") !== "auto" ? len(a("rx"), vw) : a("ry") !== null ? len(a("ry"), vh) : 0;
+            let ry = a("ry") !== null && a("ry") !== "auto" ? len(a("ry"), vh) : rx;
             rx = Math.min(rx, w / 2);
             ry = Math.min(ry, h / 2);
-            addShape(el, [rectPath(x, y, w, h, rx, ry)], style, m, ctx, parentId, "Rectangle", { x, y, w, h }, Math.abs(rx - ry) < 1e-6 ? { type: "rect", rx } : undefined);
-            return;
+            return { subs: [rectPath(x, y, w, h, rx, ry)], local: { x, y, w, h }, name: "Rectangle", kind: Math.abs(rx - ry) < 1e-6 ? { type: "rect", rx } : undefined };
         }
         case "circle":
         case "ellipse": {
@@ -680,24 +786,218 @@ function walk(el: Element, parentStyle: Style, parentMatrix: M, ctx: Ctx, parent
             const cy = len(a("cy"), vh);
             const rx = tag === "circle" ? len(a("r"), Math.hypot(vw, vh) / Math.SQRT2) : len(a("rx"), vw);
             const ry = tag === "circle" ? rx : len(a("ry"), vh);
-            if (rx <= 0 || ry <= 0) return;
-            addShape(el, [ellipsePath(cx, cy, rx, ry)], style, m, ctx, parentId, "Ellipse", { x: cx - rx, y: cy - ry, w: rx * 2, h: ry * 2 }, { type: "ellipse" });
-            return;
+            if (rx <= 0 || ry <= 0) return null;
+            return { subs: [ellipsePath(cx, cy, rx, ry)], local: { x: cx - rx, y: cy - ry, w: rx * 2, h: ry * 2 }, name: "Ellipse", kind: { type: "ellipse" } };
         }
         case "line": {
             const p1 = { x: len(a("x1"), vw), y: len(a("y1"), vh) };
             const p2 = { x: len(a("x2"), vw), y: len(a("y2"), vh) };
-            addShape(el, [{ closed: false, points: [{ ...p1, in: null, out: null }, { ...p2, in: null, out: null }] }], { ...style, fill: null }, m, ctx, parentId, "Line", { x: Math.min(p1.x, p2.x), y: Math.min(p1.y, p2.y), w: Math.abs(p2.x - p1.x), h: Math.abs(p2.y - p1.y) });
-            return;
+            const sub: Subpath = { closed: false, points: [{ ...p1, in: null, out: null }, { ...p2, in: null, out: null }] };
+            return { subs: [sub], local: { x: Math.min(p1.x, p2.x), y: Math.min(p1.y, p2.y), w: Math.abs(p2.x - p1.x), h: Math.abs(p2.y - p1.y) }, name: "Line", noFill: true };
         }
         case "polyline":
         case "polygon": {
             const nums = (a("points") ?? "").split(/[\s,]+/).filter(Boolean).map(Number);
             const pts: PathPoint[] = [];
             for (let i = 0; i + 1 < nums.length; i += 2) pts.push({ x: nums[i] ?? 0, y: nums[i + 1] ?? 0, in: null, out: null });
-            if (pts.length < 2) return;
+            if (pts.length < 2) return null;
             const sub: Subpath = { closed: tag === "polygon", points: pts };
-            addShape(el, [sub], style, m, ctx, parentId, tag === "polygon" ? "Polygon" : "Line", pathBounds([sub]) ?? { x: 0, y: 0, w: 0, h: 0 });
+            return { subs: [sub], local: pathBounds([sub]) ?? { x: 0, y: 0, w: 0, h: 0 }, name: tag === "polygon" ? "Polygon" : "Line", noFill: tag === "polyline" && !el.getAttribute("fill") };
+        }
+        default:
+            return null;
+    }
+}
+
+// The shapes of a clip path or mask, each with its own transform folded in (user space of the clipped element).
+function clipShapes(clip: Element, ctx: Ctx): { el: Element; shape: Shape; m: M }[] {
+    const out: { el: Element; shape: Shape; m: M }[] = [];
+    const visit = (el: Element, m: M) => {
+        const tag = el.tagName.replace(/^svg:/, "");
+        const mine = m.multiply(parseTransform(el.getAttribute("transform")));
+        if (tag === "use") {
+            const ref = ctx.defs.get((el.getAttribute("href") ?? el.getAttribute("xlink:href") ?? "").replace(/^#/, ""));
+            if (ref) visit(ref, mine.translate(len(el.getAttribute("x"), ctx.viewport.w), len(el.getAttribute("y"), ctx.viewport.h)));
+            return;
+        }
+        if (tag === "g") {
+            for (const child of Array.from(el.children)) visit(child, mine);
+            return;
+        }
+        const shape = shapeOf(el, ctx);
+        if (shape) out.push({ el, shape, m: mine });
+    };
+    for (const child of Array.from(clip.children)) visit(child, new DOMMatrix());
+    return out;
+}
+
+function cornersBox(m: M, box: Box, ctx: Ctx): Box {
+    const pts = [
+        [box.x, box.y],
+        [box.x + box.w, box.y],
+        [box.x + box.w, box.y + box.h],
+        [box.x, box.y + box.h],
+    ].map(([x, y]) => m.transformPoint(new DOMPoint(x, y)));
+    const xs = pts.map((p) => p.x + ctx.origin.x);
+    const ys = pts.map((p) => p.y + ctx.origin.y);
+    return { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+}
+
+// What a walk may leave to its wrapper: an element's clip path or mask, already turned into a frame.
+interface Skip {
+    clip?: boolean;
+    mask?: boolean;
+}
+
+// A clipped or masked element lives in a frame of its own: a plain rectangular clip path is the
+// frame's clip; any other clip path, or a mask, becomes a mask layer first in the frame, hiding
+// the element outside it.
+function wrapClipped(el: Element, clip: Element | null, mask: Element | null, style: Style, parentStyle: Style, parentMatrix: M, m: M, ctx: Ctx, parentId: string, skip: Skip) {
+    const name = el.getAttribute("id") || el.getAttribute("inkscape:label") || (clip ? "Clip group" : "Mask group");
+    const vw = ctx.viewport.w;
+    const vh = ctx.viewport.h;
+    let box: Box | null = null;
+    let shapes: { el: Element; shape: Shape; m: M }[] = [];
+    let plainRect = false;
+    if (clip) {
+        const cm = m.multiply(parseTransform(clip.getAttribute("transform")));
+        shapes = clipShapes(clip, ctx).map((s) => ({ ...s, m: cm.multiply(s.m) }));
+        const placed = shapes.flatMap((s) => placeSubpaths(s.shape.subs, s.m, ctx));
+        box = pathBounds(placed);
+        const only = shapes[0];
+        plainRect = shapes.length === 1 && only?.shape.kind?.type === "rect" && only.shape.kind.rx === 0 && isAxisAligned(only.m);
+    } else if (mask) {
+        const units = mask.getAttribute("maskUnits") ?? "objectBoundingBox";
+        if (units === "userSpaceOnUse" && mask.getAttribute("width") && mask.getAttribute("height")) {
+            box = cornersBox(m, { x: len(mask.getAttribute("x"), vw), y: len(mask.getAttribute("y"), vh), w: len(mask.getAttribute("width"), vw), h: len(mask.getAttribute("height"), vh) }, ctx);
+        } else {
+            const placed = clipShapes(mask, ctx).flatMap((s) => placeSubpaths(s.shape.subs, m.multiply(s.m), ctx));
+            box = pathBounds(placed);
+        }
+    }
+    box ??= cornersBox(parentMatrix, { x: 0, y: 0, w: vw, h: vh }, ctx);
+    box = { x: box.x, y: box.y, w: Math.max(1, box.w), h: Math.max(1, box.h) };
+    const frame = { ...makeNode(ctx.doc, "frame", box, parentId, { name, fills: [], clip: Boolean(clip), opacity: style.opacity, blendMode: style.blend }), ...box };
+    const at = ctx.commands.length;
+    ctx.commands.push({ type: "node.create", node: frame });
+    // The mask layer: an opaque copy of the clip path's shapes, or the mask's own content.
+    if (clip && !plainRect && shapes.length) {
+        const maskStyle: Style = { ...DEFAULT_STYLE, fill: "#000000", stroke: null, display: true };
+        // One shape masks by its outline; several are grouped and mask by their coverage.
+        let host = frame.id;
+        if (shapes.length > 1) {
+            const group = makeNode(ctx.doc, "group", { x: 0, y: 0, w: 1, h: 1 }, frame.id, { name: "Clip", fills: [], isMask: true, maskType: "alpha" });
+            ctx.commands.push({ type: "node.create", node: group });
+            host = group.id;
+        }
+        for (const s of shapes) addShape(s.el, s.shape.subs, maskStyle, s.m, ctx, host, s.shape.name, s.shape.local, s.shape.kind, shapes.length === 1 ? { isMask: true, maskType: "vector" } : {});
+    } else if (mask) {
+        const type: SceneNode["maskType"] = (mask.getAttribute("mask-type") ?? parseDecls(mask.getAttribute("style") ?? "")["mask-type"]) === "alpha" ? "alpha" : "luminance";
+        const group = makeNode(ctx.doc, "group", { x: 0, y: 0, w: 1, h: 1 }, frame.id, { name: "Mask", fills: [], isMask: true, maskType: type });
+        const before = ctx.commands.length;
+        ctx.commands.push({ type: "node.create", node: group });
+        const inner = { ...DEFAULT_STYLE, ...styleOf(mask, parentStyle, ctx), opacity: 1, blend: "normal" as const };
+        const mm = m.multiply(parseTransform(mask.getAttribute("transform")));
+        for (const child of Array.from(mask.children)) walk(child, inner, mm, ctx, group.id);
+        if (ctx.commands.length === before + 1) ctx.commands.pop();
+    }
+    const before = ctx.commands.length;
+    walk(el, parentStyle, parentMatrix, ctx, frame.id, { clip: skip.clip || Boolean(clip), mask: skip.mask || Boolean(mask) });
+    // Nothing visible inside: the frame goes too.
+    if (ctx.commands.length === before) ctx.commands.splice(at);
+}
+
+// The matrix and viewport inside a nested svg or symbol: its viewBox scaled to the width and
+// height it is given (meet, centred), or left as it is without them.
+function nestedViewport(el: Element, m: M, ctx: Ctx, width: string | null, height: string | null): { inner: M; viewport: { w: number; h: number } } {
+    const vw = ctx.viewport.w;
+    const vh = ctx.viewport.h;
+    const w = width !== null ? len(width, vw) : null;
+    const h = height !== null ? len(height, vh) : null;
+    const vb = (el.getAttribute("viewBox") ?? "").split(/[\s,]+/).map(Number);
+    let inner = m;
+    if (vb.length === 4 && vb.every((n) => Number.isFinite(n)) && (vb[2] as number) > 0 && (vb[3] as number) > 0 && (w || h)) {
+        const [vx, vy, bw, bh] = vb as [number, number, number, number];
+        const ww = w ?? ((h as number) * bw) / bh;
+        const hh = h ?? (ww * bh) / bw;
+        const k = Math.min(ww / bw, hh / bh);
+        inner = inner.translate((ww - bw * k) / 2, (hh - bh * k) / 2).scale(k, k).translate(-vx, -vy);
+        return { inner, viewport: { w: bw, h: bh } };
+    }
+    return { inner, viewport: w && h ? { w, h } : ctx.viewport };
+}
+
+const SKIPPED = new Set(["defs", "style", "title", "desc", "metadata", "clipPath", "mask", "linearGradient", "radialGradient", "pattern", "symbol", "marker", "filter", "script"]);
+
+function walk(el: Element, parentStyle: Style, parentMatrix: M, ctx: Ctx, parentId: string, skip: Skip = {}) {
+    const tag = el.tagName.replace(/^svg:/, "");
+    if (SKIPPED.has(tag)) return;
+    const style = styleOf(el, parentStyle, ctx);
+    if (!style.display) return;
+    const m = parentMatrix.multiply(parseTransform(el.getAttribute("transform")));
+    const a = (n: string) => el.getAttribute(n);
+    const vw = ctx.viewport.w;
+    const vh = ctx.viewport.h;
+    // A clip path or mask on the element: it lives in a frame that clips or masks it.
+    const d = declsOf(el, ctx);
+    const clipRef = skip.clip ? null : urlId(d["clip-path"]);
+    const maskRef = skip.mask ? null : urlId(d.mask);
+    const clip = clipRef ? ctx.defs.get(clipRef) : undefined;
+    const mask = maskRef ? ctx.defs.get(maskRef) : undefined;
+    if (clip?.tagName === "clipPath") {
+        wrapClipped(el, clip, null, style, parentStyle, parentMatrix, m, ctx, parentId, skip);
+        return;
+    }
+    if (mask?.tagName === "mask") {
+        wrapClipped(el, null, mask, style, parentStyle, parentMatrix, m, ctx, parentId, skip);
+        return;
+    }
+    // Inside its own frame, the element's opacity and blend are the frame's.
+    if (skip.clip || skip.mask) {
+        style.opacity = 1;
+        style.blend = "normal";
+    }
+    switch (tag) {
+        case "g":
+        case "a":
+        case "switch": {
+            const kids = Array.from(el.children);
+            if (!kids.length) return;
+            // A group inside the frame made for its clip path or mask is that frame: its children go straight in.
+            if (skip.clip || skip.mask) {
+                for (const child of kids) walk(child, { ...style, opacity: 1, blend: "normal" }, m, ctx, parentId);
+                return;
+            }
+            // Groups keep their structure; their opacity and blend stay on the group.
+            const group = makeNode(ctx.doc, "group", { x: 0, y: 0, w: 1, h: 1 }, parentId, { name: el.getAttribute("id") || el.getAttribute("inkscape:label") || "Group", opacity: style.opacity, blendMode: style.blend, fills: [] });
+            const before = ctx.commands.length;
+            ctx.commands.push({ type: "node.create", node: group });
+            const inner = { ...style, opacity: 1, blend: "normal" as const };
+            for (const child of kids) walk(child, inner, m, ctx, group.id);
+            // An empty group is dropped.
+            if (ctx.commands.length === before + 1) ctx.commands.pop();
+            return;
+        }
+        case "svg": {
+            // A nested svg: its x/y offset, and its viewBox scaled to its width and height.
+            const { inner, viewport } = nestedViewport(el, m.translate(len(a("x"), vw), len(a("y"), vh)), ctx, a("width"), a("height"));
+            for (const child of Array.from(el.children)) walk(child, { ...style, opacity: 1, blend: "normal" }, inner, { ...ctx, viewport }, parentId);
+            return;
+        }
+        case "use": {
+            const ref = ctx.defs.get((a("href") ?? a("xlink:href") ?? "").replace(/^#/, ""));
+            if (!ref || ref === el || ref.contains(el)) return;
+            const moved = m.translate(len(a("x"), vw), len(a("y"), vh));
+            if (ref.tagName === "symbol" || ref.tagName === "svg") {
+                // A symbol's contents, placed by the use's size (its viewBox scaled to it), as a group.
+                const { inner, viewport } = nestedViewport(ref, moved, ctx, a("width") ?? ref.getAttribute("width"), a("height") ?? ref.getAttribute("height"));
+                const group = makeNode(ctx.doc, "group", { x: 0, y: 0, w: 1, h: 1 }, parentId, { name: a("id") || ref.getAttribute("id") || "Instance", opacity: style.opacity, blendMode: style.blend, fills: [] });
+                const before = ctx.commands.length;
+                ctx.commands.push({ type: "node.create", node: group });
+                const kidStyle = { ...styleOf(ref, style, ctx), opacity: 1, blend: "normal" as const };
+                for (const child of Array.from(ref.children)) walk(child, kidStyle, inner, { ...ctx, viewport }, group.id);
+                if (ctx.commands.length === before + 1) ctx.commands.pop();
+            } else walk(ref, style, moved, ctx, parentId);
             return;
         }
         case "text":
@@ -706,6 +1006,11 @@ function walk(el: Element, parentStyle: Style, parentMatrix: M, ctx: Ctx, parent
         case "image":
             addImage(el, style, m, ctx, parentId);
             return;
+        default: {
+            const shape = shapeOf(el, ctx);
+            if (!shape) return;
+            addShape(el, shape.subs, shape.noFill ? { ...style, fill: null } : style, m, ctx, parentId, shape.name, shape.local, shape.kind);
+        }
     }
 }
 
@@ -733,7 +1038,7 @@ export function importSvg(markup: string, point: { x: number; y: number }, name 
     const frame = makeNode(doc, "frame", { x: local.x, y: local.y, w: width, h: height }, parentId, { name: root.getAttribute("id") || name, fills: [], clip: false });
     const defs = new Map<string, Element>();
     for (const el of Array.from(root.querySelectorAll("[id]"))) defs.set(el.getAttribute("id") ?? "", el);
-    const ctx: Ctx = { css: readCss(root), defs, doc, commands: [{ type: "node.create", node: { ...frame, x: local.x, y: local.y, w: width, h: height } }], parentId: frame.id, origin: { x: local.x, y: local.y }, viewport: { w: hasViewBox ? (vb[2] as number) : width, h: hasViewBox ? (vb[3] as number) : height } };
+    const ctx: Ctx = { css: readCss(root), defs, doc, commands: [{ type: "node.create", node: { ...frame, x: local.x, y: local.y, w: width, h: height } }], parentId: frame.id, origin: { x: local.x, y: local.y }, viewport: { w: hasViewBox ? (vb[2] as number) : width, h: hasViewBox ? (vb[3] as number) : height }, images: new Map() };
     const style = styleOf(root, DEFAULT_STYLE, ctx);
     for (const child of Array.from(root.children)) walk(child, { ...style, opacity: 1 }, m, ctx, frame.id);
     editor.execute({ type: "batch", commands: ctx.commands });
