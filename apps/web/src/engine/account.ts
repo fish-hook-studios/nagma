@@ -133,7 +133,7 @@ void finishEmailChange();
 
 // ---- The settings dialog (components/account-settings.tsx): which tab is open, if any ----
 
-export type SettingsTab = "account" | "notifications" | "security" | "community" | "tokens" | "ai";
+export type SettingsTab = "account" | "notifications" | "security" | "community" | "tokens" | "ai" | "stats";
 
 let openTab: SettingsTab | null = null;
 const settingsListeners = new Set<() => void>();

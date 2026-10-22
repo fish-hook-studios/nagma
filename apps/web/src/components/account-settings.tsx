@@ -11,6 +11,7 @@ import { AiTab } from "./ai-settings";
 import { Avatar } from "./avatar";
 import { PersonalTokens } from "./personal-tokens";
 import { UnverifiedAccounts } from "./verify-email";
+import { StatsTab } from "./server-stats";
 import { Select } from "./select";
 
 // Settings for your account, from the account menu: name and picture, email and password,
@@ -34,6 +35,7 @@ const ROW = "flex items-center gap-3 py-2";
 function AccountSettings({ initial, signedIn, onClose }: { initial: SettingsTab; signedIn: boolean; onClose: () => void }) {
     const [tab, setTab] = useState<SettingsTab>(initial);
     const view = useAccountView();
+    const admin = useAuth((s) => Boolean(s.user?.serverAdmin));
     useEffect(() => {
         if (signedIn) void loadAccount();
     }, [signedIn]);
@@ -57,6 +59,7 @@ function AccountSettings({ initial, signedIn, onClose }: { initial: SettingsTab;
                                           ["community", "Community"],
                                           ["tokens", "Tokens"],
                                           ["ai", "AI"],
+                                          ...(admin ? ([["stats", "Stats"]] as [SettingsTab, string][]) : []),
                                       ]
                                     : [["ai", "AI"]]
                             }
@@ -73,6 +76,7 @@ function AccountSettings({ initial, signedIn, onClose }: { initial: SettingsTab;
                         : tab === "notifications" ? <NotificationsTab notify={view.notify} />
                         : tab === "security" ? <SecurityTab />
                         : tab === "tokens" ? <div className="py-4"><PersonalTokens /></div>
+                        : tab === "stats" ? <StatsTab />
                         : <CommunityTab />}
                     </div>
                 </AriaDialog>

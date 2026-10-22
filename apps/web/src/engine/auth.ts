@@ -311,6 +311,15 @@ export async function unverifiedAccounts(): Promise<{ id: string; name: string; 
     if (!res.ok) return [];
     return (await res.json()) as { id: string; name: string; email: string; createdAt: number | null }[];
 }
+// Server admins: how the server is used, counted on the server (engine/server-stats.tsx shows it).
+export interface UsageDay { day: string; loads: number; devices: number; signups: number; verified: number; files: number; peakEditors: number; peakConnections: number }
+export interface UsageReport { today: string; since: string; days: UsageDay[]; totals: { accounts: number; verifiedAccounts: number; files: number; teams: number }; now: { connections: number; rooms: number; joined: number; editors: number } }
+export async function usageReport(): Promise<UsageReport> {
+    const res = await fetch(`${httpBase()}/auth/admin/stats`, { headers: authHeaders() });
+    const data = (await res.json().catch(() => ({}))) as UsageReport & { error?: string };
+    if (!res.ok) throw new Error(data.error ?? `The server answered ${res.status}.`);
+    return data;
+}
 export async function verifyAccountAsAdmin(userId: string) {
     const res = await fetch(`${httpBase()}/auth/admin/verify`, { method: "POST", headers: { "content-type": "application/json", ...authHeaders() }, body: JSON.stringify({ userId }) });
     const data = (await res.json().catch(() => ({}))) as { error?: string };

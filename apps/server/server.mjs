@@ -287,6 +287,93 @@ function purgeSessions() {
 setTimeout(purgeSessions, 1000).unref();
 setInterval(purgeSessions, 6 * 60 * 60 * 1000).unref();
 
+// ---- Usage: counted on the server, nothing in anyone's browser ----
+// One record per day in data/stats.json: app loads (the page served to a browser), the distinct
+// devices behind them (a SHA-256 of the address and browser under a salt drawn fresh each day, so
+// no address is kept and no two days can be joined), sign-ups, accounts verified, files made, the
+// most people editing at once and the most open connections. Server admins read them at
+// /auth/admin/stats. A self-hosted server or the desktop app's own server tells nobody else.
+const STATS_FILE = join(DATA, "stats.json");
+const STATS_KEEP_DAYS = 400;
+let usage = { days: {} };
+try {
+    usage = JSON.parse(await readFile(STATS_FILE, "utf8"));
+    if (!usage || typeof usage !== "object" || !usage.days) usage = { days: {} };
+} catch {
+    usage = { days: {} };
+}
+let usageTimer = null;
+function saveUsage() {
+    clearTimeout(usageTimer);
+    usageTimer = setTimeout(() => saveLater(STATS_FILE, JSON.stringify(usage)), 500);
+}
+const dayKey = (t = Date.now()) => new Date(t).toISOString().slice(0, 10);
+let seenToday = { key: "", set: new Set() };
+function usageToday() {
+    const key = dayKey();
+    let day = usage.days[key];
+    if (!day) {
+        day = usage.days[key] = { loads: 0, devices: 0, signups: 0, verified: 0, files: 0, peakEditors: 0, peakConnections: 0, salt: randomBytes(16).toString("base64url"), seen: [] };
+        // Older days keep their counts only: without their salt the hashes mean nothing.
+        for (const [k, d] of Object.entries(usage.days)) {
+            if (k === key) continue;
+            delete d.seen;
+            delete d.salt;
+        }
+        for (const k of Object.keys(usage.days).sort().slice(0, -STATS_KEEP_DAYS)) delete usage.days[k];
+        saveUsage();
+    }
+    if (seenToday.key !== key) seenToday = { key, set: new Set(day.seen ?? []) };
+    return day;
+}
+// The app's page served to a browser: one load, and one device per address and browser per day.
+function countAppLoad(req) {
+    const day = usageToday();
+    day.loads++;
+    const hash = createHash("sha256").update(`${day.salt}|${clientAddress(req)}|${req.headers["user-agent"] ?? ""}`).digest("base64url").slice(0, 22);
+    if (!seenToday.set.has(hash)) {
+        seenToday.set.add(hash);
+        day.seen = [...seenToday.set];
+        day.devices = day.seen.length;
+    }
+    saveUsage();
+}
+function countUsage(what) {
+    usageToday()[what]++;
+    saveUsage();
+}
+// The most people editing at once and the most open connections, noted whenever someone joins.
+function noteUsagePeaks() {
+    let editors = 0;
+    for (const room of rooms.values()) for (const c of room.clients.values()) if (c.joined && c.role === "edit") editors++;
+    const connections = wss ? wss.clients.size : 0;
+    const day = usageToday();
+    let changed = false;
+    if (editors > day.peakEditors) (day.peakEditors = editors), (changed = true);
+    if (connections > day.peakConnections) (day.peakConnections = connections), (changed = true);
+    if (changed) saveUsage();
+}
+async function usageReport() {
+    const ids = (await readdir(DATA)).filter((n) => /^[A-Za-z0-9_-]{6,64}\.json$/.test(n)).length;
+    const days = Object.keys(usage.days)
+        .sort()
+        .slice(-90)
+        .map((day) => {
+            const d = usage.days[day];
+            return { day, loads: d.loads, devices: d.devices, signups: d.signups, verified: d.verified, files: d.files, peakEditors: d.peakEditors, peakConnections: d.peakConnections };
+        });
+    let editors = 0;
+    let joined = 0;
+    for (const room of rooms.values()) for (const c of room.clients.values()) if (c.joined) (joined++, c.role === "edit" && editors++);
+    return {
+        today: dayKey(),
+        days,
+        totals: { accounts: accounts.users.length, verifiedAccounts: accounts.users.filter((u) => isVerified(u)).length, files: ids, teams: org?.teams?.length ?? 0 },
+        now: { connections: wss ? wss.clients.size : 0, rooms: rooms.size, joined, editors },
+        since: Object.keys(usage.days).sort()[0] ?? dayKey(),
+    };
+}
+
 // Who a request is from, by its bearer token (or ?token= for sockets). Each use slides the expiry on
 // (written at most once an hour).
 function userFromToken(token) {
@@ -352,6 +439,7 @@ const selfUser = (u) => ({ ...publicUser(u), emailVerified: isVerified(u), verif
 
 function markVerified(user) {
     if (!user) return;
+    if (user.emailVerified === false) countUsage("verified");
     user.emailVerified = true;
     delete user.verify;
     saveAccounts();
@@ -450,6 +538,8 @@ function ssoAccount(email, name) {
         user = { id: randomBytes(9).toString("base64url"), name: String(name || email.split("@")[0]).slice(0, 60), email, color: USER_COLORS[accounts.users.length % USER_COLORS.length], salt, hash: hashPassword(randomBytes(24).toString("base64"), salt), createdAt: Date.now(), sso: true, emailVerified: true };
         accounts.users.push(user);
         saveAccounts();
+        countUsage("signups");
+        countUsage("verified");
         void claimEmailInvites(user, email);
     }
     // The identity provider vouched for the address.
@@ -667,6 +757,12 @@ async function serveAuth(req, res) {
         if (!isServerAdmin(user)) return json(403, { error: "Only a server admin can see this." });
         return json(200, accounts.users.filter((u) => !isVerified(u)).map((u) => ({ id: u.id, name: u.name, email: u.email, createdAt: u.createdAt ?? null })));
     }
+    // Server admins: how the server is used, counted here and nowhere else.
+    if (path === "/auth/admin/stats" && req.method === "GET") {
+        const user = userFromReq(req);
+        if (!isServerAdmin(user)) return json(403, { error: "Only a server admin can see this." });
+        return json(200, await usageReport());
+    }
     if (req.method !== "POST") return false;
     let body = {};
     try {
@@ -702,6 +798,8 @@ async function serveAuth(req, res) {
         const user = { id: randomBytes(9).toString("base64url"), name, email, color: USER_COLORS[accounts.users.length % USER_COLORS.length], salt, hash: hashPassword(password, salt), createdAt: Date.now(), emailVerified: invited };
         accounts.users.push(user);
         noteSignup(req);
+        countUsage("signups");
+        if (invited) countUsage("verified");
         await claimEmailInvites(user, email);
         const verification = invited ? { sent: false, kept: false, mailConfigured: mailConfigured() } : { sent: false, kept: false, mailConfigured: false };
         return json(200, { token: startSession(user), user: selfUser(user), verification });
@@ -730,6 +828,8 @@ async function serveAuth(req, res) {
         const user = { id: randomBytes(9).toString("base64url"), name: pending.name, email, color: USER_COLORS[accounts.users.length % USER_COLORS.length], salt: pending.salt, hash: pending.hash, createdAt: Date.now(), emailVerified: true };
         accounts.users.push(user);
         saveAccounts();
+        countUsage("signups");
+        countUsage("verified");
         await claimEmailInvites(user, email);
         return json(200, { token: startSession(user), user: selfUser(user), verification: { sent: false, kept: false, mailConfigured: mailConfigured() } });
     }
@@ -1303,6 +1403,7 @@ async function createServerFile(req, res) {
     const project = typeof b.project === "string" ? projectById(b.project) : null;
     if (b.project && (!project || project.trashed || !canEditProject(project, user))) return json(403, { error: "You can't add files to that folder." });
     const made = await makeFile(user, b.doc, project?.id ?? null, typeof b.kind === "string" ? b.kind.slice(0, 20) : "design");
+    countUsage("files");
     return json(200, { id: made.id, keys: made.file.keys, project: project?.id ?? null });
 }
 
@@ -3646,6 +3747,8 @@ async function serveStatic(req, res) {
     } catch {
         path = join(STATIC, "index.html");
     }
+    // The app's page, asked for by a browser (not its assets, not a health probe): one app load.
+    if (path.endsWith("index.html") && req.method === "GET" && String(req.headers.accept ?? "").includes("text/html")) countAppLoad(req);
     try {
         const { body, etag } = await staticFile(path);
         const type = TYPES[extname(path)] ?? "application/octet-stream";
@@ -4265,6 +4368,7 @@ function openConnection(ws, id, client) {
                 if (ws.remote) roomWorkers.join(ws, snapshot, client);
                 else send(ws, snapshot);
                 client.joined = true;
+                noteUsagePeaks();
                 if (!ws.remote) {
                     queuePresence(room, ws, client, presenceOptions);
                     presenceRateChanged(room);
