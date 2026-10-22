@@ -187,9 +187,10 @@ export function pickImportFiles() {
     input.click();
 }
 
-// Everything Import opens: design, slides and campaign files, presentations, PDFs, page layouts,
-// pictures and video. Each becomes a file of its own kind.
-export const IMPORT_ACCEPT = ".fig,.deck,.buzz,.sketch,.pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation,.pdf,application/pdf,.idml,.designcraft,image/*,.svg,video/*,.mov,.mkv,.webm,.mxf,.psd,.psb";
+// Everything Import opens: Nagma local copies (.nagma.json, File › Save local copy), design,
+// slides and campaign files, presentations, PDFs, page layouts, pictures and video. Each becomes a
+// file of its own kind.
+export const IMPORT_ACCEPT = ".nagma,.nagma.json,application/json,.fig,.deck,.buzz,.sketch,.pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation,.pdf,application/pdf,.idml,.designcraft,image/*,.svg,video/*,.mov,.mkv,.webm,.mxf,.psd,.psb";
 const FIG_FAMILY = /\.(fig|deck|buzz)$/i;
 const PPTX = /\.pptx$/i;
 const SKETCH = /\.sketch$/i;
@@ -198,6 +199,15 @@ export async function importAsNewFiles(files: File[]) {
     const { createFile, openFile, createEmptyDocument, importFigFile, discardFile } = await import("./files");
     const { zoomToFit } = await import("./camera");
     const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
+    const { importLocalCopy, isLocalCopyFile } = await import("./local-copy");
+    for (const file of files.filter((f) => isLocalCopyFile(f))) {
+        try {
+            const opened = await importLocalCopy(file);
+            editor.notify(`Opened ${opened.name}.`);
+        } catch (error) {
+            editor.notify(`Couldn't open ${file.name}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    }
     for (const file of files.filter((f) => FIG_FAMILY.test(f.name))) {
         await importFigFile(file).catch((error) => editor.notify(`Couldn't open ${file.name}: ${error instanceof Error ? error.message : String(error)}`));
     }
@@ -237,7 +247,7 @@ export async function importAsNewFiles(files: File[]) {
         zoomToFit();
         keepIfFilled(meta.id);
     }
-    const rest = files.filter((f) => !FIG_FAMILY.test(f.name) && !SKETCH.test(f.name) && !PPTX.test(f.name) && !isPdfFile(f) && !isLayoutFile(f));
+    const rest = files.filter((f) => !isLocalCopyFile(f) && !FIG_FAMILY.test(f.name) && !SKETCH.test(f.name) && !PPTX.test(f.name) && !isPdfFile(f) && !isLayoutFile(f));
     if (rest.length) {
         const name = rest.length === 1 ? rest[0]?.name.replace(/\.[^.]+$/, "") || "Untitled" : "Untitled";
         const meta = createFile("design", createEmptyDocument(name), name);

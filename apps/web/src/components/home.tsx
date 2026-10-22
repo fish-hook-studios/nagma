@@ -26,7 +26,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "reac
 import { Button as AriaButton, Menu as AriaMenu, MenuTrigger as AriaMenuTrigger, Popover as AriaPopover, Separator as AriaSeparator } from "react-aria-components";
 import { addAccount, auth, openSignIn, signOut, switchAccount, useAuth } from "../engine/auth";
 import { join, useCollab } from "../engine/collab";
-import { pickImportFiles } from "../engine/images";
+import { importAsNewFiles, pickImportFiles } from "../engine/images";
 import { openNewDocument } from "../document/new-document";
 import {
     type FileKind,
@@ -1228,7 +1228,24 @@ export function Home() {
                     {currentFolder && <IconButton size="sm" icon={Star01} label={starred.includes(currentFolder.id) ? "Unstar folder" : "Star folder"} active={starred.includes(currentFolder.id)} onPress={() => toggleStar(currentFolder.id)} />}
                 </header>
 
-                <div ref={scrollRef} onPointerDown={startMarquee} className="relative min-h-0 flex-1 overflow-y-auto px-[34px] pb-8 select-none">
+                <div
+                    ref={scrollRef}
+                    onPointerDown={startMarquee}
+                    // Files from the desktop dropped on Home open the way Import… opens them.
+                    onDragOver={(e) => {
+                        if (!e.dataTransfer.types.includes("Files")) return;
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = "copy";
+                    }}
+                    onDrop={(e) => {
+                        const dropped = Array.from(e.dataTransfer.files);
+                        if (!dropped.length) return;
+                        e.preventDefault();
+                        e.stopPropagation();
+                        void importAsNewFiles(dropped);
+                    }}
+                    className="relative min-h-0 flex-1 overflow-y-auto px-[34px] pb-8 select-none"
+                >
                     {/* Page title row (Community and search results have their own) */}
                     {section.kind === "recents" && !searching && <RecommendedResources signedIn={Boolean(account)} onOpen={open} onMore={() => go({ kind: "community" })} />}
                     {section.kind !== "community" && !searching && <div className={`flex items-center gap-[9px] ${section.kind === "folders" ? "pt-[29px] pb-[36px]" : "pt-[21px] pb-[22px]"}`}>

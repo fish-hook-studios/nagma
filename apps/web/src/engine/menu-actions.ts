@@ -108,10 +108,7 @@ export const MENU_ACTIONS: MenuAction[] = [
         label: "Save local copy…",
         group: "File",
         keywords: "download backup",
-        run: () => {
-            const doc = editor.get().doc;
-            download(new Blob([JSON.stringify(doc)], { type: "application/json" }), `${doc.name || "Untitled"}.nagma.json`);
-        },
+        run: () => void import("./local-copy").then((m) => m.saveLocalCopy()),
     },
     { id: "saveVersion", label: "Save to version history", group: "File", shortcut: "⌥ ⌘ S", keywords: "version checkpoint name", run: openSaveVersion },
     { id: "history", label: "Show version history", group: "File", keywords: "versions restore", run: () => collab.set({ historyOpen: true }) },

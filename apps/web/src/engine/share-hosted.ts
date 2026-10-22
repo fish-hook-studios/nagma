@@ -2,7 +2,6 @@ import { useSyncExternalStore } from "react";
 import { type Account, auth, connectToServer, openSignIn } from "./auth";
 import { setMyName, shareCurrent } from "./collab";
 import { deleteDoc, docWritesSettled, loadDoc, saveDoc } from "./doc-store";
-import { download } from "./export";
 import { type FileKind, createFile, fileMeta, openFile } from "./files";
 import { onThisComputer } from "./onboarding";
 import { type ServerInfo, checkServer, closeServerPicker, currentServer, hostedServer, rememberServer } from "./servers";
@@ -162,10 +161,9 @@ export async function resumePendingShare(): Promise<boolean> {
     return true;
 }
 
-// Export a copy: the document as a .nagma.json file (File › Save local copy).
+// Export a copy: the document as a .nagma.json file with its media inside (File › Save local copy).
 export function exportCopy() {
-    const doc = editor.get().doc;
-    download(new Blob([JSON.stringify(doc)], { type: "application/json" }), `${doc.name || "Untitled"}.nagma.json`);
+    void import("./local-copy").then((m) => m.saveLocalCopy());
 }
 
 // ---- Opening Share from elsewhere (after a move) ----

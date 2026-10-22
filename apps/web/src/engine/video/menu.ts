@@ -1,5 +1,4 @@
 import { collab, openSaveVersion } from "../collab";
-import { download } from "../export";
 import { editor } from "../store";
 import { toggleShortcuts } from "../ui-state";
 import {
@@ -67,10 +66,7 @@ export const VIDEO_ACTIONS: VideoAction[] = [
     {
         id: "v:save",
         label: "Save local copy…",
-        run: () => {
-            const doc = editor.get().doc;
-            download(new Blob([JSON.stringify(doc)], { type: "application/json" }), `${doc.name || "Untitled"}.nagma.json`);
-        },
+        run: () => void import("../local-copy").then((m) => m.saveLocalCopy()),
     },
     { id: "v:version", label: "Save to version history…", shortcut: "⌥ ⌘ S", run: openSaveVersion },
     { id: "v:history", label: "Show version history", run: () => collab.set({ historyOpen: true }) },

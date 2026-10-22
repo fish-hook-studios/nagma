@@ -16,7 +16,6 @@ import { collab, useCollab } from "../engine/collab";
 import { useAuth } from "../engine/auth";
 import { getTeams, projectOf, refreshTeams, useTeams } from "../engine/teams";
 import { listLocalFolders } from "../engine/folders";
-import { download } from "../engine/export";
 import { fileMeta } from "../engine/files";
 import { vectorUi } from "../engine/vector-ui";
 import { editor, useEditor } from "../engine/store";
@@ -249,7 +248,7 @@ export function FileHeader({ actions, onExport, lead }: { actions?: React.ReactN
         else if (key.startsWith("move:")) void moveCurrentFile(key.slice(5) || null);
         else if (key === "where") openHome();
         else if (key === "export") (onExport ?? (() => vectorUi.set({ exportOpen: true })))();
-        else if (key === "save") download(new Blob([JSON.stringify(editor.get().doc)], { type: "application/json" }), `${name || "Untitled"}.nagma.json`);
+        else if (key === "save") void import("../engine/local-copy").then((m) => m.saveLocalCopy());
         // The trash keeps it, so no confirmation: it can be restored from Trash on Home.
         else if (key === "trash") trashCurrentFile();
         else if (key === "home") openHome();

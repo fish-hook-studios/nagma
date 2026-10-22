@@ -139,7 +139,7 @@ function run(action: string, arg?: unknown): unknown {
 
 // The type of a file the app hands over by name (Finder gives no type): pictures are only read as
 // pictures with an image type.
-const TYPES: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", avif: "image/avif", bmp: "image/bmp", tif: "image/tiff", tiff: "image/tiff", svg: "image/svg+xml", pdf: "application/pdf" };
+const TYPES: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", avif: "image/avif", bmp: "image/bmp", tif: "image/tiff", tiff: "image/tiff", svg: "image/svg+xml", pdf: "application/pdf", json: "application/json" };
 export function typeForName(name: string): string {
     return TYPES[/\.([^.]+)$/.exec(name)?.[1]?.toLowerCase() ?? ""] ?? "";
 }

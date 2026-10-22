@@ -4,9 +4,9 @@
 
 const path = require("node:path");
 
-// Everything Import… opens: design, slides and campaign files, presentations, PDFs, page layouts,
-// Sketch and Photoshop files, pictures and video.
-const OPENABLE = /\.(fig|deck|buzz|pptx|pdf|sketch|idml|designcraft|psd|psb|svg|png|jpe?g|gif|webp|avif|bmp|tiff?|mp4|m4v|mov|mkv|webm|mxf)$/i;
+// Everything Import… opens: Nagma local copies (.nagma.json), design, slides and campaign files,
+// presentations, PDFs, page layouts, Sketch and Photoshop files, pictures and video.
+const OPENABLE = /\.(nagma|nagma\.json|fig|deck|buzz|pptx|pdf|sketch|idml|designcraft|psd|psb|svg|png|jpe?g|gif|webp|avif|bmp|tiff?|mp4|m4v|mov|mkv|webm|mxf)$/i;
 
 // The file goes to the page as base64 through executeJavaScript, about a third bigger again;
 // past this it's refused with a message (Import… in the app reads bigger files directly).
