@@ -7,49 +7,73 @@
 <meta name="robots" content="noindex">
 <link rel="icon" href="favicon.svg">
 <style>
+/* Coconat and Absans by Collletttivo, SIL Open Font License 1.1 (fonts/OFL-Coconat.txt, fonts/OFL-Absans.txt). */
 @font-face { font-family: "Coconat"; src: url("fonts/Coconat-Regular.woff2") format("woff2"); font-weight: 400; font-display: swap; }
 @font-face { font-family: "Absans"; src: url("fonts/Absans-Regular.woff2") format("woff2"); font-weight: 400; font-display: swap; }
 :root {
   --cream: #F6F1E7; --ink: #141413; --ink-2: #3D3B37; --mute: #6B675F;
-  --orange: #EF7F42; --pink: #FC829A; --green: #4FAF78; --mint: #BFE6C8; --yellow: #F5C842; --sky: #8FC1F0; --lilac: #C9B8F2;
+  --orange: #EF7F42; --pink: #FC829A; --bubble: #F7B3C8; --green: #4FAF78; --mint: #BFE6C8; --yellow: #F5C842; --sky: #8FC1F0; --lilac: #C9B8F2; --red: #E4572E;
   --display: "Coconat", Georgia, serif; --body: "Absans", system-ui, sans-serif;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; background: #0E0E0D; color: var(--cream); font-family: var(--body); font-synthesis: none; -webkit-font-smoothing: antialiased; }
-body { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px 16px; }
-.top { width: min(96vw, 1280px); display: flex; justify-content: space-between; align-items: center; color: #8d887c; font-size: 13px; }
-.top b { font-family: var(--display); font-weight: 400; font-size: 18px; color: var(--cream); }
+body { min-height: 100vh; min-height: 100svh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px 16px; }
+.top { width: min(96vw, 1280px); display: flex; justify-content: space-between; align-items: center; gap: 12px; color: #8d887c; font-size: 13px; }
+.top b { font-family: var(--display); font-weight: 400; font-size: 18px; color: var(--cream); white-space: nowrap; }
 .top kbd { font: inherit; padding: 1px 6px; border: 1px solid #3a3833; border-radius: 6px; color: var(--cream); }
+@media (max-width: 720px) { .top span { display: none; } }
 
-/* The stage: 16:9, sizes in cqw so it scales with the window. */
-.stage { position: relative; width: min(96vw, 1280px); aspect-ratio: 16 / 9; overflow: hidden; border-radius: 18px; background: var(--ink); container-type: inline-size; cursor: pointer; user-select: none; box-shadow: 0 30px 80px -40px rgba(0,0,0,.9); }
-.scene { position: absolute; inset: 0; opacity: 0; }
+/* The stage: 16:9, everything inside sized in cqw so it scales with the window (1cqw = 1% of the stage width). */
+.stage { position: relative; width: min(96vw, 1280px); aspect-ratio: 16 / 9; overflow: hidden; border-radius: 18px; background: var(--cream); container-type: inline-size; cursor: pointer; user-select: none; box-shadow: 0 30px 80px -40px rgba(0,0,0,.9); }
+.scene { position: absolute; inset: 0; opacity: 0; background: var(--cream); }
 .scene > * { position: absolute; }
-.h { font-family: var(--display); font-weight: 400; line-height: .98; letter-spacing: -.02em; color: var(--cream); }
-.h .w { display: inline-block; white-space: pre; opacity: 0; }
-.h .u { position: relative; }
-.h .u i { position: absolute; left: 0; right: .25em; bottom: .02em; height: .14em; background: var(--orange); transform-origin: left; transform: scaleX(0); border-radius: .04em; z-index: -1; }
-.sub { font-size: 2cqw; color: #B9B4A8; opacity: 0; line-height: 1.4; }
-.chapter { left: 6cqw; top: 3.2cqw; font-size: 1.1cqw; letter-spacing: .14em; text-transform: uppercase; color: var(--orange); opacity: 0; }
-.chapter b { font-weight: 400; color: #8d887c; margin-left: 1cqw; letter-spacing: .14em; }
 
-/* A real frame of the app: the capture, in a thin window, with a slow camera. */
-.shotwin { left: 7cqw; top: 12cqw; width: 86cqw; aspect-ratio: 1440 / 856; border-radius: 1cqw; overflow: hidden; border: .12cqw solid rgba(246,241,231,.18); box-shadow: 0 2cqw 5cqw -2cqw rgba(0,0,0,.8); opacity: 0; background: #1b1a18; }
-.shotwin img { display: block; width: 100%; height: 100%; transform-origin: 50% 50%; will-change: transform; }
+/* Display type: Coconat, tight. Big product names draw in letter by letter behind a mask. */
+.big { left: 0; right: 0; top: 17.5cqw; text-align: center; font-family: var(--display); font-weight: 400; font-size: 17cqw; line-height: .9; letter-spacing: -.035em; color: var(--ink); white-space: nowrap; }
+.big .m { display: inline-block; overflow: hidden; vertical-align: bottom; padding: .04em .015em .16em; margin-bottom: -.16em; }
+.big .m i { display: inline-block; font-style: normal; transform: translateY(112%); will-change: transform; }
+.eyebrow { left: 0; right: 0; text-align: center; top: 12.6cqw; font-size: 1.25cqw; letter-spacing: .16em; text-transform: uppercase; color: var(--ink); opacity: 0; }
+/* Stamped words: the hero's uppercase lines, popped in one by one. */
+.stamp { font-family: var(--display); font-weight: 400; letter-spacing: -.03em; line-height: .86; color: var(--ink); text-transform: uppercase; white-space: nowrap; }
+.stamp.lc { text-transform: none; }
+.stamp .w { display: inline-block; opacity: 0; will-change: transform; }
+.outline { color: transparent; -webkit-text-stroke: .22cqw var(--ink); }
+/* Highlighter: the website's marker swipe (wobbly band, rough filter), wiped in left to right. */
+.hl { position: relative; display: inline-block; white-space: nowrap; }
+.hl .hlm { position: absolute; left: -0.12em; width: calc(100% + 0.24em); top: -6%; height: 112%; z-index: -1; overflow: visible; pointer-events: none; clip-path: inset(-20% 100% -20% 0); }
+.hl .hlm path { fill: var(--hlc, var(--yellow)); opacity: .8; filter: url(#rough); }
+.hl.pink { --hlc: var(--pink); } .hl.orange { --hlc: var(--orange); } .hl.sky { --hlc: var(--sky); } .hl.green { --hlc: var(--green); } .hl.mint { --hlc: var(--mint); }
 
-/* Callouts: a dot on the real UI, a line, and a small label. */
-.co { width: 0; height: 0; opacity: 0; z-index: 6; }
-.co i { position: absolute; left: -.55cqw; top: -.55cqw; width: 1.1cqw; height: 1.1cqw; border-radius: 50%; background: var(--orange); box-shadow: 0 0 0 .3cqw rgba(239,127,66,.35); transform: scale(0); }
-.co svg { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; }
-.co svg line { stroke: var(--orange); stroke-width: 2px; stroke-dasharray: 400; stroke-dashoffset: 400; }
-.co span { position: absolute; white-space: nowrap; padding: .55cqw .95cqw; border-radius: .5cqw; background: var(--cream); color: var(--ink); font-size: 1.25cqw; line-height: 1.3; opacity: 0; box-shadow: 0 .4cqw 1.4cqw rgba(0,0,0,.35); }
-.co span b { font-weight: 400; color: var(--orange); }
+/* A window of the real app: the website's loop frame (ink border, hard offset shadow). The capture inside takes the camera. */
+.win { border: .18cqw solid var(--ink); border-radius: 1.4cqw; overflow: hidden; background: #fff; box-shadow: .7cqw .7cqw 0 var(--ink); opacity: 0; will-change: transform; }
+.win img, .win video { display: block; width: 100%; height: 100%; object-fit: cover; object-position: 50% 0; transform-origin: 50% 50%; will-change: transform; }
+.win video { background: #fff; }
+.cap { font-size: 1.3cqw; color: var(--ink); opacity: 0; white-space: nowrap; }
+.tile { overflow: hidden; border: .18cqw solid var(--ink); border-radius: 1cqw; background: #fff; box-shadow: .5cqw .5cqw 0 var(--ink); opacity: 0; will-change: transform; }
+.tile img { position: absolute; display: block; max-width: none; }
+/* A drawn line over a capture (the prototype flow). */
+.flow { overflow: visible; pointer-events: none; }
+.flow path { fill: none; stroke: var(--ink); stroke-width: .4cqw; stroke-linecap: round; stroke-dasharray: 1000; stroke-dashoffset: 1000; }
+.flow circle { fill: var(--orange); stroke: var(--ink); stroke-width: .25cqw; transform-box: fill-box; transform-origin: center; transform: scale(0); }
 
-.mark { opacity: 0; }
-.mark img { width: 100%; height: 100%; }
-.sh { opacity: 0; }
-.sh svg { width: 100%; height: 100%; fill: currentColor; overflow: visible; }
-.cta { font-family: var(--display); font-size: 2.6cqw; color: var(--ink); background: var(--cream); padding: 1.3cqw 3cqw; border-radius: 999px; opacity: 0; }
+/* Stickers and pills: the website's. Coconat, ink border, hard shadow, popped in with a wobble. */
+.stw { will-change: transform; }
+.st { display: inline-block; padding: .75cqw 1.5cqw; border-radius: 999px; border: .18cqw solid var(--ink); font-family: var(--display); font-size: 1.8cqw; line-height: 1.2; color: var(--ink); background: var(--c, var(--cream)); box-shadow: .4cqw .4cqw 0 var(--ink); white-space: nowrap; opacity: 0; will-change: transform; }
+.st.big2 { font-size: 2.6cqw; padding: 1cqw 2.2cqw; }
+/* Named cursors: the website's crowd. */
+.cc { display: flex; align-items: flex-start; opacity: 0; will-change: transform; z-index: 5; }
+.cc svg { width: 1.9cqw; height: 1.9cqw; fill: var(--c); stroke: var(--ink); stroke-width: 1.6; stroke-linejoin: round; filter: drop-shadow(1px 2px 0 rgba(20,20,19,.25)); }
+.cc span { margin: 1.3cqw 0 0 -.5cqw; padding: .25cqw .8cqw; border-radius: 999px; background: var(--c); border: .12cqw solid var(--ink); font-family: var(--body); font-size: 1.05cqw; white-space: nowrap; color: var(--ink); }
+/* Funny shapes: the website's sprite. */
+.fun { opacity: 0; will-change: transform; }
+.fun svg { display: block; width: 100%; height: 100%; fill: currentColor; overflow: visible; }
+
+/* The loader beat: the website's page loader (orange box pops, the cat climbs up inside it, the wordmark wipes in). */
+.ld { display: flex; align-items: center; gap: 2cqw; will-change: transform; transform-origin: 0 0; }
+.ld .box { position: relative; width: 14cqw; height: 14cqw; border-radius: 3.7cqw; background: var(--orange); overflow: hidden; isolation: isolate; opacity: 0; will-change: transform; }
+.ld .box img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; transform: translateY(105%); will-change: transform; }
+.ld .wm { height: 8cqw; width: auto; display: block; clip-path: inset(-10% 100% -10% 0); }
+.ld .wm svg { height: 100%; width: auto; display: block; fill: currentColor; }
 
 /* The player. */
 .player { width: min(96vw, 1280px); display: grid; grid-template-columns: auto auto 1fr auto auto; align-items: center; gap: 14px; padding: 10px 14px; border-radius: 999px; background: #1e1d1b; }
@@ -66,18 +90,34 @@ body { min-height: 100vh; display: flex; flex-direction: column; align-items: ce
 .chapters button { font: inherit; font-size: 12px; padding: 6px 12px; border-radius: 999px; border: 1px solid #3a3833; background: transparent; color: #B9B4A8; cursor: pointer; }
 .chapters button:hover, .chapters button.on { background: var(--cream); color: var(--ink); border-color: var(--cream); }
 .hint { width: min(96vw, 1280px); color: #7d786e; font-size: 12px; }
-.start { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(14,14,13,.45); z-index: 30; }
-.start div { padding: 1.1cqw 2.6cqw; border-radius: 999px; background: var(--cream); color: var(--ink); font-family: var(--display); font-size: 2.2cqw; }
+.start { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(246,241,231,.5); z-index: 30; }
+.start div { padding: 1.1cqw 2.6cqw; border-radius: 999px; background: var(--ink); color: var(--cream); font-family: var(--display); font-size: 2.2cqw; border: .18cqw solid var(--ink); box-shadow: .5cqw .5cqw 0 var(--orange); }
+@media (max-width: 600px) { .player { gap: 8px; padding: 8px 10px; } .time { min-width: 0; font-size: 12px; } .player button { width: 34px; height: 34px; } .hint { display: none; } }
 </style>
 </head>
 <body>
-<div class="top"><b>Nagma reel · cut 2</b><span><kbd>Space</kbd> play · <kbd>←</kbd> <kbd>→</kbd> 2 s · <kbd>⇧</kbd>+arrows 10 s · <kbd>0</kbd>–<kbd>9</kbd> jump · <kbd>M</kbd> mute</span></div>
+<div class="top"><b>Nagma reel · 40 s</b><span><kbd>Space</kbd> play · <kbd>←</kbd> <kbd>→</kbd> chapters · <kbd>⇧</kbd>+arrows 2 s · <kbd>0</kbd>–<kbd>9</kbd> jump · <kbd>M</kbd> mute</span></div>
 
 <div class="stage" id="stage">
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
-    <symbol id="sh-sparkle" viewBox="0 0 100 100"><path d="M50 0c4 28 18 42 50 50-32 8-46 22-50 50-4-28-18-42-50-50 32-8 46-22 50-50z"/></symbol>
-    <symbol id="sh-asterisk" viewBox="0 0 100 100"><path d="M43 0h14v34l30-17 7 12-30 17 30 17-7 12-30-17v34H43V66L13 83l-7-12 30-17L6 37l7-12 30 17z"/></symbol>
-    <symbol id="sh-flower" viewBox="0 0 100 100"><path d="M50 4c9 0 15 7 16 14 7-3 16-1 20 6s2 16-4 21c6 5 8 14 4 21s-13 9-20 6c-1 7-7 14-16 14s-15-7-16-14c-7 3-16 1-20-6s-2-16 4-21c-6-5-8-14-4-21s13-9 20-6C35 11 41 4 50 4z"/></symbol>
+    <defs>
+      <filter id="rough" x="-10%" y="-20%" width="120%" height="140%"><feTurbulence type="fractalNoise" baseFrequency="0.03 0.12" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="5" xChannelSelector="R" yChannelSelector="G"/></filter>
+      <symbol id="sh-flower" viewBox="0 0 100 100"><path d="M50 4c9 0 15 7 16 14 7-3 16-1 20 6s2 16-4 21c6 5 8 14 4 21s-13 9-20 6c-1 7-7 14-16 14s-15-7-16-14c-7 3-16 1-20-6s-2-16 4-21c-6-5-8-14-4-21s13-9 20-6C35 11 41 4 50 4z"/></symbol>
+      <symbol id="sh-sparkle" viewBox="0 0 100 100"><path d="M50 0c4 28 18 42 50 50-32 8-46 22-50 50-4-28-18-42-50-50 32-8 46-22 50-50z"/></symbol>
+      <symbol id="sh-star" viewBox="0 0 100 100"><path d="M50 2l14 32 35 3-26 23 8 34-31-18-31 18 8-34L1 37l35-3z"/></symbol>
+      <symbol id="sh-squiggle" viewBox="0 0 200 60" overflow="visible"><path d="M4 30c20-36 40-36 60 0s40 36 60 0 40-36 60 0" fill="none" stroke="currentColor" stroke-width="12" stroke-linecap="round"/></symbol>
+      <symbol id="sh-zigzag" viewBox="0 0 200 60" overflow="visible"><path d="M4 50l32-40 32 40 32-40 32 40 32-40 32 40" fill="none" stroke="currentColor" stroke-width="12" stroke-linejoin="round" stroke-linecap="round"/></symbol>
+      <symbol id="sh-arch" viewBox="0 0 100 100"><path d="M5 100V50a45 45 0 0 1 90 0v50H70V50a20 20 0 0 0-40 0v50z"/></symbol>
+      <symbol id="sh-ring" viewBox="0 0 100 100"><path d="M50 2a48 48 0 1 0 0 96 48 48 0 0 0 0-96zm0 26a22 22 0 1 1 0 44 22 22 0 0 1 0-44z"/></symbol>
+      <symbol id="sh-bolt" viewBox="0 0 100 100"><path d="M58 0L14 58h26L36 100l50-62H58z"/></symbol>
+      <symbol id="sh-asterisk" viewBox="0 0 100 100"><path d="M43 0h14v34l30-17 7 12-30 17 30 17-7 12-30-17v34H43V66L13 83l-7-12 30-17L6 37l7-12 30 17z"/></symbol>
+      <symbol id="sh-cloud" viewBox="0 0 160 100"><path d="M40 95a28 28 0 0 1-8-55 30 30 0 0 1 56-18 26 26 0 0 1 44 20 24 24 0 0 1-6 47z"/></symbol>
+      <symbol id="sh-halfmoon" viewBox="0 0 100 100"><path d="M50 0a50 50 0 0 1 0 100z"/></symbol>
+      <symbol id="sh-triangle" viewBox="0 0 100 100"><path d="M50 4l46 88H4z" stroke-linejoin="round"/></symbol>
+      <symbol id="sh-eye" viewBox="0 0 160 100"><path d="M80 5C40 5 10 50 10 50s30 45 70 45 70-45 70-45S120 5 80 5zm0 70a25 25 0 1 1 0-50 25 25 0 0 1 0 50z"/></symbol>
+      <symbol id="sh-arrow" viewBox="0 0 200 100" overflow="visible"><path d="M8 70c40-50 90-60 150-30" fill="none" stroke="currentColor" stroke-width="12" stroke-linecap="round"/><path d="M130 24l32 16-10 34" fill="none" stroke="currentColor" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="wm" viewBox="150 21 290 96"><path d="M152.743 96V24H164.88L204.171 89.52V24H211.886V96H199.749L160.457 31.3029V96H152.743ZM240.355 57.1714C234.183 57.1714 227.326 61.4571 228.955 70.4571L222.783 64.8C224.069 57.5143 231.098 52.1143 240.441 52.1143C251.669 52.1143 259.126 57.8571 259.126 69.8571C259.126 78.4286 256.983 90.8571 264.698 96H256.726C253.983 93.6 252.955 89.8286 252.612 85.6286C250.298 93.0857 245.155 96.8571 237.012 96.8571C227.841 96.8571 222.955 91.4571 222.955 84.7714C222.955 75.6 230.583 70.5429 240.269 70.4571L252.869 70.3714C252.869 61.3714 247.983 57.1714 240.355 57.1714ZM229.126 84.1714C229.126 88.5429 232.555 91.8 237.869 91.8C248.926 91.8 252.612 81.4286 252.612 77.3143L252.698 75.5143L240.269 75.6857C233.583 75.7714 229.126 78.2571 229.126 84.1714ZM279.838 67.2C279.838 72.8571 284.296 77.0571 291.324 77.0571C298.353 77.0571 302.81 72.8571 302.81 67.2C302.81 61.6286 298.353 57.5143 291.324 57.5143C284.638 57.5143 279.838 61.6286 279.838 67.2ZM267.324 99.4286L272.81 94.2C270.581 92.8286 269.038 90.6857 269.038 87.2571C269.038 81.2571 274.181 78.3429 279.238 78.4286C275.896 75.7714 273.924 71.8286 273.924 67.2C273.924 58.7143 280.781 52.5429 291.324 52.5429C294.496 52.5429 297.238 53.0571 299.638 54C298.867 45.9429 303.41 40.9714 309.41 40.0286L315.067 45.7714C314.467 45.6857 313.867 45.6857 313.267 45.6857C306.496 45.6857 303.238 50.2286 303.238 55.8857H303.067C306.753 58.5429 308.724 62.4857 308.724 67.2C308.724 75.7714 302.21 81.9429 291.238 81.9429C287.553 81.9429 285.581 81.2571 282.238 81.2571C278.124 81.2571 275.038 82.9714 275.038 86.3143C275.038 91.3714 281.381 90.8571 284.724 90.3429L295.953 88.7143C304.524 87.4286 315.153 88.5429 315.153 98.8286C315.153 109.114 303.41 113.914 291.153 113.914C277.01 113.914 268.01 107.743 267.324 99.4286ZM273.238 94.4571C271.696 104.314 280.696 108.771 291.153 108.771C300.238 108.771 309.238 105.686 309.238 99.3429C309.238 93.2571 302.038 93.5143 295.696 94.4571L285.324 96C281.896 96.5143 276.838 96.4286 273.238 94.4571ZM339.356 56.9143C332.671 56.9143 328.213 61.5429 327.613 70.0286V96H321.442V53.1429H327.613V60.2571C330.099 55.2 334.556 52.1143 341.413 52.1143C347.928 52.1143 352.556 55.0286 354.699 60.0857C357.442 55.0286 362.328 52.1143 369.271 52.1143C379.213 52.1143 384.528 58.0286 384.528 67.7143V96H378.271V68.8286C378.271 60.9429 373.899 56.9143 367.813 56.9143C361.128 56.9143 356.671 61.5429 356.071 70.0286V96H349.813V68.8286C349.813 60.9429 345.442 56.9143 339.356 56.9143ZM410.491 57.1714C404.32 57.1714 397.463 61.4571 399.091 70.4571L392.92 64.8C394.205 57.5143 401.234 52.1143 410.577 52.1143C421.805 52.1143 429.263 57.8571 429.263 69.8571C429.263 78.4286 427.12 90.8571 434.834 96H426.863C424.12 93.6 423.091 89.8286 422.748 85.6286C420.434 93.0857 415.291 96.8571 407.148 96.8571C397.977 96.8571 393.091 91.4571 393.091 84.7714C393.091 75.6 400.72 70.5429 410.405 70.4571L423.005 70.3714C423.005 61.3714 418.12 57.1714 410.491 57.1714ZM399.263 84.1714C399.263 88.5429 402.691 91.8 408.005 91.8C419.063 91.8 422.748 81.4286 422.748 77.3143L422.834 75.5143L410.405 75.6857C403.72 75.7714 399.263 78.2571 399.263 84.1714Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></symbol>
+    </defs>
   </svg>
   <div class="start" id="start"><div>Play the reel</div></div>
 </div>
@@ -90,21 +130,31 @@ body { min-height: 100vh; display: flex; flex-direction: column; align-items: ce
   <button id="restart" aria-label="Restart"><svg viewBox="0 0 24 24"><path d="M12 5a7 7 0 1 1-6.3 4H3.5A9 9 0 1 0 12 3V0L7 4l5 4z"/></svg></button>
 </div>
 <div class="chapters" id="chapters"></div>
-<div class="hint">Every frame of the app is a full-resolution capture of the real Nagma UI; everything around it is HTML on one clock, so scrubbing is exact. Music and sounds are synthesised in the page.</div>
+<div class="hint">Every frame of the app is a capture or a real-time recording of the real Nagma UI; everything around it is HTML on one clock, so scrubbing is exact. Music and sounds are synthesised in the page and start when you press play.</div>
 
 <script>
 // ---- The clock, and every animation on it ----
+// 126 BPM, swung. Every cut sits on a beat: b(n) is the time of beat n.
+const BPM = 126, BEAT = 60 / BPM, b = (n) => n * BEAT;
+const DURATION = 41;
+const REDUCE = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const stage = document.getElementById("stage");
 const ANIMS = [];
-const EASE = "cubic-bezier(.2,.8,.2,1)", SOFT = "cubic-bezier(.25,.1,.25,1)";
-function anim(el, frames, { at, dur, ease = EASE, fill = "both" }) {
+const EASE = "cubic-bezier(.2,.8,.2,1)", SOFT = "cubic-bezier(.25,.1,.25,1)", POP = "cubic-bezier(.2,1.25,.3,1)", SNAP = "cubic-bezier(.3,.7,.2,1)";
+// `layout` marks a transform that places something (kept, but cut, when motion is reduced); other transforms are dropped then, leaving fades.
+function anim(el, frames, { at, dur, ease = EASE, fill = "both", layout = false }) {
+  if (REDUCE) {
+    if (layout) dur = Math.min(dur, 0.05);
+    else frames = frames.map((f) => { const g = { ...f }; delete g.transform; delete g.clipPath; delete g.strokeDashoffset; return g; });
+  }
   const a = el.animate(frames, { delay: at * 1000, duration: Math.max(1, dur * 1000), easing: ease, fill });
   a.pause(); ANIMS.push(a); return a;
 }
 const el = (tag, cls, html = "", style = "") => { const e = document.createElement(tag); if (cls) e.className = cls; e.innerHTML = html; if (style) e.style.cssText = style; return e; };
 const SCENES = [];
-function scene(name, at, end, build) {
+function scene(name, at, end, bg, build) {
   const s = el("div", "scene");
+  s.style.background = bg;
   stage.appendChild(s);
   anim(s, [{ opacity: 0 }, { opacity: 1 }], { at: at - 0.04, dur: 0.08, ease: "linear" });
   anim(s, [{ opacity: 1 }, { opacity: 0 }], { at: end, dur: 0.08, ease: "linear", fill: "forwards" });
@@ -113,193 +163,371 @@ function scene(name, at, end, build) {
   return s;
 }
 const SFX = []; const sfx = (t, kind) => SFX.push([t, kind]);
-// A line of display type: the words rise in one after another; `u` underlines one word in orange.
-function line(s, text, { at, size = 7, x = 6, y = 10, color = "var(--cream)", stagger = 0.07, u = null, width = "", out = null }) {
-  const h = el("div", "h", "", `left:${x}cqw;top:${y}cqw;font-size:${size}cqw;color:${color};${width ? "width:" + width + "cqw" : ""}`);
-  text.split(" ").forEach((word, i) => {
-    let w;
-    if (u && word.replace(/[.,!?]/g, "") === u) { w = el("span", "w u", `<i></i>${word} `); anim(w.querySelector("i"), [{ transform: "scaleX(0)" }, { transform: "scaleX(1)" }], { at: at + i * stagger + 0.4, dur: 0.5 }); }
-    else w = el("span", "w", word + " ");
-    h.appendChild(w);
-    anim(w, [{ opacity: 0, transform: "translateY(.35em)" }, { opacity: 1, transform: "none" }], { at: at + i * stagger, dur: 0.6, ease: EASE });
-  });
-  if (out != null) anim(h, [{ opacity: 1 }, { opacity: 0, transform: "translateY(-.3cqw)" }], { at: out, dur: 0.4, fill: "forwards" });
-  s.appendChild(h);
-  sfx(at, "tick");
-  return h;
+const IMG = "img/reel/";                 // the captures (1440x856)
+const LOOPS = IMG.replace("reel/", "");  // the recorded loops (1440x900) and their posters live beside them
+const CURSOR = '<svg viewBox="0 0 24 24"><path d="M4 3l16 7.5-7.2 1.8L10 20z"/></svg>';
+const HLM = '<svg class="hlm" viewBox="0 0 200 100" preserveAspectRatio="none" aria-hidden="true"><path d="M4 16 C 40 8, 90 12, 130 9 S 186 4, 197 12 C 200 40, 198 66, 195 92 C 150 88, 100 96, 60 93 S 14 98, 5 90 C 1 64, 2 40, 4 16 Z"/></svg>';
+// The camera on a capture: scale z about the point (fx%, fy%) of it, bringing that point to the middle of the window.
+const cam = (z, fx, fy) => `translate(${(z * (50 - fx)).toFixed(2)}%, ${(z * (50 - fy)).toFixed(2)}%) scale(${z})`;
+
+// A flat colour title card: the product name draws in letter by letter, then leaves as the shot arrives.
+function card(s, name, { at, out, n = null, fg = "var(--ink)", hl = null }) {
+  const big = el("div", "big", "", `color:${fg}`);
+  big.innerHTML = [...name].map((ch) => `<span class="m"><i>${ch}</i></span>`).join("");
+  if (hl) { big.innerHTML = `<span class="hl ${hl}">${big.innerHTML}${HLM}</span>`; }
+  s.appendChild(big);
+  [...big.querySelectorAll("i")].forEach((i, k) => { if (REDUCE) { i.style.transform = "none"; anim(i, [{ opacity: 0 }, { opacity: 1 }], { at: at + k * 0.045, dur: 0.4 }); } anim(i, [{ transform: "translateY(112%)" }, { transform: "none" }], { at: at + k * 0.035, dur: 0.42, ease: EASE }); sfx(at + k * 0.035, "tick"); });
+  if (hl) anim(big.querySelector(".hlm"), [{ clipPath: "inset(-20% 100% -20% 0)" }, { clipPath: "inset(-20% -2% -20% 0)" }], { at: at + 0.14, dur: 0.3, ease: SNAP });
+  anim(big, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(-3cqw) scale(.96)" }], { at: out - 0.1, dur: 0.18, ease: "ease-in", fill: "forwards" });
+  if (n) { const e = el("div", "eyebrow", n, `color:${fg}`); s.appendChild(e); anim(e, [{ opacity: 0, transform: "translateY(.6cqw)" }, { opacity: 1, transform: "none" }], { at: at + 0.1, dur: 0.4 }); anim(e, [{ opacity: 1 }, { opacity: 0 }], { at: out - 0.1, dur: 0.15, fill: "forwards" }); }
+  return big;
 }
-function sub(s, text, { at, x = 6, y = 40, size = 2, w = 0, out = null, color = "" }) {
-  const c = el("div", "sub", text, `left:${x}cqw;top:${y}cqw;font-size:${size}cqw;${w ? "width:" + w + "cqw;" : ""}${color ? "color:" + color : ""}`);
-  s.appendChild(c);
-  anim(c, [{ opacity: 0, transform: "translateY(.6cqw)" }, { opacity: 1, transform: "none" }], { at, dur: 0.6 });
-  if (out != null) anim(c, [{ opacity: 1 }, { opacity: 0 }], { at: out, dur: 0.3, fill: "forwards" });
-  return c;
-}
-function chapter(s, n, text, at) {
-  const c = el("div", "chapter", `${n} <b>${text}</b>`);
-  s.appendChild(c);
-  anim(c, [{ opacity: 0, transform: "translateY(-.5cqw)" }, { opacity: 1, transform: "none" }], { at, dur: 0.5 });
-  return c;
-}
-// A capture of the real app, arriving from below, with a slow push in toward a point (in capture pixels).
-const SHOT_TOP = 12;
-function shot(s, name, { at, out = null, focus = null, zoom = 1.06, dur = 6 }) {
-  const w = el("div", "shotwin", '<img alt="" width="1440" height="856">');
-  w.querySelector("img").src = "img/reel/" + name + ".webp";
-  s.appendChild(w);
-  anim(w, [{ opacity: 0, transform: "translateY(3cqw) scale(.985)" }, { opacity: 1, transform: "none" }], { at, dur: 0.7, ease: EASE });
-  const img = w.querySelector("img");
-  if (focus) img.style.transformOrigin = `${(focus[0] / 1440) * 100}% ${(focus[1] / 856) * 100}%`;
-  anim(img, [{ transform: "scale(1)" }, { transform: `scale(${zoom})` }], { at: at + 0.2, dur, ease: SOFT });
-  if (out != null) anim(w, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(-1.5cqw) scale(1.01)" }], { at: out, dur: 0.4, ease: "ease-in", fill: "forwards" });
+// A window of the real app, snapping in. z/fx/fy: the camera (fx, fy in % of the capture); z2: where the slow push ends.
+function snap(s, name, { at, out = null, x = 12, y = 6.4, w = 76, ar = 1440 / 856, z = 1, z2 = null, fx = 50, fy = 50, rot = 0 }) {
+  const win = el("div", "win", '<img alt="" width="1440" height="856">', `left:${x}cqw;top:${y}cqw;width:${w}cqw;height:${(w / ar).toFixed(2)}cqw`);
+  win.querySelector("img").src = IMG + name + ".webp";
+  s.appendChild(win);
+  anim(win, [{ opacity: 0 }, { opacity: 1 }], { at, dur: 0.05, ease: "linear" });
+  anim(win, [{ transform: `translateY(3cqw) scale(.84) rotate(${rot - 2}deg)` }, { transform: `rotate(${rot}deg)` }], { at, dur: 0.5, ease: POP });
+  const img = win.querySelector("img");
+  const end = out != null ? out : at + 3;
+  anim(img, [{ transform: cam(z, fx, fy) }, { transform: cam(z2 ?? z * 1.05, fx, fy) }], { at, dur: end - at + 0.2, ease: SOFT });
+  if (out != null) anim(win, [{ opacity: 1 }, { opacity: 0 }], { at: out, dur: 0.1, ease: "linear", fill: "forwards" });
   sfx(at, "whoosh");
+  return win;
+}
+// A few seconds of a recorded loop, zoomed on the action. The video's time is the master clock's: from + (t - at).
+const VIDEOS = [];
+function clip(s, loop, { at, out, from, x = 12, y = 5.6, w = 76, z = 1.3, z2 = null, fx = 50, fy = 50 }) {
+  const win = el("div", "win", "", `left:${x}cqw;top:${y}cqw;width:${w}cqw;height:${(w / 1.6).toFixed(2)}cqw`);
+  const v = document.createElement("video");
+  v.muted = true; v.playsInline = true; v.preload = "metadata"; v.setAttribute("muted", ""); v.setAttribute("playsinline", "");
+  v.src = LOOPS + "loop-" + loop + ".mp4"; v.poster = LOOPS + "loop-" + loop + ".jpg";
+  win.appendChild(v); s.appendChild(win);
+  VIDEOS.push({ v, at, out, from, win });
+  anim(win, [{ opacity: 0 }, { opacity: 1 }], { at, dur: 0.05, ease: "linear" });
+  anim(win, [{ transform: "translateY(3cqw) scale(.84)" }, { transform: "none" }], { at, dur: 0.5, ease: POP });
+  anim(v, [{ transform: cam(z, fx, fy) }, { transform: cam(z2 ?? z * 1.06, fx, fy) }], { at, dur: out - at + 0.2, ease: SOFT });
+  anim(win, [{ opacity: 1 }, { opacity: 0 }], { at: out, dur: 0.1, ease: "linear", fill: "forwards" });
+  sfx(at, "whoosh");
+  return win;
+}
+// The same screen at three widths: the window shrinks into the desktop one, a tablet and a phone pop up beside it.
+function multiply(s, win, name, { at, out }) {
+  const d = { x: 5, y: 14.2, w: 50 }, t = { x: 58, y: 14.6, w: 22, ar: 3 / 4 }, p = { x: 83, y: 17.6, w: 12, ar: 9 / 19.5 };
+  const sc = d.w / 76;
+  // Centre to centre: the window keeps its middle as the origin, so the pop before this and the shrink agree.
+  anim(win, [{ transform: "none" }, { transform: `translate(${(d.x + d.w / 2 - 50).toFixed(2)}cqw, ${(d.y + d.w / 2 / (1440 / 856) - 29).toFixed(2)}cqw) scale(${sc})` }], { at, dur: 0.5, ease: EASE, layout: true });
+  [[t, 0.12], [p, 0.24]].forEach(([g, dl]) => {
+    const w2 = el("div", "win", '<img alt="">', `left:${g.x}cqw;top:${g.y}cqw;width:${g.w}cqw;height:${(g.w / g.ar).toFixed(2)}cqw`);
+    w2.querySelector("img").src = IMG + name + ".webp";
+    s.appendChild(w2);
+    anim(w2, [{ opacity: 0 }, { opacity: 1 }], { at: at + dl, dur: 0.05, ease: "linear" });
+    anim(w2, [{ transform: "translateY(4cqw) scale(.7)" }, { transform: "none" }], { at: at + dl, dur: 0.5, ease: POP });
+    anim(w2, [{ opacity: 1 }, { opacity: 0 }], { at: out, dur: 0.1, ease: "linear", fill: "forwards" });
+    sfx(at + dl, "pop");
+  });
+  [["Desktop · 1440", d.x, 46.2], ["Tablet · 800", t.x, 46.2], ["Phone · 375", p.x, 46.2]].forEach(([txt, x, y], i) => {
+    const c = el("div", "cap", txt, `left:${x}cqw;top:${y}cqw`); s.appendChild(c);
+    anim(c, [{ opacity: 0, transform: "translateY(.5cqw)" }, { opacity: 1, transform: "none" }], { at: at + 0.3 + i * 0.08, dur: 0.3 });
+    anim(c, [{ opacity: 1 }, { opacity: 0 }], { at: out, dur: 0.1, fill: "forwards" });
+  });
+  anim(win, [{ opacity: 1 }, { opacity: 0 }], { at: out, dur: 0.1, ease: "linear", fill: "forwards" });
+  sfx(at, "pop");
+}
+// A crop of a capture or poster as its own tile (the campaign sizes). Crop in source pixels; sw is the source width.
+function tile(s, src, sw, [cx, cy, cw, chh], { at, out, x, y, w, rot = 0 }) {
+  const h = (w * chh) / cw;
+  const t = el("div", "tile", '<img alt="">', `left:${x}cqw;top:${y}cqw;width:${w}cqw;height:${h.toFixed(2)}cqw`);
+  const img = t.querySelector("img"); img.src = src;
+  const k = w / cw; img.style.width = (sw * k).toFixed(2) + "cqw"; img.style.left = (-cx * k).toFixed(2) + "cqw"; img.style.top = (-cy * k).toFixed(2) + "cqw";
+  s.appendChild(t);
+  anim(t, [{ opacity: 0 }, { opacity: 1 }], { at, dur: 0.05, ease: "linear" });
+  anim(t, [{ transform: `scale(.6) rotate(${rot - 8}deg)` }, { transform: `rotate(${rot}deg)` }], { at, dur: 0.5, ease: POP });
+  if (out != null) anim(t, [{ opacity: 1 }, { opacity: 0 }], { at: out, dur: 0.1, fill: "forwards" });
+  sfx(at, "pop");
+  return t;
+}
+// A sticker (pill) popping in at (x, y) with the website's wobble. c: a colour variable name.
+function sticker(s, text, { at, out = null, x, y, c = "cream", rot = -3, big = false, kind = "pop" }) {
+  const w = el("div", "stw", `<span class="st${big ? " big2" : ""}" style="--c:var(--${c})">${text}</span>`, `left:${x}cqw;top:${y}cqw;transform:translate(-50%,-50%)`);
+  s.appendChild(w);
+  const st = w.firstChild;
+  anim(st, [{ opacity: 0 }, { opacity: 1 }], { at, dur: 0.02, ease: "linear" });
+  anim(st, [{ transform: "scale(0) rotate(-20deg)", offset: 0 }, { transform: `scale(1.1) rotate(${rot + 3}deg)`, offset: 0.7 }, { transform: `scale(1) rotate(${rot}deg)`, offset: 1 }], { at, dur: 0.55, ease: EASE });
+  if (out != null) anim(st, [{ opacity: 1 }, { opacity: 0 }], { at: out, dur: 0.1, fill: "forwards" });
+  sfx(at, kind);
   return w;
 }
-// A callout on the capture at (px, py) in capture pixels (as captured, before the camera), its label offset by (dx, dy) cqw.
-function callout(s, text, px, py, dx, dy, { at, out = null }) {
-  const x = 7 + (px / 1440) * 86, y = SHOT_TOP + (py / 1440) * 86;
-  const c = el("div", "co", `<i></i><svg><line x1="0" y1="0" x2="0" y2="0"/></svg><span>${text}</span>`, `left:${x}cqw;top:${y}cqw`);
-  s.appendChild(c);
-  const ln = c.querySelector("line");
-  const sp = c.querySelector("span"); sp.style.left = dx + "cqw"; sp.style.top = dy + "cqw";
-  const tx = dx < 0 ? "-100%" : "0", ty = dy < 0 ? "-100%" : "0";
-  sp.style.transform = `translate(${tx}, ${ty})`;
-  // The line's end in pixels, from the stage's width (cqw).
-  const px2 = () => { const W = stage.clientWidth / 100; ln.setAttribute("x2", dx * W); ln.setAttribute("y2", dy * W); };
-  px2(); addEventListener("resize", px2);
-  anim(c, [{ opacity: 0 }, { opacity: 1 }], { at, dur: 0.15, ease: "linear" });
-  anim(c.querySelector("i"), [{ transform: "scale(0)" }, { transform: "scale(1)" }], { at, dur: 0.4, ease: "cubic-bezier(.34,1.56,.64,1)" });
-  anim(ln, [{ strokeDashoffset: 400 }, { strokeDashoffset: 0 }], { at: at + 0.1, dur: 0.35 });
-  anim(sp, [{ opacity: 0, transform: `translate(${tx}, ${ty}) translateY(.4cqw)` }, { opacity: 1, transform: `translate(${tx}, ${ty})` }], { at: at + 0.3, dur: 0.4 });
-  if (out != null) anim(c, [{ opacity: 1 }, { opacity: 0 }], { at: out, dur: 0.25, fill: "forwards" });
-  sfx(at + 0.05, "blip");
-  return c;
-}
-function mark(s, src, { at, x, y, w, out = null }) {
-  const m = el("div", "mark", "<img alt=\"\">", `left:${x}cqw;top:${y}cqw;width:${w}cqw`);
-  m.querySelector("img").src = src;
-  s.appendChild(m);
-  anim(m, [{ opacity: 0, transform: "translateY(1.2cqw) scale(.94)" }, { opacity: 1, transform: "none" }], { at, dur: 0.7, ease: EASE });
-  if (out != null) anim(m, [{ opacity: 1 }, { opacity: 0 }], { at: out, dur: 0.4, fill: "forwards" });
-  return m;
-}
-function accent(s, id, { at, x, y, size = 6, color = "var(--orange)", spin = 0 }) {
-  const d = el("div", "sh", "<svg><use/></svg>", `left:${x}cqw;top:${y}cqw;width:${size}cqw;height:${size}cqw;color:${color}`);
-  d.querySelector("use").setAttribute("href", "#" + id);
+// A named cursor crossing the stage: through the points [[x, y], ...] in cqw over `dur` seconds.
+function cursor(s, name, c, pts, { at, dur }) {
+  const d = el("div", "cc", `${CURSOR}<span>${name}</span>`, `left:0;top:0;--c:var(--${c})`);
   s.appendChild(d);
-  anim(d, [{ opacity: 0, transform: "scale(.4) rotate(-30deg)" }, { opacity: 1, transform: `scale(1) rotate(${spin}deg)` }], { at, dur: 0.7, ease: "cubic-bezier(.34,1.4,.64,1)" });
-  anim(d, [{ transform: `scale(1) rotate(${spin}deg)` }, { transform: `scale(1) rotate(${spin + 25}deg)` }], { at: at + 0.7, dur: 12, ease: "linear" });
+  anim(d, [{ opacity: 0 }, { opacity: 1 }], { at, dur: 0.1, ease: "linear" });
+  anim(d, pts.map(([x, y], i) => ({ transform: `translate(${x}cqw, ${y}cqw)`, offset: i / (pts.length - 1), easing: "cubic-bezier(.45,.05,.55,.95)" })), { at, dur, ease: "linear", layout: true });
+  anim(d, [{ opacity: 1 }, { opacity: 0 }], { at: at + dur - 0.05, dur: 0.1, fill: "forwards" });
+  sfx(at, "blip");
   return d;
 }
-// One capture with its line of copy: in at `t`, out after `dur`.
-function beat(s, name, text, t, dur, focus, extra) {
-  const w = shot(s, name, { at: t, out: t + dur, focus, zoom: 1.08, dur: dur + 0.4 });
-  line(s, text, { at: t + 0.05, size: 3.1, x: 6, y: 5.6, out: t + dur - 0.1 });
-  if (extra) extra(w);
-  return w;
+// A funny shape from the sprite. Pops in, then drifts and turns very slowly.
+function shape(s, id, { at, out = null, x, y, w, ar = 1, color = "var(--orange)", rot = 0, drift = 2 }) {
+  const d = el("div", "fun", "<svg><use/></svg>", `left:${x}cqw;top:${y}cqw;width:${w}cqw;height:${(w / ar).toFixed(2)}cqw;color:${color}`);
+  d.querySelector("use").setAttribute("href", "#" + id);
+  s.appendChild(d);
+  anim(d, [{ opacity: 0 }, { opacity: 1 }], { at, dur: 0.05, ease: "linear" });
+  anim(d, [{ transform: `scale(.3) rotate(${rot - 40}deg)`, offset: 0 }, { transform: `scale(1.06) rotate(${rot + 4}deg)`, offset: 0.65 }, { transform: `scale(1) rotate(${rot}deg)`, offset: 0.8 }, { transform: `translate(${drift}cqw, ${-drift * 0.6}cqw) rotate(${rot + 12}deg) scale(1)`, offset: 1 }], { at, dur: 6, ease: "linear" });
+  if (out != null) anim(d, [{ opacity: 1 }, { opacity: 0 }], { at: out, dur: 0.1, fill: "forwards" });
+  return d;
 }
+// A shape tumbling in from above and landing (a bounce) where it is placed: the sticker-wall pile. Skipped when motion is reduced.
+function tumble(s, id, { at, x, y, w, ar = 1, color, rot = 0 }) {
+  if (REDUCE) return null;
+  const d = el("div", "fun", "<svg><use/></svg>", `left:${x}cqw;top:${y}cqw;width:${w}cqw;height:${(w / ar).toFixed(2)}cqw;color:${color}`);
+  d.querySelector("use").setAttribute("href", "#" + id);
+  s.appendChild(d);
+  anim(d, [{ opacity: 0 }, { opacity: 1 }], { at, dur: 0.02, ease: "linear" });
+  anim(d, [
+    { transform: `translateY(-70cqw) rotate(${rot - 200}deg)`, offset: 0, easing: "cubic-bezier(.45,0,1,1)" },
+    { transform: `translateY(0) rotate(${rot - 14}deg)`, offset: 0.62, easing: "cubic-bezier(0,0,.4,1)" },
+    { transform: `translateY(-4cqw) rotate(${rot - 4}deg)`, offset: 0.8, easing: "cubic-bezier(.45,0,1,1)" },
+    { transform: `translateY(0) rotate(${rot}deg)`, offset: 1 },
+  ], { at, dur: 1.1, ease: "linear" });
+  sfx(at + 0.68, "thud");
+  return d;
+}
+// Stamped words (the hero's uppercase lines): each word slams in, u marks the word that gets the highlighter.
+function stamp(s, text, { at, x, y, size, stagger = 0.24, lc = false, hl = null, hlc = "pink", fg = "var(--ink)", outline = null, out = null }) {
+  const h = el("div", "stamp" + (lc ? " lc" : ""), "", `left:${x}cqw;top:${y}cqw;font-size:${size}cqw;color:${fg}`);
+  text.split(" ").forEach((word, i) => {
+    let inner = word;
+    if (outline && word.toLowerCase().startsWith(outline)) inner = `<span class="outline">${word.slice(0, outline.length)}</span>${word.slice(outline.length)}`;
+    const w = el("span", "w", inner + (i < text.split(" ").length - 1 ? "&nbsp;" : ""));
+    if (hl && word.replace(/[.,!?]/g, "").toLowerCase() === hl) { w.innerHTML = `<span class="hl ${hlc}">${w.innerHTML}${HLM}</span>`; anim(w.querySelector(".hlm"), [{ clipPath: "inset(-20% 100% -20% 0)" }, { clipPath: "inset(-20% -2% -20% 0)" }], { at: at + i * stagger + 0.22, dur: 0.5, ease: SNAP }); }
+    h.appendChild(w);
+    anim(w, [{ opacity: 0, transform: "scale(1.7)" }, { opacity: 1, transform: "none" }], { at: at + i * stagger, dur: 0.26, ease: "cubic-bezier(.2,.9,.3,1)" });
+    sfx(at + i * stagger, "stamp");
+  });
+  if (out != null) anim(h, [{ opacity: 1 }, { opacity: 0 }], { at: out, dur: 0.12, fill: "forwards" });
+  s.appendChild(h);
+  return h;
+}
+// The website's loader: orange box pops, the cat climbs up inside it, the wordmark wipes in.
+function loader(s, { at, x, y, fg = "var(--ink)" }) {
+  const g = el("div", "ld", '<div class="box"><img alt=""></div><div class="wm"><svg><use href="#wm"/></svg></div>', `left:${x}cqw;top:${y}cqw;color:${fg}`);
+  g.querySelector("img").src = "insignia-cat.svg";
+  s.appendChild(g);
+  const box = g.querySelector(".box"), cat = g.querySelector("img"), wm = g.querySelector(".wm");
+  if (at > 0.01) anim(g, [{ opacity: 0 }, { opacity: 1 }], { at, dur: 0.02, ease: "linear" });
+  // On the very first frame the box is already there (small); later in the reel it appears on its beat.
+  anim(box, [{ opacity: at > 0.01 ? 0 : 1 }, { opacity: 1 }], { at, dur: 0.02, ease: "linear" });
+  anim(box, [{ transform: "scale(.5) rotate(-8deg)" }, { transform: "none" }], { at, dur: 0.5, ease: EASE });
+  if (REDUCE) { cat.style.transform = "none"; anim(cat, [{ opacity: 0 }, { opacity: 1 }], { at: at + 0.35, dur: 0.5 }); }
+  anim(cat, [{ transform: "translateY(105%)" }, { transform: "none" }], { at: at + 0.35, dur: 0.7, ease: EASE });
+  anim(wm, [{ clipPath: "inset(-10% 100% -10% 0)" }, { clipPath: "inset(-10% -2% -10% 0)" }], { at: at + 0.85, dur: 0.6, ease: SNAP });
+  if (REDUCE) wm.style.clipPath = "none";
+  sfx(at, "pop"); sfx(at + 0.35, "rise"); sfx(at + 0.85, "whoosh");
+  return g;
+}
+// The product's own pill, top left, that stays for its whole beat.
+const tag = (s, name, c, at, out) => sticker(s, name, { at, out, x: 11, y: 4.2, c, rot: -4, kind: "pop" });
+const S = { c: (name, c, fg = "var(--ink)") => [name, c, fg] };
 
-// ---- 1. Cold open ----
-scene("Open", 0, 5.2, (s) => {
-  line(s, "Design tools got expensive.", { at: 0.3, size: 6.4, x: 8, y: 17, out: 3.0 });
-  line(s, "Files got stuck inside them.", { at: 1.5, size: 6.4, x: 8, y: 25, u: "stuck", out: 3.0 });
-  mark(s, "insignia.svg", { at: 3.3, x: 43, y: 14, w: 14 });
-  mark(s, "wordmark.svg", { at: 3.6, x: 39, y: 30, w: 22 });
-  sub(s, "One app for the whole studio. It lives on your computer.", { at: 4.1, x: 30, y: 41.5, size: 2.1, w: 40 });
-  sfx(3.3, "soft");
+// ======================= 1. Open: the loader, then the promise =======================
+scene("Open", 0, b(8), "var(--cream)", (s) => {
+  const g = loader(s, { at: 0, x: 29.5, y: 21 });
+  // The insignia shrinks into the corner as the words stamp in.
+  anim(g, [{ transform: "none" }, { transform: "translate(-25.5cqw, -17.4cqw) scale(.4)" }], { at: b(4), dur: 0.5, ease: EASE, layout: true });
+  stamp(s, "MAKE", { at: b(4) + 0.1, x: 8, y: 11, size: 15.5 });
+  stamp(s, "ANYTHING.", { at: b(5), x: 8, y: 24.5, size: 15.5, outline: "any" });
+  stamp(s, "for free.", { at: b(6), x: 8.5, y: 38.5, size: 15.5, lc: true, hl: "free", stagger: 0.12 });
+  shape(s, "sh-sparkle", { at: b(5) + 0.2, x: 78, y: 10, w: 9, color: "var(--orange)", rot: 15 });
+  shape(s, "sh-flower", { at: b(6) + 0.1, x: 72, y: 27, w: 20, color: "var(--yellow)", rot: -10 });
+  shape(s, "sh-squiggle", { at: b(6) + 0.3, x: 60, y: 48, w: 16, ar: 200 / 60, color: "var(--sky)", rot: -6 });
 });
 
-// ---- 2. Starts on your computer ----
-scene("Home", 5.2, 11.4, (s, at) => {
-  chapter(s, "01", "Starts on your computer", at + 0.1);
-  line(s, "No account. No upload. Open it and work.", { at: at + 0.2, size: 3.4, x: 6, y: 5.6 });
-  shot(s, "home", { at: at + 0.6, focus: [640, 420], zoom: 1.05, dur: 6 });
-  callout(s, "<b>This computer.</b> Your files stay on your disk.", 150, 26, 6, 8, { at: at + 1.6 });
-  callout(s, "Starter files, so there is something to open on day one.", 760, 300, 12, 9.5, { at: at + 2.8 });
-  callout(s, "Design, Board, Slides, Make: one Home for every kind of file.", 1100, 26, -8, 4.5, { at: at + 4.0 });
+// ======================= 2. Design =======================
+scene("Design", b(8), b(22), "var(--orange)", (s, at) => {
+  card(s, "Design", { at, out: b(10), n: "01 / 08" });
+  shape(s, "sh-flower", { at: at + 0.2, x: -8, y: 30, w: 26, color: "var(--cream)", rot: 10 });
+  tag(s, "Design", "cream", b(10), b(22));
+  const v = snap(s, "vesta", { at: b(10), z: 1.05, z2: 1.1, fx: 50, fy: 46 });
+  multiply(s, v, "vesta", { at: b(12), out: b(14) });
+  // The Bhramayugam file: the Stories list selected, its auto layout gap scrubbed.
+  clip(s, "design", { at: b(14), out: b(18), from: 3.8, z: 1.3, z2: 1.42, fx: 54, fy: 44 });
+  sticker(s, "Auto layout, scrubbed", { at: b(14) + 0.3, out: b(18), x: 50, y: 51.5, c: "yellow", rot: 2 });
+  snap(s, "design-props", { at: b(18), out: b(19), z: 1.25, fx: 82, fy: 40 });
+  sticker(s, "Constraints", { at: b(18) + 0.1, out: b(19), x: 70, y: 48, c: "sky", rot: -3 });
+  snap(s, "variables", { at: b(19), out: b(20), z: 1.3, fx: 30, fy: 36 });
+  sticker(s, "Variables with modes", { at: b(19) + 0.1, out: b(20), x: 36, y: 46, c: "mint", rot: 3 });
+  snap(s, "inspect", { at: b(20), out: b(22), z: 1.25, z2: 1.32, fx: 80, fy: 70 });
+  sticker(s, "Inspect: code for any layer", { at: b(20) + 0.15, out: b(22), x: 61, y: 50, c: "lilac", rot: -2 });
 });
 
-// ---- 3. Design ----
-scene("Design", 11.4, 20.8, (s, at) => {
-  chapter(s, "02", "Design, with the serious parts", at + 0.1);
-  beat(s, "vesta", "A real design file. Ten screens, one investing app.", at + 0.3, 2.6, [740, 460]);
-  beat(s, "design-props", "Auto layout. Constraints. Components that follow.", at + 2.9, 2.4, [1300, 520], () => callout(s, "Layout, size and fills of the selected card", 1300, 500, -6, -5.5, { at: at + 3.6, out: at + 5.2 }));
-  beat(s, "variables", "Variables, with Light and Dark modes.", at + 5.3, 2.2, [800, 330], () => callout(s, "One value per mode. Switch a frame, everything follows.", 1030, 290, -6, 7, { at: at + 6.0, out: at + 7.4 }));
-  const i = shot(s, "inspect", { at: at + 7.5, focus: [1260, 650], zoom: 1.12, dur: 2.4 });
-  line(s, "Inspect: code for any layer, in the units your team uses.", { at: at + 7.55, size: 3.1, x: 6, y: 5.6 });
-  callout(s, "Layer properties, CSS or any other target", 1260, 690, -7, -5, { at: at + 8.3 });
+// ======================= 3. Build =======================
+scene("Build", b(22), b(32), "var(--yellow)", (s, at) => {
+  card(s, "Build", { at, out: b(24), n: "02 / 08" });
+  shape(s, "sh-bolt", { at: at + 0.15, x: 76, y: 2, w: 20, color: "var(--ink)", rot: 12 });
+  tag(s, "Prototype · Make", "cream", b(24), b(32));
+  const p = snap(s, "prototype", { at: b(24), out: b(26), z: 1.15, z2: 1.22, fx: 42, fy: 42 });
+  // A flow line drawn across the real frames.
+  const f = el("div", "flow", '<svg viewBox="0 0 1440 856" style="position:absolute;inset:0;width:100%;height:100%;overflow:visible"><path d="M330 470 C 520 420, 640 240, 980 250"/><circle cx="980" cy="250" r="14"/></svg>', "left:12cqw;top:6.4cqw;width:76cqw;height:45.2cqw;opacity:0");
+  s.appendChild(f);
+  if (REDUCE) { f.querySelector("path").style.strokeDashoffset = 0; f.querySelector("circle").style.transform = "none"; }
+  anim(f, [{ opacity: 0 }, { opacity: 1 }], { at: b(24) + 0.4, dur: 0.05 });
+  anim(f.querySelector("path"), [{ strokeDashoffset: 1000 }, { strokeDashoffset: 0 }], { at: b(24) + 0.4, dur: 0.6, ease: SNAP });
+  anim(f.querySelector("circle"), [{ transform: "scale(0)" }, { transform: "scale(1)" }], { at: b(24) + 0.95, dur: 0.3, ease: POP });
+  anim(f, [{ opacity: 1 }, { opacity: 0 }], { at: b(26), dur: 0.1, fill: "forwards" });
+  sfx(b(24) + 0.4, "draw"); sfx(b(24) + 0.95, "blip");
+  sticker(s, "Wire the flow", { at: b(24) + 0.2, out: b(26), x: 74, y: 49, c: "pink", rot: 3 });
+  // Make: a sentence typed in, then the app appears.
+  clip(s, "make", { at: b(26), out: b(29), from: 0.2, z: 1.7, z2: 1.8, fx: 24, fy: 78 });
+  sticker(s, "Say what you want", { at: b(26) + 0.2, out: b(29), x: 70, y: 13, c: "cream", rot: -3 });
+  clip(s, "make", { at: b(29), out: b(31), from: 10.6, z: 1.2, z2: 1.28, fx: 62, fy: 56 });
+  sticker(s, "Your own AI key, any provider", { at: b(29) + 0.15, out: b(31), x: 30, y: 50, c: "lilac", rot: 2 });
+  snap(s, "make-attach", { at: b(31), out: b(32), z: 1.35, fx: 22, fy: 78 });
+  sticker(s, "Build as app, from the frames", { at: b(31) + 0.1, out: b(32), x: 68, y: 14, c: "mint", rot: -2 });
 });
 
-// ---- 4. Prototype → Build as app ----
-scene("Build", 20.8, 28.4, (s, at) => {
-  chapter(s, "03", "From frames to a working app", at + 0.1);
-  beat(s, "prototype", "Wire the flow. Then build the real thing from it.", at + 0.3, 2.8, [760, 460], () => callout(s, "<b>Build as app.</b> The frames go to Make as the starting point.", 1310, 165, -5, 7, { at: at + 1.4, out: at + 3.0 }));
-  const m = shot(s, "make-attach", { at: at + 3.2, focus: [220, 740], zoom: 1.1, dur: 4.5 });
-  line(s, "Make writes it. With your own key, on any model.", { at: at + 3.25, size: 3.1, x: 6, y: 5.6 });
-  callout(s, "The screen, attached from the design file", 60, 683, 8, -7, { at: at + 4.0 });
-  callout(s, "Plan first, or build straight away", 130, 855, 10, -4, { at: at + 5.0 });
-  callout(s, "Your key. Nothing leaves this machine unless you send it.", 1226, 68, -6, 7, { at: at + 6.0 });
+// ======================= 4. The studio: six products, four beats each =======================
+scene("Board", b(32), b(36), "var(--lilac)", (s, at) => {
+  card(s, "Board", { at, out: b(33), n: "03 / 08" });
+  shape(s, "sh-star", { at: at + 0.15, x: 80, y: 30, w: 22, color: "var(--yellow)", rot: -15 });
+  tag(s, "Board", "yellow", b(33), b(36));
+  clip(s, "board", { at: b(33), out: b(36), from: 3.2, z: 1.3, z2: 1.38, fx: 46, fy: 50 });
+  sticker(s, "Stickies, sections, votes", { at: b(33) + 0.25, out: b(36), x: 70, y: 50.5, c: "pink", rot: 3 });
+});
+scene("Slides", b(36), b(40), "var(--sky)", (s, at) => {
+  card(s, "Slides", { at, out: b(37), n: "04 / 08" });
+  shape(s, "sh-halfmoon", { at: at + 0.15, x: -6, y: 4, w: 20, color: "var(--cream)", rot: 30 });
+  tag(s, "Slides", "cream", b(37), b(40));
+  snap(s, "slides-deck", { at: b(37), out: b(40), x: 8, y: 6, w: 70, z: 1.08, z2: 1.14, fx: 50, fy: 42 });
+  snap(s, "slides-presenter", { at: b(38.5), out: b(40), x: 40, y: 20, w: 56, z: 1, z2: 1.04, rot: 1.5 });
+  sticker(s, "Presenter view: notes and a timer", { at: b(38.5) + 0.2, out: b(40), x: 32, y: 51, c: "yellow", rot: -2 });
+});
+scene("Campaign", b(40), b(44), "var(--pink)", (s, at) => {
+  card(s, "Campaign", { at, out: b(41), n: "05 / 08" });
+  shape(s, "sh-asterisk", { at: at + 0.15, x: 82, y: -4, w: 18, color: "var(--cream)", rot: 20 });
+  tag(s, "Campaign", "cream", b(41), b(44));
+  snap(s, "campaign-bulk", { at: b(41), out: b(42), z: 1.3, fx: 50, fy: 36 });
+  sticker(s, "Paste a spreadsheet", { at: b(41) + 0.1, out: b(42), x: 24, y: 48, c: "yellow", rot: -3 });
+  // One design, four sizes: the real posters from the Campaign recording, each its own tile.
+  const P = LOOPS + "loop-campaign.jpg";
+  tile(s, P, 1440, [104, 232, 262, 444], { at: b(42), out: b(44), x: 6, y: 9, w: 17, rot: -2 });
+  tile(s, P, 1440, [378, 232, 264, 252], { at: b(42) + 0.1, out: b(44), x: 27, y: 12, w: 20, rot: 1.5 });
+  tile(s, P, 1440, [656, 232, 264, 324], { at: b(42) + 0.2, out: b(44), x: 51, y: 9, w: 19, rot: -1 });
+  tile(s, P, 1440, [934, 232, 462, 252], { at: b(42) + 0.3, out: b(44), x: 73, y: 14, w: 23, rot: 2 });
+  tile(s, P, 1440, [378, 232, 264, 252], { at: b(42) + 0.4, out: b(44), x: 30, y: 36, w: 12, rot: -3 });
+  tile(s, P, 1440, [934, 232, 462, 252], { at: b(42) + 0.5, out: b(44), x: 46, y: 40, w: 15, rot: 2 });
+  tile(s, P, 1440, [656, 232, 264, 324], { at: b(42) + 0.6, out: b(44), x: 65, y: 36, w: 9, rot: 4 });
+  sticker(s, "Every size at once", { at: b(42) + 0.5, out: b(44), x: 50, y: 52, c: "cream", rot: -2, big: true });
+});
+scene("Sites", b(44), b(48), "var(--mint)", (s, at) => {
+  card(s, "Sites", { at, out: b(45), n: "06 / 08" });
+  shape(s, "sh-cloud", { at: at + 0.15, x: -4, y: 36, w: 28, ar: 1.6, color: "var(--cream)" });
+  tag(s, "Sites", "cream", b(45), b(48));
+  clip(s, "sites", { at: b(45), out: b(48), from: 7.0, z: 1.3, z2: 1.36, fx: 36, fy: 50 });
+  sticker(s, "Three breakpoints, one page", { at: b(45) + 0.25, out: b(48), x: 70, y: 50.5, c: "yellow", rot: 2 });
+});
+scene("Video", b(48), b(52), "var(--ink)", (s, at) => {
+  card(s, "Video", { at, out: b(49), n: "07 / 08", fg: "var(--cream)" });
+  shape(s, "sh-eye", { at: at + 0.15, x: 70, y: 32, w: 30, ar: 1.6, color: "var(--orange)", rot: -8 });
+  tag(s, "Video", "orange", b(49), b(52));
+  clip(s, "video", { at: b(49), out: b(52), from: 6.8, z: 1.3, z2: 1.38, fx: 40, fy: 46 });
+  sticker(s, "Titles, tracks, MP4 out", { at: b(49) + 0.25, out: b(52), x: 68, y: 50.5, c: "orange", rot: -2 });
+});
+scene("Document", b(52), b(56), "var(--bubble)", (s, at) => {
+  card(s, "Document", { at, out: b(53), n: "08 / 08" });
+  shape(s, "sh-arch", { at: at + 0.15, x: 84, y: 38, w: 18, color: "var(--cream)", rot: 0 });
+  tag(s, "Document", "cream", b(53), b(56));
+  snap(s, "document", { at: b(53), out: b(56), z: 1.5, z2: 1.62, fx: 40, fy: 58 });
+  sticker(s, "Edit a PDF. Sign it.", { at: b(53) + 0.25, out: b(56), x: 70, y: 50.5, c: "yellow", rot: 3 });
 });
 
-// ---- 5. The rest of the studio ----
-scene("Studio", 28.4, 41.0, (s, at) => {
-  chapter(s, "04", "The rest of the studio, in the same app", at + 0.1);
-  beat(s, "slides-deck", "Slides. Real layers, real type, a filmstrip that reorders.", at + 0.3, 2.3, [700, 380]);
-  beat(s, "slides-presenter", "Presenter view: next slide, notes, a timer.", at + 2.6, 2.1, [500, 400]);
-  beat(s, "board", "Board. A retro with the whole team, names on every note.", at + 4.7, 2.3, [720, 480]);
-  beat(s, "campaign-bulk", "Campaign. Paste a spreadsheet, get an asset per row.", at + 7.0, 2.1, [720, 300], () => callout(s, "Five rows in, five posts out", 720, 290, 12, 10, { at: at + 7.7, out: at + 9.0 }));
-  beat(s, "sites-publish", "Sites. Three breakpoints, one click to publish.", at + 9.1, 2.1, [560, 260]);
-  beat(s, "video", "Video. Tracks, titles, motion presets, MP4 out.", at + 11.2, 1.5, [720, 540]);
+// ======================= 5. Together =======================
+scene("Together", b(56), b(68), "var(--sky)", (s, at) => {
+  card(s, "Together", { at, out: b(57), hl: "pink" });
+  shape(s, "sh-ring", { at: at + 0.1, x: 82, y: 32, w: 22, color: "var(--cream)" });
+  tag(s, "Together", "cream", b(57), b(68));
+  clip(s, "collab", { at: b(57), out: b(62), from: 0.3, z: 1.22, z2: 1.3, fx: 54, fy: 54 });
+  // The crowd: the website's seven named cursors cross the file at once.
+  const T = b(57) + 0.15;
+  cursor(s, "Koduman Potti", "pink", [[-14, 40], [30, 28], [52, 34], [112, 20]], { at: T, dur: 2.3 });
+  cursor(s, "Michael", "sky", [[112, 12], [70, 22], [44, 30], [-16, 44]], { at: T + 0.1, dur: 2.2 });
+  cursor(s, "Bilal John", "mint", [[20, 62], [36, 40], [58, 44], [66, -8]], { at: T + 0.2, dur: 2.1 });
+  cursor(s, "Pranchiyettan", "lilac", [[-12, 16], [22, 20], [40, 14], [112, 30]], { at: T + 0.25, dur: 2.2 });
+  cursor(s, "Balram", "orange", [[60, 62], [56, 38], [72, 30], [78, -8]], { at: T + 0.35, dur: 2 });
+  cursor(s, "Achootty", "yellow", [[112, 48], [78, 40], [60, 48], [-14, 56]], { at: T + 0.4, dur: 2.2 });
+  cursor(s, "Joseph Alex", "cream", [[34, -8], [38, 22], [30, 36], [10, 62]], { at: T + 0.5, dur: 2 });
+  sticker(s, "Everyone in the same file", { at: b(59), out: b(62), x: 72, y: 51, c: "yellow", rot: 2 });
+  snap(s, "comments", { at: b(62), out: b(63), z: 1.5, fx: 44, fy: 36 });
+  sticker(s, "Comments on the pixel", { at: b(62) + 0.1, out: b(63), x: 30, y: 50, c: "pink", rot: -3 });
+  snap(s, "share", { at: b(63), out: b(64), z: 1.45, fx: 48, fy: 36 });
+  sticker(s, "Share a link", { at: b(63) + 0.1, out: b(64), x: 72, y: 48, c: "mint", rot: 3 });
+  snap(s, "history", { at: b(64), out: b(65), z: 1.4, fx: 82, fy: 34 });
+  sticker(s, "Named versions, forever", { at: b(64) + 0.1, out: b(65), x: 32, y: 49, c: "yellow", rot: -2 });
+  snap(s, "server", { at: b(65), out: b(68), z: 1.45, z2: 1.55, fx: 50, fy: 30 });
+  sticker(s, "Any server, even yours", { at: b(65) + 0.3, out: b(68), x: 50, y: 50.5, c: "cream", rot: -2, big: true });
 });
 
-// ---- 6. Together ----
-scene("Together", 41.0, 50.6, (s, at) => {
-  beat(s, "document", "Document. Edit a PDF and sign it, right there.", at - 0.2, 2.0, [720, 420]);
-  chapter(s, "05", "Together, on a server you choose", at + 1.9);
-  beat(s, "comments", "Comments, pinned to the exact pixel.", at + 2.0, 2.2, [640, 400]);
-  beat(s, "history", "Named versions, next to the autosaves.", at + 4.2, 2.2, [1300, 300], () => callout(s, "Who changed what, and when", 1300, 250, -6, 8, { at: at + 4.9, out: at + 6.3 }));
-  shot(s, "server", { at: at + 6.5, focus: [720, 300], zoom: 1.08, dur: 3.4 });
-  line(s, "Share from your laptop. Hosted for free, or run your own.", { at: at + 6.55, size: 3.1, x: 6, y: 5.6 });
-  callout(s, "<b>This computer:</b> only you", 530, 195, -5, 7, { at: at + 7.2 });
-  callout(s, "<b>Hosted, free:</b> share with anyone", 530, 253, -5, 11, { at: at + 7.8 });
-  callout(s, "<b>Your own server:</b> one command on any Linux box", 720, 316, 6, 9, { at: at + 8.4 });
+// ======================= 6. Yours =======================
+scene("Yours", b(68), b(78), "var(--mint)", (s, at) => {
+  card(s, "Yours", { at, out: b(69), hl: "orange" });
+  tag(s, "Yours", "cream", b(69), b(78));
+  snap(s, "home", { at: b(69), x: 27, y: 10, w: 46, z: 1, z2: 1.05 });
+  const pills = [["Free forever", 14, 11, "cream", -5], ["No account to start", 86, 11, "bubble", 4], ["Your server", 10, 25, "sky", -3], ["Opens .fig", 90, 27, "yellow", 5], ["No seats", 12, 38, "lilac", 3], ["MPL-2.0", 88, 38, "cream", -4]];
+  pills.forEach(([t, x, y, c, r], i) => sticker(s, t, { at: b(70 + i), x, y, c, rot: r }));
+  // The sticker wall: shapes tumble in and pile up along the floor.
+  tumble(s, "sh-star", { at: b(73), x: 1, y: 45, w: 13, color: "var(--yellow)", rot: 20 });
+  tumble(s, "sh-flower", { at: b(73.5), x: 77, y: 44, w: 16, color: "var(--pink)", rot: -15 });
+  tumble(s, "sh-sparkle", { at: b(74), x: 16, y: 48, w: 9, color: "var(--orange)", rot: 10 });
+  tumble(s, "sh-ring", { at: b(74.5), x: 61, y: 47, w: 11, color: "var(--sky)", rot: 0 });
+  tumble(s, "sh-cloud", { at: b(75), x: 36, y: 48, w: 18, ar: 1.6, color: "var(--cream)", rot: 4 });
+  tumble(s, "sh-triangle", { at: b(75.5), x: 86, y: 47, w: 10, color: "var(--lilac)", rot: -12 });
+  tumble(s, "sh-asterisk", { at: b(76), x: 27, y: 42, w: 9, color: "var(--green)", rot: 30 });
+  tumble(s, "sh-halfmoon", { at: b(76.5), x: 50, y: 44, w: 9, color: "var(--yellow)", rot: 90 });
+  tumble(s, "sh-bolt", { at: b(77), x: 72, y: 38, w: 8, color: "var(--ink)", rot: 15 });
 });
 
-// ---- 7. Yours ----
-scene("Yours", 50.6, 57.6, (s, at) => {
-  chapter(s, "06", "Yours, in every sense", at + 0.1);
-  line(s, "Your files, on your disk.", { at: at + 0.3, size: 6.2, x: 8, y: 11 });
-  line(s, "Your key, in your keychain.", { at: at + 1.5, size: 6.2, x: 8, y: 19 });
-  line(s, "Your copy of the code.", { at: at + 2.7, size: 6.2, x: 8, y: 27, u: "code" });
-  sub(s, "MPL-2.0. Fork it, run it, keep it. Nobody counts your seats and nothing waits behind a tier.", { at: at + 4.0, x: 8, y: 37, size: 2.2, w: 60 });
-  accent(s, "sh-asterisk", { at: at + 0.6, x: 82, y: 10, size: 9, color: "var(--orange)" });
-  accent(s, "sh-sparkle", { at: at + 2.0, x: 74, y: 32, size: 5, color: "var(--pink)" });
-  accent(s, "sh-flower", { at: at + 3.2, x: 86, y: 40, size: 7, color: "var(--mint)" });
+// ======================= 7. Make anything. For free. Then the logo. =======================
+scene("End", b(78), DURATION, "var(--cream)", (s, at) => {
+  stamp(s, "Make anything.", { at, x: 9, y: 12, size: 13, stagger: 0.2, lc: true, out: b(82) });
+  stamp(s, "For free.", { at: b(80), x: 9, y: 28, size: 13, stagger: 0.2, lc: true, hl: "free", out: b(82) });
+  shape(s, "sh-sparkle", { at: at + 0.3, x: 80, y: 8, w: 8, color: "var(--orange)", rot: 15, out: b(82) });
+  shape(s, "sh-squiggle", { at: b(80) + 0.2, x: 62, y: 42, w: 18, ar: 200 / 60, color: "var(--sky)", rot: -8, out: b(82) });
+  shape(s, "sh-flower", { at: b(80) + 0.35, x: 84, y: 30, w: 14, color: "var(--yellow)", rot: 10, out: b(82) });
+  // The logo alone on ink.
+  const ink = el("div", "", "", "inset:0;background:var(--ink);opacity:0"); s.appendChild(ink);
+  anim(ink, [{ opacity: 0 }, { opacity: 1 }], { at: b(82), dur: 0.05, ease: "linear" });
+  loader(s, { at: b(82) + 0.05, x: 29.5, y: 21, fg: "var(--cream)" });
+  sfx(b(82), "final");
 });
-
-// ---- 8. End ----
-scene("End", 57.6, 64, (s, at) => {
-  s.style.background = "var(--orange)";
-  mark(s, "insignia-cat.svg", { at: at + 0.2, x: 41, y: 5.5, w: 18 });
-  mark(s, "wordmark.svg", { at: at + 0.7, x: 37, y: 24.5, w: 26 });
-  line(s, "Free, forever.", { at: at + 1.3, size: 5, x: 36.5, y: 37.5, color: "var(--ink)" });
-  const b = el("div", "cta", "Download for macOS  →", "left:34cqw;top:45.5cqw"); s.appendChild(b);
-  anim(b, [{ opacity: 0, transform: "scale(.8)" }, { opacity: 1, transform: "none" }], { at: at + 2.2, dur: 0.5, ease: "cubic-bezier(.34,1.4,.64,1)" });
-  sub(s, "nagma.app", { at: at + 2.8, x: 44.5, y: 53, size: 1.9, color: "var(--ink)" });
-  sfx(at + 0.5, "soft"); sfx(at + 2.2, "chime");
-});
-const DURATION = 64;
 
 // ---- Playback ----
 let t = 0, playing = false, muted = false, raf = 0, last = 0;
 const rangeEl = document.getElementById("range"), fillEl = document.getElementById("fill"), timeEl = document.getElementById("time"), playBtn = document.getElementById("play"), muteBtn = document.getElementById("mute"), startEl = document.getElementById("start");
 rangeEl.max = DURATION;
 const fmt = (x) => `${Math.floor(x / 60)}:${String(Math.floor(x % 60)).padStart(2, "0")}`;
+// The loops follow the clock: their time is set on every seek and corrected whenever it drifts more than 80 ms; a loop plays only while its shot is on screen and is detached from rendering otherwise.
+function syncVideos() {
+  for (const c of VIDEOS) {
+    const active = t >= c.at - 0.02 && t < c.out, near = t >= c.at - 3 && t < c.out + 0.5;
+    c.v.style.display = near ? "" : "none";
+    if (near) {
+      if (!c.loaded) { c.loaded = true; c.v.load(); }
+      const dur = isFinite(c.v.duration) && c.v.duration > 0 ? c.v.duration - 0.05 : 99;
+      const want = Math.min(dur, c.from + Math.max(0, Math.min(t, c.out) - c.at));
+      if (Math.abs(c.v.currentTime - want) > 0.08 && !c.v.seeking) c.v.currentTime = want;
+    }
+    if (active && playing) { if (c.v.paused) c.v.play().catch(() => {}); }
+    else if (!c.v.paused) c.v.pause();
+  }
+}
 function seek(x, fromUser = false) {
   t = Math.max(0, Math.min(DURATION, x));
   // Only the chapter on screen is painted (hidden ones still cost paint at opacity 0).
   for (const sc of SCENES) sc.node.style.visibility = sc.at - 0.15 <= t && t < sc.end + 0.15 ? "visible" : "hidden";
   for (const a of ANIMS) a.currentTime = t * 1000;
+  syncVideos();
   rangeEl.value = t; fillEl.style.width = (t / DURATION * 100) + "%"; timeEl.textContent = `${fmt(t)} / ${fmt(DURATION)}`;
   document.querySelectorAll("#chapters button").forEach((b, i) => b.classList.toggle("on", SCENES[i].at <= t && t < SCENES[i].end));
   if (fromUser) audio.resync();
@@ -312,73 +540,85 @@ function tick(now) {
   seek(t); audio.schedule(t);
   raf = requestAnimationFrame(tick);
 }
-function play() { if (playing) return; if (t >= DURATION - 0.01) seek(0); playing = true; startEl.style.display = "none"; playBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>'; playBtn.setAttribute("aria-label", "Pause"); audio.start(t); last = performance.now(); raf = requestAnimationFrame(tick); }
-function pause() { if (!playing) return; playing = false; cancelAnimationFrame(raf); audio.stop(); playBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M7 4l14 8-14 8z"/></svg>'; playBtn.setAttribute("aria-label", "Play"); }
+function play() { if (playing) return; if (t >= DURATION - 0.01) seek(0); playing = true; startEl.style.display = "none"; playBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>'; playBtn.setAttribute("aria-label", "Pause"); audio.start(t); last = performance.now(); syncVideos(); raf = requestAnimationFrame(tick); }
+function pause() { if (!playing) return; playing = false; cancelAnimationFrame(raf); audio.stop(); syncVideos(); playBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M7 4l14 8-14 8z"/></svg>'; playBtn.setAttribute("aria-label", "Play"); }
 const toggle = () => (playing ? pause() : play());
 playBtn.onclick = toggle; stage.onclick = toggle;
 document.getElementById("restart").onclick = () => { seek(0, true); play(); };
 rangeEl.oninput = () => seek(+rangeEl.value, true);
 muteBtn.onclick = () => setMuted(!muted);
 function setMuted(m) { muted = m; audio.setMuted(m); muteBtn.innerHTML = m ? '<svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 4V5L7 9zM16 9l5 5m0-5-5 5" stroke="currentColor" stroke-width="2" fill="none"/></svg>' : '<svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 4V5L7 9zM16 8a4.5 4.5 0 0 1 0 8v-2a2.5 2.5 0 0 0 0-4zM16 4a8 8 0 0 1 0 16v-2a6 6 0 0 0 0-12z"/></svg>'; muteBtn.setAttribute("aria-label", m ? "Unmute" : "Mute"); }
+const chapterAt = (dir) => { const i = SCENES.findIndex((sc) => sc.at <= t && t < sc.end); const j = Math.max(0, Math.min(SCENES.length - 1, (i < 0 ? 0 : i) + dir)); return SCENES[j].at + 0.02; };
 addEventListener("keydown", (e) => {
   if (e.target.tagName === "INPUT" && e.key !== " ") return;
-  const big = e.shiftKey ? 10 : 2;
   if (e.key === " ") { e.preventDefault(); toggle(); }
-  else if (e.key === "ArrowRight") { e.preventDefault(); seek(t + big, true); }
-  else if (e.key === "ArrowLeft") { e.preventDefault(); seek(t - big, true); }
+  else if (e.key === "ArrowRight") { e.preventDefault(); seek(e.shiftKey ? t + 2 : chapterAt(1), true); }
+  else if (e.key === "ArrowLeft") { e.preventDefault(); seek(e.shiftKey ? t - 2 : chapterAt(-1), true); }
   else if (e.key === "Home") seek(0, true);
   else if (e.key === "End") seek(DURATION - 0.01, true);
   else if (e.key.toLowerCase() === "m") setMuted(!muted);
   else if (/^[0-9]$/.test(e.key)) seek(DURATION * (+e.key) / 10, true);
 });
 const chapters = document.getElementById("chapters");
-SCENES.forEach((sc) => { const b = el("button", "", `${sc.name} <span style="opacity:.6">${fmt(sc.at)}</span>`); b.onclick = () => { seek(sc.at + 0.02, true); if (!playing) play(); }; chapters.appendChild(b); });
+SCENES.forEach((sc) => { const bt = el("button", "", `${sc.name} <span style="opacity:.6">${fmt(sc.at)}</span>`); bt.onclick = () => { seek(sc.at + 0.02, true); if (!playing) play(); }; chapters.appendChild(bt); });
 const trackEl = document.querySelector(".track");
 SCENES.forEach((sc) => { if (sc.at) trackEl.appendChild(el("em", "", "", `left:${sc.at / DURATION * 100}%`)); });
 
-// ---- Sound: a synthesised soundtrack and a few quiet effects, scheduled on the same clock ----
+// ---- Sound: a small jazz combo, synthesised, scheduled on the same clock ----
+// 126 BPM with swung eighths: walking bass, brushed hats and a rim on 2 and 4, a Rhodes-like stab every two bars,
+// a short horn riff at every section change, one chord to end. Every cut is on the grid, so the effects sit on it too.
 const audio = (() => {
   let ctx = null, master = null, music = null, fx = null, base = 0, step = 0, fxIndex = 0, running = false, noise = null;
-  const BPM = 118, STEP = 60 / BPM / 4;
+  const STEP = BEAT / 4, SW = BEAT / 6;             // a sixteenth, and the swing (off-beat eighths land a triplet late)
+  const swing = (s) => (s % 4 === 2 ? SW : 0);
   const N = (n) => 440 * Math.pow(2, (n - 69) / 12);
-  const ensure = () => { if (ctx) return; ctx = new (window.AudioContext || window.webkitAudioContext)(); master = ctx.createGain(); master.gain.value = muted ? 0 : 0.9; master.connect(ctx.destination); music = ctx.createGain(); music.gain.value = 0.5; music.connect(master); fx = ctx.createGain(); fx.gain.value = 0.45; fx.connect(master); };
-  const noiseBuf = () => { const b = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate); const d = b.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; return b; };
+  const ensure = () => { if (ctx) return; ctx = new (window.AudioContext || window.webkitAudioContext)(); master = ctx.createGain(); master.gain.value = muted ? 0 : 0.9; master.connect(ctx.destination); music = ctx.createGain(); music.gain.value = 0.42; music.connect(master); fx = ctx.createGain(); fx.gain.value = 0.4; fx.connect(master); };
+  const noiseBuf = () => { const bf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate); const d = bf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; return bf; };
   const env = (g, at, a, d, peak = 1) => { g.gain.cancelScheduledValues(at); g.gain.setValueAtTime(0.0001, at); g.gain.linearRampToValueAtTime(peak, at + a); g.gain.exponentialRampToValueAtTime(0.0001, at + a + d); };
-  const osc = (type, f, at, len, out, { a = 0.005, d = 0.2, peak = 0.3, slide = null, filter = null } = {}) => { const o = ctx.createOscillator(); o.type = type; o.frequency.setValueAtTime(f, at); if (slide) o.frequency.exponentialRampToValueAtTime(slide, at + len); const g = ctx.createGain(); env(g, at, a, d, peak); o.connect(g); if (filter) { const fl = ctx.createBiquadFilter(); fl.type = "lowpass"; fl.frequency.value = filter; g.connect(fl); fl.connect(out); } else g.connect(out); o.start(at); o.stop(at + len + 0.05); };
+  const osc = (type, f, at, len, out, { a = 0.005, d = 0.2, peak = 0.3, slide = null, filter = null, q = 0 } = {}) => { const o = ctx.createOscillator(); o.type = type; o.frequency.setValueAtTime(f, at); if (slide) o.frequency.exponentialRampToValueAtTime(slide, at + len); const g = ctx.createGain(); env(g, at, a, d, peak); o.connect(g); if (filter) { const fl = ctx.createBiquadFilter(); fl.type = "lowpass"; fl.frequency.value = filter; fl.Q.value = q; g.connect(fl); fl.connect(out); } else g.connect(out); o.start(at); o.stop(at + a + d + 0.05); };
   const burst = (at, len, out, { hp = 1000, lp = 12000, peak = 0.4, d = 0.08 } = {}) => { noise ||= noiseBuf(); const src = ctx.createBufferSource(); src.buffer = noise; const h = ctx.createBiquadFilter(); h.type = "highpass"; h.frequency.value = hp; const l = ctx.createBiquadFilter(); l.type = "lowpass"; l.frequency.value = lp; const g = ctx.createGain(); env(g, at, 0.002, d, peak); src.connect(h); h.connect(l); l.connect(g); g.connect(out); src.start(at); src.stop(at + len + 0.05); };
-  const kick = (at) => osc("sine", 140, at, 0.3, music, { d: 0.26, peak: 0.8, slide: 42 });
-  const snare = (at) => { burst(at, 0.2, music, { hp: 1800, peak: 0.28, d: 0.12 }); osc("triangle", 180, at, 0.15, music, { d: 0.1, peak: 0.2, slide: 110 }); };
-  const hat = (at, open = false) => burst(at, open ? 0.25 : 0.06, music, { hp: 7500, peak: open ? 0.12 : 0.09, d: open ? 0.18 : 0.04 });
-  const bass = (at, n, len) => osc("sawtooth", N(n), at, len, music, { d: len * 0.9, peak: 0.24, filter: 650 });
-  const pluck = (at, n) => osc("triangle", N(n), at, 0.4, music, { d: 0.35, peak: 0.15 });
-  const pad = (at, ns, len = 1.8) => ns.forEach((n) => osc("triangle", N(n), at, len, music, { a: 0.08, d: len * 0.9, peak: 0.05 }));
-  const stab = (at, ns) => ns.forEach((n) => osc("square", N(n), at, 0.22, music, { d: 0.18, peak: 0.05, filter: 2000 }));
-  // D major, a loop of four: D, A, Bm, G.
-  const CH = [[62, 66, 69, 73], [57, 61, 64, 69], [59, 62, 66, 69], [55, 59, 62, 67]];
-  const ARP = [[74, 78, 81, 86], [69, 73, 76, 81], [71, 74, 78, 81], [67, 71, 74, 79]];
-  const section = (tt) => (tt < 5.2 ? 0 : tt < 50.6 ? 1 : tt < 57.6 ? 2 : 3);
+  // The combo.
+  const bass = (at, n, len = BEAT * 0.95) => { osc("triangle", N(n), at, len, music, { a: 0.012, d: len * 1.1, peak: 0.55, filter: 380 }); osc("sine", N(n), at, len, music, { a: 0.012, d: len, peak: 0.2 }); burst(at, 0.03, music, { hp: 1500, lp: 4000, peak: 0.05, d: 0.02 }); };
+  const hat = (at, acc = false) => burst(at, 0.06, music, { hp: 7000, lp: 14000, peak: acc ? 0.075 : 0.045, d: acc ? 0.045 : 0.03 });
+  const brush = (at) => burst(at, 0.3, music, { hp: 2500, lp: 7000, peak: 0.03, d: 0.24 });
+  const rim = (at) => { burst(at, 0.04, music, { hp: 2500, lp: 6500, peak: 0.13, d: 0.025 }); osc("sine", 840, at, 0.05, music, { d: 0.04, peak: 0.09, slide: 600 }); };
+  const kick = (at) => osc("sine", 105, at, 0.25, music, { d: 0.2, peak: 0.3, slide: 48 });
+  const rhodes = (at, ns, len = 1.4, peak = 0.07) => ns.forEach((n) => { const f = N(n); osc("sine", f, at, len, music, { a: 0.012, d: len, peak }); osc("sine", f * 2, at, len * 0.5, music, { a: 0.006, d: len * 0.45, peak: peak * 0.25 }); osc("triangle", f, at, 0.1, music, { a: 0.002, d: 0.09, peak: peak * 0.35, filter: 2500 }); });
+  const horn = (at, n, len, peak = 0.055) => { osc("sawtooth", N(n), at, len, music, { a: 0.03, d: len, peak, filter: 1400, q: 2 }); osc("sawtooth", N(n - 12), at, len, music, { a: 0.03, d: len, peak: peak * 0.4, filter: 900 }); };
+  // F major, eight bars: Fmaj7 Dm7 Gm7 C7 Am7 Dm7 Gm7 C7, with a walking line under each.
+  const CH = [[65, 69, 72, 76], [62, 65, 69, 72], [67, 70, 74, 77], [60, 64, 67, 70], [69, 72, 76, 79], [62, 65, 69, 72], [67, 70, 74, 77], [60, 64, 67, 70]];
+  const BL = [[41, 45, 48, 50], [50, 48, 45, 43], [43, 46, 50, 47], [48, 40, 43, 44], [45, 48, 52, 50], [50, 48, 45, 44], [43, 46, 50, 49], [48, 46, 44, 42]];
+  const chordAt = (tt) => CH[Math.floor(tt / BEAT / 4) % 8];
+  const section = (tt) => (tt < b(8) ? 0 : tt < b(78) ? 1 : 2);
   const atStep = (i, when) => {
-    const bar = Math.floor(i / 16), s16 = i % 16, chord = CH[bar % 4], arp = ARP[bar % 4], sec = section(i * STEP);
-    if (sec === 0) { if (s16 === 0) pad(when, chord, 1.9); if (s16 % 4 === 2) pluck(when, arp[(s16 >> 2) % 4]); }
-    else if (sec === 1) {
-      if (s16 === 0 || s16 === 7 || s16 === 8 || s16 === 14) kick(when);
-      if (s16 === 4 || s16 === 12) snare(when);
-      if (s16 % 2 === 0) hat(when, s16 === 10);
-      if (s16 % 4 === 0 || s16 === 6 || s16 === 14) bass(when, chord[0] - 24, STEP * 1.8);
-      if (s16 === 0 || s16 === 10) stab(when, chord);
-      if ([2, 5, 9, 13].includes(s16)) pluck(when, arp[(s16 + bar) % 4]);
-      if (s16 === 0 && bar % 2) pad(when, chord.map((n) => n + 12), 1.6);
-    } else if (sec === 2) { if (s16 === 0) { kick(when); pad(when, chord, 2.0); bass(when, chord[0] - 24, STEP * 6); } if (s16 === 8) hat(when, true); if (s16 % 4 === 2) pluck(when, arp[(s16 >> 2) % 4] + 12); }
-    else { if (s16 === 0 && bar % 2 === 0) { kick(when); pad(when, chord.map((n) => n + 12), 2.4); bass(when, chord[0] - 24, STEP * 8); } if (s16 % 4 === 2) pluck(when, arp[(s16 >> 2) % 4] + 12); }
+    const bar = Math.floor(i / 16), s = i % 16, sec = section(i * STEP), ch = CH[bar % 8], bl = BL[bar % 8], w = when + swing(s);
+    if (sec === 2) return;
+    if (s % 2 === 0) hat(w, s % 8 === 4);
+    if (sec === 1 && (s === 4 || s === 12)) { rim(w); brush(w + 0.02); }
+    if (sec === 1 && s === 0) kick(when);
+    if (s % 4 === 0 && (sec === 1 || bar >= 1)) bass(when, bl[s >> 2]);
+    if (sec === 1 && s === 14 && bar % 2 === 1) bass(w, bl[3] + 1, STEP * 1.2);
+    if (s === 0 && bar % 2 === 0) rhodes(when, ch);
+    if (sec === 1 && s === 14 && bar % 2 === 1) rhodes(w, CH[(bar + 1) % 8], 0.5, 0.045);
   };
   const effects = {
-    tick: (w) => osc("sine", 1400, w, 0.05, fx, { d: 0.04, peak: 0.12 }),
-    blip: (w) => osc("sine", 880, w, 0.09, fx, { d: 0.08, peak: 0.16, slide: 1320 }),
-    whoosh: (w) => burst(w, 0.35, fx, { hp: 500, lp: 3500, peak: 0.16, d: 0.3 }),
-    soft: (w) => osc("sine", N(74), w, 0.6, fx, { a: 0.02, d: 0.5, peak: 0.12 }),
-    chime: (w) => { osc("sine", N(86), w, 0.9, fx, { d: 0.8, peak: 0.18 }); osc("sine", N(93), w + 0.08, 0.9, fx, { d: 0.8, peak: 0.12 }); },
+    tick: (w) => osc("sine", 1600, w, 0.04, fx, { d: 0.03, peak: 0.06 }),
+    blip: (w) => osc("sine", 880, w, 0.09, fx, { d: 0.08, peak: 0.1, slide: 1320 }),
+    pop: (w) => { osc("sine", 520, w, 0.1, fx, { d: 0.09, peak: 0.16, slide: 1040 }); burst(w, 0.03, fx, { hp: 3000, lp: 9000, peak: 0.08, d: 0.02 }); },
+    whoosh: (w) => burst(w - 0.08 > 0 ? w - 0.08 : w, 0.3, fx, { hp: 600, lp: 4000, peak: 0.13, d: 0.24 }),
+    draw: (w) => burst(w, 0.5, fx, { hp: 2500, lp: 6000, peak: 0.05, d: 0.45 }),
+    rise: (w) => osc("sine", 300, w, 0.5, fx, { a: 0.05, d: 0.45, peak: 0.06, slide: 900 }),
+    stamp: (w) => { osc("sine", 120, w, 0.18, fx, { d: 0.16, peak: 0.3, slide: 50 }); burst(w, 0.05, fx, { hp: 800, lp: 5000, peak: 0.12, d: 0.04 }); },
+    thud: (w) => { osc("sine", 160, w, 0.12, fx, { d: 0.1, peak: 0.16, slide: 70 }); burst(w, 0.04, fx, { hp: 1500, lp: 6000, peak: 0.05, d: 0.03 }); },
+    horn: (w) => { const ch = chordAt(w - base); const ns = [ch[2], ch[3], ch[0] + 12]; horn(w, ns[0], 0.16); horn(w + BEAT / 2 + SW, ns[1], 0.16); horn(w + BEAT, ns[2], 0.5, 0.065); },
+    hold: (w) => { bass(w, 41, 1.6); rhodes(w, [65, 69, 72, 76], 1.6, 0.06); },
+    hold2: (w) => { bass(w, 48, 0.9); rhodes(w, [60, 64, 67, 70], 0.9, 0.05); },
+    final: (w) => { bass(w, 41, 2.4); rhodes(w, [53, 57, 60, 64, 67, 72], 2.6, 0.075); burst(w, 0.6, music, { hp: 5000, lp: 12000, peak: 0.05, d: 0.5 }); osc("sine", N(89), w + 0.1, 1.2, fx, { d: 1.1, peak: 0.07 }); },
   };
-  SFX.sort((a, b) => a[0] - b[0]);
+  // Section changes get the horn; the closer gets its own three chords.
+  for (const n of [8, 22, 32, 56, 68]) sfx(b(n), "horn");
+  sfx(b(78), "hold"); sfx(b(80), "hold2");
+  SFX.sort((a, c) => a[0] - c[0]);
   const LOOK = 0.25;
   function start(at) { ensure(); if (ctx.state === "suspended") ctx.resume(); base = ctx.currentTime - at; step = Math.ceil(at / STEP); fxIndex = SFX.findIndex(([x]) => x >= at); if (fxIndex < 0) fxIndex = SFX.length; running = true; schedule(at); }
   function schedule(now) {
@@ -394,6 +634,8 @@ const audio = (() => {
 
 seek(0);
 startEl.onclick = (e) => { e.stopPropagation(); play(); };
+// For the recorder and for scripts: the clock, exposed.
+window.reel = { seek: (x) => seek(x, true), play, pause, get duration() { return DURATION; }, get time() { return t; } };
 </script>
 </body>
 </html>
