@@ -2,7 +2,7 @@
 // default link access of files put on the server, and who may decide a branch review.
 import { after, before, describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { call, connect, createFile, sampleDoc, signUp, startServer, verifyAccount, waitUntil } from "./helpers.mjs";
+import { call, connect, createFile, sampleDoc, signUp, signupCode, startServer, verifyAccount, waitUntil } from "./helpers.mjs";
 
 describe("sign-up is limited per address", () => {
     let server;
@@ -303,7 +303,8 @@ describe("invitations to an email address belong to the account once it exists",
     after(async () => server?.stop());
 
     test("signing up turns the invite into membership; changing the email keeps it; the old address gives nothing", async () => {
-        const r = await call(server, "POST", "/auth/signup", { body: { name: "Later", email, password: "correct horse battery" } });
+        assert.equal((await call(server, "POST", "/auth/signup", { body: { name: "Later", email, password: "correct horse battery" } })).status, 202);
+        const r = await call(server, "POST", "/auth/signup/confirm", { body: { email, code: await signupCode(server, email) } });
         assert.equal(r.status, 200);
         const later = { token: r.body.token, user: r.body.user };
         const access = await call(server, "GET", `/files/${file.id}/access`, { token: owner.token });
@@ -323,7 +324,8 @@ describe("invitations to an email address belong to the account once it exists",
         assert.equal((await call(server, "POST", "/account/email/verify", { body: { token } })).status, 200);
         assert.equal((await call(server, "GET", `/files/${file.id}/doc`, { token: later.token })).status, 200);
         // Someone signing up with the old address later gets nothing.
-        const squatter = await call(server, "POST", "/auth/signup", { body: { name: "Squatter", email, password: "correct horse battery" } });
+        assert.equal((await call(server, "POST", "/auth/signup", { body: { name: "Squatter", email, password: "correct horse battery" } })).status, 202);
+        const squatter = await call(server, "POST", "/auth/signup/confirm", { body: { email, code: await signupCode(server, email) } });
         assert.equal(squatter.status, 200);
         assert.equal((await call(server, "GET", `/files/${file.id}/doc`, { token: squatter.body.token })).status, 403);
     });

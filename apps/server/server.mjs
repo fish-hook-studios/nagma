@@ -3,7 +3,7 @@
 // Collaborators apply the same patches in the same order, so everyone ends up with the same file.
 // First: settings under the product's old name are read as NAGMA_* (legacy-names.mjs).
 import "./legacy-names.mjs";
-import { createHash, createHmac, createPublicKey, randomBytes, randomUUID, scryptSync, timingSafeEqual, verify as cryptoVerify } from "node:crypto";
+import { createHash, createHmac, createPublicKey, randomBytes, randomInt, randomUUID, scryptSync, timingSafeEqual, verify as cryptoVerify } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
 import { createReadStream, readFileSync } from "node:fs";
 import { createServer, request as httpRequest } from "node:http";
@@ -414,6 +414,31 @@ function takeInviteToken(token, email) {
 // The token to put in an invitation mailed to `email`: none for an account that's already verified.
 const inviteTokenFor = (email) => (isVerified(userByEmail(email)) ? null : inviteEmailToken(email));
 
+// ---- Sign-up with a code: the address is proven before the account exists ----
+// When this server can deliver mail, sign-up doesn't make an account. It keeps the name and
+// password (hashed) as a pending sign-up for 15 minutes and mails a six-digit code; the account is
+// created when the code comes back, verified from its first moment. A mistyped address therefore
+// never owns an account. Five wrong codes end the attempt; a new code replaces the old one.
+const PENDING_TTL_MS = 15 * 60 * 1000;
+const PENDING_ATTEMPTS = 5;
+function sweepPending(now = Date.now()) {
+    accounts.pending ??= {};
+    let changed = false;
+    for (const [email, p] of Object.entries(accounts.pending)) if (p.expires < now) { delete accounts.pending[email]; changed = true; }
+    if (changed) saveAccounts();
+}
+async function sendSignupCode(pending, email, origin, now = Date.now()) {
+    const code = String(randomInt(0, 1000000)).padStart(6, "0");
+    pending.codeHash = hashToken(`${email}:${code}`);
+    pending.expires = now + PENDING_TTL_MS;
+    pending.attempts = 0;
+    pending.sent = [...(pending.sent ?? []).filter((t) => now - t < 60 * 60 * 1000), now];
+    saveAccounts();
+    const sent = await sendMail(email, `${code} is your Nagma code`, `Your Nagma code is ${code}\n\nEnter it in the app to finish creating your account. It expires in 15 minutes.\n\nIf you didn't ask for an account, ignore this message.`);
+    const kept = sent ? false : await keepUnsentLink(DATA, "email-links.txt", `${new Date(now).toISOString()} sign-up code for ${email}: ${code} (valid 15 minutes)\n`, email);
+    return { sent, kept, mailConfigured: mailConfigured() };
+}
+
 // ---- Single sign-on: shared by OpenID Connect (below) and SAML (saml.mjs) ----
 
 // The Nagma account for someone the identity provider signed in: found by email, or made on their
@@ -661,12 +686,61 @@ async function serveAuth(req, res) {
         const salt = randomBytes(16).toString("base64");
         // An emailed invitation's token for this address proves it at once.
         const invited = typeof body.emailToken === "string" && body.emailToken ? takeInviteToken(body.emailToken, email) : false;
+        if (!invited && verifyRequired() && mailReady()) {
+            // The address is proven first: a code goes out, the account is made when it comes back.
+            // (Required without mail: the account is made unverified and a server admin vouches for it.)
+            sweepPending();
+            const existing = accounts.pending[email];
+            const wait = existing ? resendWaitFor(existing.sent ?? []) : 0;
+            if (wait) return tooMany(res, wait);
+            const pending = { name, salt, hash: hashPassword(password, salt), createdAt: Date.now(), origin: String(body.origin ?? "") };
+            accounts.pending[email] = pending;
+            noteSignup(req);
+            const verification = await sendSignupCode(pending, email, body.origin);
+            return json(202, { pending: true, email, verification });
+        }
         const user = { id: randomBytes(9).toString("base64url"), name, email, color: USER_COLORS[accounts.users.length % USER_COLORS.length], salt, hash: hashPassword(password, salt), createdAt: Date.now(), emailVerified: invited };
         accounts.users.push(user);
         noteSignup(req);
         await claimEmailInvites(user, email);
-        const verification = invited ? { sent: false, kept: false, mailConfigured: mailConfigured() } : mailReady() ? await sendVerification(user, body.origin) : { sent: false, kept: false, mailConfigured: false };
+        const verification = invited ? { sent: false, kept: false, mailConfigured: mailConfigured() } : { sent: false, kept: false, mailConfigured: false };
         return json(200, { token: startSession(user), user: selfUser(user), verification });
+    }
+    if (path === "/auth/signup/confirm") {
+        sweepPending();
+        const email = String(body.email ?? "").trim().toLowerCase().slice(0, 120);
+        const code = String(body.code ?? "").replace(/\s+/g, "");
+        const pending = accounts.pending[email];
+        if (!pending) return json(400, { error: "That sign-up has expired. Start again." });
+        if (!/^\d{6}$/.test(code)) return json(400, { error: "Enter the six-digit code from the email." });
+        const hash = hashToken(`${email}:${code}`);
+        const ok = typeof pending.codeHash === "string" && pending.codeHash.length === hash.length && timingSafeEqual(Buffer.from(pending.codeHash), Buffer.from(hash));
+        if (!ok) {
+            pending.attempts = (pending.attempts ?? 0) + 1;
+            if (pending.attempts >= PENDING_ATTEMPTS) {
+                delete accounts.pending[email];
+                saveAccounts();
+                return json(400, { error: "Too many wrong codes. Start the sign-up again." });
+            }
+            saveAccounts();
+            return json(400, { error: `That code isn't right. ${PENDING_ATTEMPTS - pending.attempts} ${PENDING_ATTEMPTS - pending.attempts === 1 ? "try" : "tries"} left.` });
+        }
+        delete accounts.pending[email];
+        if (userByEmail(email)) { saveAccounts(); return json(409, { error: "There's already an account with that email. Sign in instead." }); }
+        const user = { id: randomBytes(9).toString("base64url"), name: pending.name, email, color: USER_COLORS[accounts.users.length % USER_COLORS.length], salt: pending.salt, hash: pending.hash, createdAt: Date.now(), emailVerified: true };
+        accounts.users.push(user);
+        saveAccounts();
+        await claimEmailInvites(user, email);
+        return json(200, { token: startSession(user), user: selfUser(user), verification: { sent: false, kept: false, mailConfigured: mailConfigured() } });
+    }
+    if (path === "/auth/signup/resend") {
+        sweepPending();
+        const email = String(body.email ?? "").trim().toLowerCase().slice(0, 120);
+        const pending = accounts.pending[email];
+        if (!pending) return json(400, { error: "That sign-up has expired. Start again." });
+        const wait = resendWaitFor(pending.sent ?? []);
+        if (wait) return tooMany(res, wait);
+        return json(200, await sendSignupCode(pending, email, body.origin || pending.origin));
     }
     if (path === "/auth/signin") {
         const keys = limitKeys(req, body.email);

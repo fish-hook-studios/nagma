@@ -4,7 +4,7 @@ import { after, before, describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { call, signUp, sleep, startServer, waitUntil } from "./helpers.mjs";
+import { call, signUp, signupCode, sleep, startServer, waitUntil } from "./helpers.mjs";
 
 // Every request here comes from 127.0.0.1, and failed attempts count per address too, so each
 // scenario that fails on purpose speaks from its own forwarded address (TRUST_PROXY=1).
@@ -16,8 +16,13 @@ describe("auth", () => {
     before(async () => (server = await startServer({ TRUST_PROXY: "1", NAGMA_DEV_MAIL_FILE: "1" })));
     after(async () => server?.stop());
 
-    test("sign up returns a session and the public user (no hash or salt)", async () => {
-        const r = await call(server, "POST", "/auth/signup", { body: { name: "  Ada  ", email: "  ADA@Example.COM ", password: "longenough1" }, headers: freshIp() });
+    test("sign up proves the address with a code, then returns a session and the public user (no hash or salt)", async () => {
+        const started = await call(server, "POST", "/auth/signup", { body: { name: "  Ada  ", email: "  ADA@Example.COM ", password: "longenough1" }, headers: freshIp() });
+        assert.equal(started.status, 202);
+        assert.equal(started.body.pending, true);
+        assert.equal(started.body.email, "ada@example.com");
+        assert.equal(started.body.token, undefined);
+        const r = await call(server, "POST", "/auth/signup/confirm", { body: { email: "ada@example.com", code: await signupCode(server, "ada@example.com") }, headers: freshIp() });
         assert.equal(r.status, 200);
         assert.ok(r.body.token.length >= 30);
         assert.equal(r.body.user.email, "ada@example.com");
@@ -221,7 +226,8 @@ describe("auth", () => {
         await call(server, "POST", "/account/email", { token: a.token, body: { email: next, password: a.password }, headers: freshIp() });
         const lines = await waitUntil(async () => (await readFile(join(server.dataDir, "email-links.txt"), "utf8").catch(() => "")).split("\n").filter((l) => l.includes(a.user.id)));
         const token = /verify-email=([A-Za-z0-9_-]+)/.exec(lines.at(-1))[1];
-        const r = await call(server, "POST", "/auth/signup", { body: { name: "Quick", email: next, password: "longenough1" }, headers: freshIp() });
+        assert.equal((await call(server, "POST", "/auth/signup", { body: { name: "Quick", email: next, password: "longenough1" }, headers: freshIp() })).status, 202);
+        const r = await call(server, "POST", "/auth/signup/confirm", { body: { email: next, code: await signupCode(server, next) }, headers: freshIp() });
         assert.equal(r.status, 200);
         assert.equal((await call(server, "POST", "/account/email/verify", { body: { token } })).status, 409);
     });

@@ -217,18 +217,46 @@ const emailToken = () => {
 // address may be the desktop app's own (localhost), which the mail's reader can't use; otherwise here.
 export const mailLinkOrigin = () => remoteLinkBase() ?? location.origin;
 
-export async function signUp(name: string, email: string, password: string): Promise<Verification | undefined> {
+// Sign-up on a server that can send mail proves the address first: the server answers "pending"
+// and mails a six-digit code, and the account only exists once confirmSignUp has it. Elsewhere (no
+// mail, or an invitation's token for this address) the account is made and signed in at once.
+export interface PendingSignUp {
+    pending: true;
+    email: string;
+    verification: Verification;
+}
+
+export async function signUp(name: string, email: string, password: string): Promise<PendingSignUp | Verification | undefined> {
     const token = emailToken();
-    const r = await call("/auth/signup", { name, email, password, origin: mailLinkOrigin(), ...(token ? { emailToken: token } : {}) });
-    if (r.user.emailVerified) {
+    const res = await fetch(`${httpBase()}/auth/signup`, { method: "POST", headers: { "content-type": "application/json", ...authHeaders() }, body: JSON.stringify({ name, email, password, origin: mailLinkOrigin(), ...(token ? { emailToken: token } : {}) }) });
+    const data = (await res.json().catch(() => ({}))) as { token?: string; user?: Account; error?: string; verification?: Verification; pending?: boolean; email?: string };
+    if (!res.ok) throw new Error(data.error ?? `The server answered ${res.status}.`);
+    if (data.pending) return { pending: true, email: data.email ?? email, verification: data.verification ?? { sent: false, kept: false, mailConfigured: false } };
+    if (!data.token || !data.user) throw new Error(`The server answered ${res.status}.`);
+    if (data.user.emailVerified) {
         try {
             sessionStorage.removeItem(EMAIL_TOKEN_KEY);
         } catch {
             // Nothing kept.
         }
     }
+    become(data.user, data.token);
+    return data.verification;
+}
+
+export const isPendingSignUp = (r: PendingSignUp | Verification | undefined): r is PendingSignUp => Boolean(r && (r as PendingSignUp).pending);
+
+// The code from the sign-up mail: the account is created, verified, and signed in.
+export async function confirmSignUp(email: string, code: string): Promise<void> {
+    const r = await call("/auth/signup/confirm", { email, code });
     become(r.user, r.token);
-    return r.verification;
+}
+
+export async function resendSignUpCode(email: string): Promise<Verification> {
+    const res = await fetch(`${httpBase()}/auth/signup/resend`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, origin: mailLinkOrigin() }) });
+    const data = (await res.json().catch(() => ({}))) as Verification & { error?: string };
+    if (!res.ok) throw new Error(data.error ?? `The server answered ${res.status}.`);
+    return data;
 }
 
 // ---- Email verification ----

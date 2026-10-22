@@ -1,7 +1,7 @@
 import { X } from "@untitledui/icons";
 import { useEffect, useState } from "react";
 import { Button as AriaButton, Dialog as AriaDialog, Modal as AriaModal, ModalOverlay as AriaModalOverlay } from "react-aria-components";
-import { changePassword, closeSignIn, listSessions, requestReset, resetPassword, setChatWebhook, setEmailDigests, signIn, signOutOtherSessions, signUp, ssoInfo, startSso, useAuth } from "../engine/auth";
+import { changePassword, closeSignIn, confirmSignUp, isPendingSignUp, listSessions, requestReset, resendSignUpCode, resetPassword, setChatWebhook, setEmailDigests, signIn, signOutOtherSessions, signUp, ssoInfo, startSso, useAuth } from "../engine/auth";
 import { acceptInvite, lookupInvite } from "../engine/teams";
 import { editor } from "../engine/store";
 import { currentServerLabel, openServerPicker } from "../engine/servers";
@@ -24,9 +24,18 @@ export function AuthModal() {
 }
 
 export function AuthForm({ onDone, compact, intro, initialMode = "in" }: { onDone?: () => void; compact?: boolean; intro?: string; initialMode?: "in" | "up" }) {
-    const [mode, setMode] = useState<"in" | "up" | "forgot" | "sso">(initialMode);
+    const [mode, setMode] = useState<"in" | "up" | "forgot" | "sso" | "code">(initialMode);
     const adding = useAuth((s) => s.adding);
     const [sent, setSent] = useState<{ mailConfigured: boolean; devMailFile: boolean } | null>(null);
+    // Sign-up with a code: the address the code went to, the code typed, and how the code was delivered.
+    const [code, setCode] = useState("");
+    const [codeTo, setCodeTo] = useState<{ email: string; kept: boolean; mailConfigured: boolean } | null>(null);
+    const [resendIn, setResendIn] = useState(0);
+    useEffect(() => {
+        if (!resendIn) return;
+        const id = setTimeout(() => setResendIn((n) => n - 1), 1000);
+        return () => clearTimeout(id);
+    }, [resendIn]);
     const [name, setName] = useState("");
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
@@ -51,8 +60,19 @@ export function AuthForm({ onDone, compact, intro, initialMode = "in" }: { onDon
                 await startSso(email.trim());
                 return;
             }
-            if (mode === "up") await signUp(name.trim(), email.trim(), password);
-            else await signIn(email.trim(), password);
+            if (mode === "code") {
+                await confirmSignUp(codeTo?.email ?? email.trim(), code);
+            } else if (mode === "up") {
+                const r = await signUp(name.trim(), email.trim(), password);
+                if (isPendingSignUp(r)) {
+                    // No account yet: the code from the mail makes it.
+                    setCodeTo({ email: r.email, kept: r.verification.kept, mailConfigured: r.verification.mailConfigured });
+                    setCode("");
+                    setResendIn(60);
+                    setMode("code");
+                    return;
+                }
+            } else await signIn(email.trim(), password);
             onDone?.();
         } catch (err) {
             setError(err instanceof Error ? err.message : String(err));
@@ -66,7 +86,7 @@ export function AuthForm({ onDone, compact, intro, initialMode = "in" }: { onDon
             {!compact && (
                 <div className="flex items-start justify-between">
                     <div>
-                        <h2 className="text-[14px] font-semibold">{mode === "up" ? "Create your account" : mode === "forgot" ? "Reset your password" : mode === "sso" ? "Sign in with SSO" : adding ? "Add an account" : "Sign in"}</h2>
+                        <h2 className="text-[14px] font-semibold">{mode === "code" ? "Check your email" : mode === "up" ? "Create your account" : mode === "forgot" ? "Reset your password" : mode === "sso" ? "Sign in with SSO" : adding ? "Add an account" : "Sign in"}</h2>
                         {intro ? <p className="mt-1 text-[12px] text-ink">{intro}</p> : <p className="mt-1 text-[12px] text-ink-muted">Accounts live on your Nagma server. They own files and get invited to others.</p>}
                         <p className="mt-2 flex items-center gap-1.5 text-[12px] text-ink-muted">
                             <span className="min-w-0 truncate">
@@ -91,7 +111,7 @@ export function AuthForm({ onDone, compact, intro, initialMode = "in" }: { onDon
                     )}
                 </div>
             )}
-            {mode !== "forgot" && mode !== "sso" && sso?.enabled && (
+            {mode !== "forgot" && mode !== "sso" && mode !== "code" && sso?.enabled && (
                 <>
                     <button type="button" onClick={() => (setMode("sso"), setError(null))} className="h-9 w-full rounded-md border border-panel-border text-[12px] font-medium hover:bg-panel-hover">
                         Sign in with SSO{sso.name ? ` (${sso.name})` : ""}
@@ -104,7 +124,7 @@ export function AuthForm({ onDone, compact, intro, initialMode = "in" }: { onDon
                 </>
             )}
             {mode === "sso" && <p className="text-[12px] text-ink-muted">Enter your work email. Your organization's identity provider signs you in.</p>}
-            {mode !== "forgot" && mode !== "sso" && (
+            {mode !== "forgot" && mode !== "sso" && mode !== "code" && (
                 <div className="grid grid-cols-2 gap-0.5 rounded-md bg-field p-0.5">
                     {(["in", "up"] as const).map((m) => (
                         <button key={m} type="button" onClick={() => setMode(m)} className={`h-7 rounded text-[11px] font-medium ${mode === m ? "bg-panel text-ink shadow-sm" : "text-ink-subtle hover:text-ink"}`}>
@@ -113,7 +133,28 @@ export function AuthForm({ onDone, compact, intro, initialMode = "in" }: { onDon
                     ))}
                 </div>
             )}
-            {mode === "forgot" && sent ? (
+            {mode === "code" && codeTo ? (
+                <>
+                    <p className="rounded-md bg-field p-3 text-[12px] leading-relaxed text-ink-muted">
+                        {codeTo.mailConfigured ? (
+                            <>
+                                We sent a six-digit code to <span className="font-medium text-ink">{codeTo.email}</span>. Enter it to finish creating your account. No account exists until you do.
+                            </>
+                        ) : codeTo.kept ? (
+                            <>
+                                Mail isn't set up on this server, so the code for <span className="font-medium text-ink">{codeTo.email}</span> was written to <code>data/email-links.txt</code> on the server.
+                            </>
+                        ) : (
+                            "Mail isn't set up on this server, so the code couldn't be sent. Ask an admin of this Nagma server to set up mail."
+                        )}
+                    </p>
+                    <input value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="6-digit code" aria-label="Code" inputMode="numeric" autoComplete="one-time-code" pattern="\d{6}" required autoFocus className={`${input} text-center text-[16px] tracking-[.3em]`} />
+                    {error && <div className="rounded-md bg-red-500/10 px-3 py-2 text-[11px] text-red-400">{error}</div>}
+                    <button type="submit" disabled={busy || code.length !== 6} className="h-9 w-full rounded-md bg-brand-500 text-[12px] font-semibold text-white hover:bg-brand-600 disabled:opacity-50">
+                        {busy ? "One moment…" : "Verify and create account"}
+                    </button>
+                </>
+            ) : mode === "forgot" && sent ? (
                 <p className="rounded-md bg-field p-3 text-[12px] leading-relaxed text-ink-muted">
                     {sent.mailConfigured ? (
                         "If there's an account for that email, we've sent it a reset link. It works for an hour."
@@ -139,7 +180,26 @@ export function AuthForm({ onDone, compact, intro, initialMode = "in" }: { onDon
                 </>
             )}
             <div className="flex justify-between text-[11px]">
-                {mode === "forgot" || mode === "sso" ? (
+                {mode === "code" ? (
+                    <>
+                        <button type="button" onClick={() => { setMode("up"); setCodeTo(null); setError(null); }} className="text-ink-muted hover:text-ink hover:underline">
+                            Wrong email? Go back
+                        </button>
+                        <button
+                            type="button"
+                            disabled={resendIn > 0 || busy}
+                            onClick={() => {
+                                setError(null);
+                                void resendSignUpCode(codeTo?.email ?? email.trim())
+                                    .then((v) => { setCodeTo((c) => (c ? { ...c, kept: v.kept, mailConfigured: v.mailConfigured } : c)); setResendIn(60); })
+                                    .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+                            }}
+                            className="text-ink-muted hover:text-ink hover:underline disabled:cursor-default disabled:no-underline disabled:opacity-60"
+                        >
+                            {resendIn > 0 ? `Send a new code in ${resendIn}s` : "Send a new code"}
+                        </button>
+                    </>
+                ) : mode === "forgot" || mode === "sso" ? (
                     <button type="button" onClick={() => { setMode("in"); setSent(null); setError(null); }} className="text-ink-muted hover:text-ink hover:underline">
                         Back to sign in
                     </button>

@@ -96,9 +96,21 @@ let counter = 0;
 export async function signUp(server, name = "Tester") {
     const email = `user${Date.now().toString(36)}${counter++}@example.com`;
     const password = "correct horse battery";
-    const r = await call(server, "POST", "/auth/signup", { body: { name, email, password } });
+    let r = await call(server, "POST", "/auth/signup", { body: { name, email, password } });
+    // A server that can deliver mail proves the address first: the code it kept confirms the sign-up.
+    if (r.status === 202 && r.body.pending) r = await call(server, "POST", "/auth/signup/confirm", { body: { email, code: await signupCode(server, email) } });
     if (r.status !== 200) throw new Error(`signup failed ${r.status} ${r.text}`);
     return { token: r.body.token, user: r.body.user, email, password };
+}
+
+// The latest sign-up code the server kept for `email` (NAGMA_DEV_MAIL_FILE=1).
+export async function signupCode(server, email, timeout = 4000) {
+    const { readFile } = await import("node:fs/promises");
+    return waitUntil(async () => {
+        const text = await readFile(join(server.dataDir, "email-links.txt"), "utf8").catch(() => "");
+        const lines = text.split("\n").filter((l) => l.includes(`sign-up code for ${email}:`));
+        return /: (\d{6}) \(valid/.exec(lines.at(-1) ?? "")?.[1] ?? null;
+    }, timeout);
 }
 
 // The latest verification link the server kept for `userId` (NAGMA_DEV_MAIL_FILE=1), as its token.
@@ -113,6 +125,8 @@ export async function verificationToken(server, userId, timeout = 4000) {
 
 // Opens the account's verification link (servers with NAGMA_DEV_MAIL_FILE=1). Returns the answer.
 export async function verifyAccount(server, account) {
+    // An account made through a sign-up code is verified from the start.
+    if (account.user?.emailVerified) return account.user;
     const token = await verificationToken(server, account.user.id);
     const r = await call(server, "POST", "/auth/verify", { body: { token } });
     if (r.status !== 200) throw new Error(`verify failed ${r.status} ${r.text}`);

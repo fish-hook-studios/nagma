@@ -1,36 +1,36 @@
-import { Key01, Laptop01, Server01, X } from "@untitledui/icons";
-import { type ReactNode, useEffect, useState } from "react";
+import { X } from "@untitledui/icons";
+import { useEffect } from "react";
 import { Button as AriaButton, Dialog as AriaDialog, Heading, Modal as AriaModal, ModalOverlay as AriaModalOverlay } from "react-aria-components";
-import { DOC_LINKS, type WelcomeChoice, chooseWelcome, markSeen, openDoc, showWelcomeOnce, useWelcomeOpen } from "../engine/onboarding";
+import { DOC_LINKS, chooseWelcome, markSeen, openDoc, showWelcomeOnce, useWelcomeOpen } from "../engine/onboarding";
 import { hostedServer, openServerPicker } from "../engine/servers";
-import { connectToHosted } from "../engine/share-hosted";
 import { useEditor } from "../engine/store";
 import { NagmaLogo } from "./nagma-logo";
 
-// Get started: the first time Home shows on this device, three ways to begin. Help › Get started
-// opens it again. What each card does is in engine/onboarding.ts.
+// Welcome: the first time Home shows on this device, three panels that say how Nagma works. Nothing
+// to decide: it closes with one button, and a server or an AI key can be added any time (Help ›
+// Get started opens this again; engine/onboarding.ts keeps what has been seen).
 
-const CARDS: { choice: WelcomeChoice; icon: ReactNode; title: string; body: string; doc: string }[] = [
+const PANELS: { key: string; title: string; body: string; doc: string; art: () => React.JSX.Element }[] = [
     {
-        choice: "local",
-        icon: <Laptop01 className="size-5" />,
-        title: "Use Nagma on this computer",
-        body: "Free, no account needed. Your files stay on this device as drafts.",
+        key: "local",
+        title: "It runs on your computer",
+        body: "Open it and work. Files are drafts on this device, there is no account to make, and nothing is uploaded until you choose a server.",
         doc: DOC_LINKS.gettingStarted,
+        art: LocalArt,
     },
     {
-        choice: "server",
-        icon: <Server01 className="size-5" />,
-        title: "Connect to a server",
-        body: "Share and work with anyone on Nagma's free hosted server, or on your own: your company's, or one you run in one command.",
+        key: "server",
+        title: "Work together on any server",
+        body: "Share and edit live with anyone on the free hosted server, your company's, or one you run with a single command.",
         doc: DOC_LINKS.connect,
+        art: ServerArt,
     },
     {
-        choice: "ai",
-        icon: <Key01 className="size-5" />,
-        title: "Add an AI key",
-        body: "AI features use your own key from the provider you choose. You pay them directly, if at all.",
+        key: "ai",
+        title: "AI with your own key",
+        body: "Make and the AI features use a key from the provider you pick. It stays on this device and you pay them directly, if at all.",
         doc: DOC_LINKS.aiKeys,
+        art: KeyArt,
     },
 ];
 
@@ -38,78 +38,123 @@ export function Onboarding() {
     const homeOpen = useEditor((s) => s.homeOpen);
     const open = useWelcomeOpen();
     const hosted = hostedServer();
-    const [connecting, setConnecting] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    // One click: connect to the hosted server (the page starts over there, signed out).
-    const pickHosted = async () => {
-        setConnecting(true);
-        setError(null);
-        const failed = await connectToHosted();
-        setConnecting(false);
-        if (failed) setError(failed);
-        else chooseWelcome("local");
-    };
-    const small = "h-7 rounded-md px-3 text-[11px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-brand-500";
     useEffect(() => {
         if (homeOpen) showWelcomeOnce();
     }, [homeOpen]);
+    const close = () => chooseWelcome("local");
     return (
-        <AriaModalOverlay isOpen={open} onOpenChange={(o) => !o && chooseWelcome("local")} isDismissable className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 px-4 py-16">
-            <AriaModal className="w-[560px] max-w-full rounded-xl border border-panel-border bg-panel-raised p-6 text-ink shadow-2xl outline-none">
-                <AriaDialog className="outline-none" aria-label="Get started with Nagma">
+        <AriaModalOverlay isOpen={open} onOpenChange={(o) => !o && close()} isDismissable className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 px-4 py-14">
+            <AriaModal className="w-[760px] max-w-full rounded-2xl border border-panel-border bg-panel-raised p-6 text-ink shadow-2xl outline-none">
+                <AriaDialog className="outline-none" aria-label="Welcome to Nagma">
                     <div className="flex items-start gap-3">
                         <NagmaLogo size={32} />
                         <div className="min-w-0 flex-1">
                             <Heading slot="title" className="text-[16px] font-semibold">
                                 Welcome to Nagma
                             </Heading>
-                            <p className="mt-1 text-[12px] text-ink-muted">Everything works on this computer from the start. Connect to a server or add an AI key whenever you like: Get started is in the Help menu and the account menu.</p>
+                            <p className="mt-1 text-[12px] text-ink-muted">Design, boards, slides, campaigns, sites, apps, video and documents in one app. Three things worth knowing before you start.</p>
                         </div>
-                        <AriaButton aria-label="Close" onPress={() => chooseWelcome("local")} className="rounded p-1 text-ink-muted outline-none hover:bg-panel-hover hover:text-ink focus-visible:ring-2 focus-visible:ring-brand-500">
+                        <AriaButton aria-label="Close" onPress={close} className="rounded p-1 text-ink-muted outline-none hover:bg-panel-hover hover:text-ink focus-visible:ring-2 focus-visible:ring-brand-500">
                             <X className="size-4" />
                         </AriaButton>
                     </div>
-                    <ul className="mt-5 space-y-2" aria-label="Ways to start">
-                        {CARDS.map((card, i) => (
-                            <li key={card.choice} className="flex items-stretch gap-1 rounded-lg border border-panel-border has-[button:hover]:bg-panel-hover">
-                                <AriaButton
-                                    autoFocus={i === 0}
-                                    onPress={() => chooseWelcome(card.choice)}
-                                    className="flex min-w-0 flex-1 items-start gap-3 rounded-lg p-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-                                >
-                                    <span className={`mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg ${i === 0 ? "bg-brand-500 text-white" : "bg-field text-ink"}`}>{card.icon}</span>
-                                    <span className="min-w-0">
-                                        <span className="block text-[13px] font-semibold">
-                                            {card.title}
-                                            {i === 0 && <span className="ml-2 rounded bg-brand-500/15 px-1.5 py-0.5 text-[10px] font-medium text-brand-500">Default</span>}
-                                        </span>
-                                        <span className="mt-0.5 block text-[12px] text-ink-muted">{card.body}</span>
-                                    </span>
-                                </AriaButton>
-                                {card.choice === "server" && hosted ? (
-                                    <span className="flex shrink-0 flex-col items-stretch justify-center gap-1 py-2 pr-2">
-                                        <AriaButton onPress={() => void pickHosted()} isDisabled={connecting} className={`${small} bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-60`}>
-                                            {connecting ? "Connecting…" : `Use ${hosted.name} hosted`}
-                                        </AriaButton>
-                                        <AriaButton onPress={() => chooseWelcome("server")} className={`${small} border border-panel-border text-ink hover:bg-panel`}>
-                                            Your own server…
-                                        </AriaButton>
-                                        <button type="button" onClick={() => openDoc(card.doc)} aria-label={`Learn more: ${card.title}`} className={`${small} text-link hover:underline`}>
+                    <ul className="mt-5 grid grid-cols-3 gap-3" aria-label="How Nagma works">
+                        {PANELS.map((p) => {
+                            const Art = p.art;
+                            return (
+                                <li key={p.key} className="flex flex-col rounded-xl border border-panel-border bg-panel">
+                                    <div className="h-[132px] overflow-hidden rounded-t-xl" aria-hidden>
+                                        <Art />
+                                    </div>
+                                    <div className="flex flex-1 flex-col p-3.5">
+                                        <h3 className="text-[13px] font-semibold">{p.title}</h3>
+                                        <p className="mt-1 flex-1 text-[12px] leading-relaxed text-ink-muted">{p.body}</p>
+                                        <button type="button" onClick={() => openDoc(p.doc)} className="mt-2 self-start text-[11px] font-medium text-link hover:underline">
                                             Learn more
                                         </button>
-                                    </span>
-                                ) : (
-                                    <button type="button" onClick={() => openDoc(card.doc)} aria-label={`Learn more: ${card.title}`} className="shrink-0 self-center rounded-md px-3 py-2 text-[11px] font-medium text-link outline-none hover:underline focus-visible:ring-2 focus-visible:ring-brand-500">
-                                        Learn more
-                                    </button>
-                                )}
-                            </li>
-                        ))}
+                                    </div>
+                                </li>
+                            );
+                        })}
                     </ul>
-                    {error && <div className="mt-3 rounded-md bg-red-500/10 px-3 py-2 text-[11px] text-red-400">{error}</div>}
+                    <div className="mt-5 flex items-center justify-between gap-3">
+                        <p className="text-[11px] text-ink-muted">
+                            Change your mind any time: {hosted ? `connect to ${hosted.name} or your own server` : "connect to a server"} from the account menu.{" "}
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    close();
+                                    openServerPicker();
+                                }}
+                                className="text-link hover:underline"
+                            >
+                                Choose a server now
+                            </button>
+                        </p>
+                        <AriaButton autoFocus onPress={close} className="h-9 shrink-0 rounded-md bg-brand-500 px-5 text-[12px] font-semibold text-white outline-none hover:bg-brand-600 focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1">
+                            Got it
+                        </AriaButton>
+                    </div>
                 </AriaDialog>
             </AriaModal>
         </AriaModalOverlay>
+    );
+}
+
+// ---- The three pictures: flat shapes in the brand's colours, no text ----
+
+const BRAND = { cream: "#F6F1E7", ink: "#141413", orange: "#EF7F42", pink: "#FC829A", green: "#4FAF78", mint: "#BFE6C8", yellow: "#F5C842", sky: "#8FC1F0", lilac: "#C9B8F2" };
+
+// A laptop with a file on it: drafts stay on this device.
+function LocalArt() {
+    return (
+        <svg viewBox="0 0 240 132" className="h-full w-full" style={{ background: BRAND.mint }}>
+            <rect x="52" y="26" width="136" height="80" rx="8" fill={BRAND.ink} />
+            <rect x="60" y="34" width="120" height="64" rx="4" fill={BRAND.cream} />
+            <rect x="40" y="104" width="160" height="8" rx="4" fill={BRAND.ink} />
+            <rect x="74" y="46" width="40" height="40" rx="5" fill={BRAND.orange} />
+            <rect x="122" y="46" width="48" height="8" rx="4" fill={BRAND.ink} opacity=".85" />
+            <rect x="122" y="60" width="36" height="6" rx="3" fill={BRAND.ink} opacity=".35" />
+            <rect x="122" y="72" width="44" height="6" rx="3" fill={BRAND.ink} opacity=".35" />
+            <circle cx="92" cy="66" r="9" fill={BRAND.cream} />
+            <path d="M88 66l3 3 6-6" fill="none" stroke={BRAND.ink} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+    );
+}
+
+// Three cursors around one shape: live editing on a server.
+function ServerArt() {
+    const cursor = (x: number, y: number, color: string) => (
+        <g transform={`translate(${x} ${y})`}>
+            <path d="M0 0l14 6.5-6.3 1.6L5.2 15z" fill={color} stroke={BRAND.ink} strokeWidth="1.4" strokeLinejoin="round" />
+            <rect x="11" y="12" width="26" height="12" rx="6" fill={color} stroke={BRAND.ink} strokeWidth="1.2" />
+        </g>
+    );
+    return (
+        <svg viewBox="0 0 240 132" className="h-full w-full" style={{ background: BRAND.sky }}>
+            <rect x="70" y="30" width="100" height="72" rx="10" fill={BRAND.cream} stroke={BRAND.ink} strokeWidth="2" />
+            <rect x="84" y="44" width="72" height="12" rx="6" fill={BRAND.yellow} />
+            <rect x="84" y="64" width="46" height="8" rx="4" fill={BRAND.ink} opacity=".3" />
+            <rect x="84" y="78" width="60" height="8" rx="4" fill={BRAND.ink} opacity=".3" />
+            {cursor(42, 22, BRAND.pink)}
+            {cursor(168, 14, BRAND.green)}
+            {cursor(150, 92, BRAND.lilac)}
+            <path d="M120 10c40-6 70 6 96 30" fill="none" stroke={BRAND.ink} strokeWidth="1.6" strokeDasharray="3 4" opacity=".5" />
+            <path d="M20 118c40-24 90-30 150-18" fill="none" stroke={BRAND.ink} strokeWidth="1.6" strokeDasharray="3 4" opacity=".5" />
+        </svg>
+    );
+}
+
+// A key and a sparkle: AI with a key of your own.
+function KeyArt() {
+    return (
+        <svg viewBox="0 0 240 132" className="h-full w-full" style={{ background: BRAND.yellow }}>
+            <circle cx="90" cy="60" r="26" fill={BRAND.cream} stroke={BRAND.ink} strokeWidth="2.4" />
+            <circle cx="90" cy="60" r="9" fill={BRAND.yellow} stroke={BRAND.ink} strokeWidth="2.4" />
+            <path d="M114 60h66v14h-10v-8h-8v12h-10v-12h-8v8h-10v-8h-20z" fill={BRAND.ink} />
+            <path d="M190 22c2 12 8 18 20 20-12 2-18 8-20 20-2-12-8-18-20-20 12-2 18-8 20-20z" fill={BRAND.orange} />
+            <path d="M44 96c1.5 8 5 11.5 13 13-8 1.5-11.5 5-13 13-1.5-8-5-11.5-13-13 8-1.5 11.5-5 13-13z" fill={BRAND.pink} />
+        </svg>
     );
 }
 

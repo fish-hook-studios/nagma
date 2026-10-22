@@ -7,7 +7,7 @@ import { after, before, describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { call, connect, readStored, sampleDoc, startServer, verifyAccount, waitUntil } from "./helpers.mjs";
+import { call, connect, readStored, sampleDoc, signupCode, startServer, waitUntil } from "./helpers.mjs";
 
 const PUBLIC = "https://share.nagma.test";
 const mailLines = async (server) => (await readFile(join(server.dataDir, "email-links.txt"), "utf8").catch(() => "")).split("\n").filter(Boolean);
@@ -17,10 +17,13 @@ describe("links from a server with a public address", () => {
     let server, owner, fileId;
     before(async () => {
         server = await startServer({ NAGMA_PUBLIC_URL: PUBLIC, NAGMA_DEV_MAIL_FILE: "1", NAGMA_REQUIRE_VERIFIED_EMAIL: "1", NAGMA_SERVER_NAME: "Nagma" });
-        // The app signs up with the server's public address as the origin for mail links.
-        const r = await call(server, "POST", "/auth/signup", { body: { name: "Owner", email: `owner${Date.now()}@example.com`, password: "correct horse battery", origin: PUBLIC } });
+        // The app signs up with the server's public address as the origin for mail links; the
+        // address is proven with a code before the account exists.
+        const email = `owner${Date.now()}@example.com`;
+        assert.equal((await call(server, "POST", "/auth/signup", { body: { name: "Owner", email, password: "correct horse battery", origin: PUBLIC } })).status, 202);
+        const r = await call(server, "POST", "/auth/signup/confirm", { body: { email, code: await signupCode(server, email) } });
         assert.equal(r.status, 200);
-        owner = { token: r.body.token, user: r.body.user };
+        owner = { token: r.body.token, user: r.body.user, email };
     });
     after(async () => server?.stop());
 
@@ -31,11 +34,10 @@ describe("links from a server with a public address", () => {
         assert.equal(r.body.publicUrl, PUBLIC);
     });
 
-    test("the verification link opens on the public address", async () => {
-        const line = await waitUntil(async () => (await mailLines(server)).find((l) => l.includes(`email verification for ${owner.user.id}:`)), 4000, "verification link");
-        const link = /(https?:\/\/\S+)/.exec(line.split(": ").slice(1).join(": "))?.[1] ?? "";
-        assert.ok(link.startsWith(`${PUBLIC}/?verify-account=`), link);
-        assert.doesNotMatch(link, LOCAL);
+    test("the sign-up code was kept for the address, and the account is verified from the start", async () => {
+        const line = await waitUntil(async () => (await mailLines(server)).find((l) => l.includes(`sign-up code for ${owner.email}:`)), 4000, "sign-up code");
+        assert.match(line, /: \d{6} \(valid 15 minutes\)/);
+        assert.equal(owner.user.emailVerified, true);
     });
 
     test("a file moved there (a hello with its document) belongs to the account", async () => {
@@ -47,17 +49,12 @@ describe("links from a server with a public address", () => {
         assert.equal(stored.doc.name, "Poster");
     });
 
-    test("sharing it waits for a verified email", async () => {
+    test("sharing it works at once, since the address was proven at sign-up", async () => {
         const r = await call(server, "PUT", `/files/${fileId}/access`, { token: owner.token, body: { link: "view" } });
-        assert.equal(r.status, 403);
-        assert.equal(r.body.code, "email-unverified");
-        const invite = await call(server, "PUT", `/files/${fileId}/access`, { token: owner.token, body: { invite: { email: "friend@example.com", role: "edit" } } });
-        assert.equal(invite.status, 403);
-        assert.equal(invite.body.code, "email-unverified");
+        assert.equal(r.status, 200);
     });
 
-    test("verified, an invitation's link is on the public address, with the file", async () => {
-        await verifyAccount(server, owner);
+    test("an invitation's link is on the public address, with the file", async () => {
         const friend = `friend${Date.now()}@example.com`;
         const r = await call(server, "PUT", `/files/${fileId}/access`, { token: owner.token, body: { invite: { email: friend, role: "edit" } } });
         assert.equal(r.status, 200, r.text);
