@@ -17,8 +17,8 @@
         "pack": "electron-builder --config electron-builder.config.cjs --dir"
     },
     "devDependencies": {
-        "electron": "44.5.1",
-        "electron-builder": "26.16.1"
+        "electron": "44.7.2",
+        "electron-builder": "26.17.0"
     },
     "build": {
         "appId": "app.nagma.desktop",
